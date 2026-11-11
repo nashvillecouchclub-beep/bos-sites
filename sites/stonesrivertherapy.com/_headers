@@ -3,6 +3,6 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
-  Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
-# Booking mode: phone_email. SimplePractice domains are added to script-src, frame-src and connect-src
+  Content-Security-Policy: default-src 'self'; img-src 'self' data: https://widget-cdn.simplepractice.com https://jamie-hallor.clientsecure.me; style-src 'self' 'unsafe-inline' https://widget-cdn.simplepractice.com; script-src 'self' https://widget-cdn.simplepractice.com https://jamie-hallor.clientsecure.me; font-src 'self'; frame-src https://jamie-hallor.clientsecure.me https://*.clientsecure.me; connect-src 'self' https://widget-cdn.simplepractice.com https://jamie-hallor.clientsecure.me; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+# Booking mode: simplepractice (Nov 11). SimplePractice domains are added to script-src, frame-src and connect-src
 # automatically from booking_config.SIMPLEPRACTICE_CSP_DOMAINS when BOOKING_MODE = "simplepractice".
