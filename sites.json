@@ -1,8 +1,14 @@
 {
-  "stonesrivertherapy.com": {
-    "dir": "sites/stonesrivertherapy.com",
-    "netlify_site_id": "d7de3ade-f59c-4f6c-936a-82094299295a",
-    "client_email": "jamie@stonesrivertherapy.com",
-    "indexnow_key": "8a58050a3c9fdb0ea3c3025ffad38930"
-  }
+ "stonesrivertherapy.com": {
+  "dir": "sites/stonesrivertherapy.com",
+  "netlify_site_id": "d7de3ade-f59c-4f6c-936a-82094299295a",
+  "client_email": "jamie@stonesrivertherapy.com",
+  "indexnow_key": "8a58050a3c9fdb0ea3c3025ffad38930"
+ },
+ "getbookedoutsolutions.com": {
+  "dir": "sites/getbookedoutsolutions.com",
+  "netlify_site_id": "13c23040-4ddd-41de-ba57-dacaa8e4d586",
+  "client_email": "rickey@getbookedoutsolutions.com",
+  "indexnow_key": "4238c2688b4166643c4a4d166cfaf886"
+ }
 }

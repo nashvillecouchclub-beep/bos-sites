@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /price-
+Disallow: /first-shop-
+Disallow: /welcome.html
+
+Sitemap: https://getbookedoutsolutions.com/sitemap.xml
