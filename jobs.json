@@ -13,5 +13,10 @@
   "id": "2026-11-11-bos-privacy-google-data",
   "site": "getbookedoutsolutions.com",
   "do": "deploy"
+ },
+ {
+  "id": "2026-11-11-bos-google-owner-trybidrescue",
+  "site": "getbookedoutsolutions.com",
+  "do": "search"
  }
 ]
