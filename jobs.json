@@ -63,5 +63,10 @@
   "id": "2026-11-12-help-videos-1",
   "site": "getbookedoutsolutions.com",
   "do": "deploy"
+ },
+ {
+  "id": "deploy-meta-partner-video-nov12",
+  "site": "getbookedoutsolutions.com",
+  "do": "deploy"
  }
 ]

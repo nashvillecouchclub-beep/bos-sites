@@ -51,11 +51,11 @@
    "minutes": 1
   },
   "meta_partner": {
-   "title": "Accept our Facebook partner request",
-   "why": "Only for the Ads and Complete packages. Open Business settings, then Requests, and accept Booked Out Solutions.",
+   "title": "Give us access to your Facebook Page",
+   "why": "Send us your business portfolio ID, then approve our request under Settings, Partners. You stay the owner.",
    "button": "Open Meta Business settings",
-   "link": "https://business.facebook.com/settings/requests",
-   "minutes": 1
+   "link": "https://business.facebook.com/latest/settings/business_info",
+   "minutes": 2
   },
   "chatgpt_profile": {
    "title": "Claim your business in ChatGPT",

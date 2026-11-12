@@ -271,34 +271,52 @@
   },
   {
    "id": "meta_partner",
-   "title": "How to accept our Facebook and Instagram partner request",
-   "time": "About 1 minute",
-   "intro": "Only for the Ads and Complete packages. This lets us run ads for your Facebook Page and Instagram. You stay the owner.",
+   "title": "How to give us access to your Facebook Page",
+   "time": "About 2 minutes, on a computer",
+   "intro": "This lets Booked Out post, answer comments, see results and run approved ads for your Facebook Page. You stay the owner, we never see your password, and you can remove us any time.",
    "before": [
-    "Admin access to your Facebook Page or Meta business portfolio"
+    "A computer (Meta's business settings work best there)",
+    "Admin access to your Facebook Page's business portfolio in Meta Business Suite"
    ],
    "steps": [
     {
-     "title": "Open Meta Business Suite settings",
-     "text": "On a computer go to business.facebook.com, then Settings.",
-     "say": "Step one. On a computer, go to business dot facebook dot com and open Settings."
+     "title": "Send us your business portfolio ID",
+     "text": "Go to business.facebook.com, open Settings, then Business info. Under your business name you'll see Business portfolio ID followed by a long number. Copy it and send it to us by replying to our email. We use it to send you a partner request.",
+     "say": "Step one. Go to business dot facebook dot com, open Settings, then Business info. Copy your business portfolio ID and send it to us."
     },
     {
-     "title": "Open Requests",
-     "text": "In the left menu, click Requests. Our request from Booked Out Solutions is listed there.",
-     "say": "Step two. In the left menu, click Requests."
+     "title": "Open Partners",
+     "text": "When we tell you the request is sent, go back to Settings and click Partners in the left menu (not Requests). Booked Out Solutions shows with a Request received tag. Click Review and approve.",
+     "say": "Step two. In Settings, click Partners, then Review and approve."
     },
     {
-     "title": "Accept",
-     "text": "Click Accept on the Booked Out Solutions request and confirm.",
-     "say": "Step three. Click Accept on the Booked Out Solutions request."
+     "title": "Get started and Next",
+     "text": "Click Get started on Meta's intro. The next screen may say Booked Out Solutions is Unverified. That's normal while Meta reviews our business. Click Next.",
+     "say": "Step three. Click Get started, then Next."
+    },
+    {
+     "title": "Pick your Page",
+     "text": "Click the Select Facebook Pages box, tick your business Page, then click Done.",
+     "say": "Step four. Select your business Page and click Done."
+    },
+    {
+     "title": "Turn on four permissions",
+     "text": "Turn on Content, Community activity, Ads and Insights. Leave Messages and calls, Revenue and the rest off. Click Review selection.",
+     "say": "Step five. Turn on Content, Community activity, Ads and Insights, then click Review selection."
+    },
+    {
+     "title": "Approve",
+     "text": "Check it lists your Page with those four permissions, then click Approve request. You'll see Booked Out Solutions was assigned to 1 asset.",
+     "say": "Step six. Click Approve request. Done."
     }
    ],
    "trouble": [
-    "Can't find Requests? You may be on your personal profile. Switch into your Page first, or open business.facebook.com/settings/requests directly.",
-    "Your Page isn't in a business portfolio? Open your Page's settings, then Page access, and accept it there."
+    "Don't see the request under Requests? That's expected. Partner requests show under Settings, then Partners.",
+    "No Business info or Partners in Settings? Your Page may not be in a business portfolio yet. Tell us and we'll walk you through making one (free, about 2 minutes).",
+    "The roles on the review screen look swapped (your business called Media agency)? That's only Meta's label. It doesn't change the access you give.",
+    "Want to remove us later? Settings, Partners, click Booked Out Solutions, then remove access."
    ],
-   "after": "We set up your ads and send you the plan before anything spends."
+   "after": "We start on your Page right away. Ads never spend until you approve the plan and budget."
   },
   {
    "id": "chatgpt_profile",
