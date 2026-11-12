@@ -56,6 +56,13 @@
    "button": "Open Meta Business settings",
    "link": "https://business.facebook.com/settings/requests",
    "minutes": 1
+  },
+  "chatgpt_profile": {
+   "title": "Claim your business in ChatGPT",
+   "why": "ChatGPT now shows business listings, and it builds one for you whether you claim it or not. Claiming lets you fix what it says and see how often ChatGPT mentions you. We prepare everything; OpenAI asks the owner to sign in and do a short ID check (a photo of your driver's license) through their partner Persona.",
+   "button": "Open ChatGPT Business Hub",
+   "link": "https://chatgpt.com/business-hub",
+   "minutes": 5
   }
  },
  "clients": [
@@ -80,6 +87,11 @@
      "id": "gbp_verify",
      "status": "waiting",
      "note": "Opens once your office is ready in December."
+    },
+    {
+     "id": "chatgpt_profile",
+     "status": "waiting",
+     "note": "Opens once your Google profile is live. ChatGPT builds local listings from public sources, so we claim yours after Google shows you."
     }
    ],
    "done": [
