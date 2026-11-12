@@ -6,13 +6,36 @@
    "title": "How to connect your Google account",
    "time": "About 1 minute",
    "intro": "This one tap lets Booked Out do the work in your package without asking you for logins again and again. You stay in control and can disconnect any time.",
-   "before": ["Your phone or computer", "The Google account you use for your business (the one that owns your Google Business Profile, if you have one)"],
+   "before": [
+    "Your phone or computer",
+    "The Google account you use for your business (the one that owns your Google Business Profile, if you have one)"
+   ],
    "steps": [
-    {"title": "Open your Connect link", "text": "Tap the Connect Google button on your setup page, or the Connect link in our welcome email. It opens a page on getbookedoutsolutions.com that sends you to Google.", "say": "Step one. On your setup page, tap the yellow Connect Google button. It takes you to Google."},
-    {"title": "Pick your business Google account", "text": "Google shows the accounts signed in on this device. Pick the one you use for your business. If it isn't listed, tap Use another account and sign in with it.", "say": "Step two. Google asks which account to use. Pick the Google account you use for your business. If you don't see it, tap Use another account and sign in."},
-    {"title": "If Google shows 'Google hasn't verified this app'", "text": "Google is still reviewing our app, so for now some people see this notice. Tap Advanced at the bottom left, then tap Go to Booked Out Solutions. This is expected and safe; it goes away once Google finishes its review.", "say": "Step three. For now, Google may show a notice that says Google hasn't verified this app. That's only because Google's review of our app is still in progress. Tap Advanced, then tap Go to Booked Out Solutions."},
-    {"title": "Check the boxes and tap Allow", "text": "Google lists what Booked Out can do: manage your Google Business Profile, add events to your calendar, send email from your Gmail (for review requests and quote follow-ups), and see only the Drive files Booked Out creates. If you see check boxes, tick each one (or Select all). Then tap Allow or Continue.", "say": "Step four. Google lists what we can do. Manage your Google profile. Add booked jobs to your calendar. Send follow-up emails from your Gmail. And see only the files we create in your Drive. We can't read your email. If you see check boxes, tick each one, or tap Select all. Then tap Allow."},
-    {"title": "You're connected", "text": "You land on a Booked Out page that says you're connected. Your setup page now shows this step as done. That's it.", "say": "Step five. You'll land on a page that says you're connected, and your setup page will show this step as done. That's it."}
+    {
+     "title": "Open your Connect link",
+     "text": "Tap the Connect Google button on your setup page, or the Connect link in our welcome email. It opens a page on getbookedoutsolutions.com that sends you to Google.",
+     "say": "Step one. On your setup page, tap the yellow Connect Google button. It takes you to Google."
+    },
+    {
+     "title": "Pick your business Google account",
+     "text": "Google shows the accounts signed in on this device. Pick the one you use for your business. If it isn't listed, tap Use another account and sign in with it.",
+     "say": "Step two. Google asks which account to use. Pick the Google account you use for your business. If you don't see it, tap Use another account and sign in."
+    },
+    {
+     "title": "If Google shows 'Google hasn't verified this app'",
+     "text": "Google is still reviewing our app, so for now some people see this notice. Tap Advanced at the bottom left, then tap Go to Booked Out Solutions. This is expected and safe; it goes away once Google finishes its review.",
+     "say": "Step three. For now, Google may show a notice that says Google hasn't verified this app. That's only because Google's review of our app is still in progress. Tap Advanced, then tap Go to Booked Out Solutions."
+    },
+    {
+     "title": "Check the boxes and tap Allow",
+     "text": "Google lists what Booked Out can do: manage your Google Business Profile, add events to your calendar, send email from your Gmail (for review requests and quote follow-ups), and see only the Drive files Booked Out creates. If you see check boxes, tick each one (or Select all). Then tap Allow or Continue.",
+     "say": "Step four. Google lists what we can do. Manage your Google profile. Add booked jobs to your calendar. Send follow-up emails from your Gmail. And see only the files we create in your Drive. We can't read your email. If you see check boxes, tick each one, or tap Select all. Then tap Allow."
+    },
+    {
+     "title": "You're connected",
+     "text": "You land on a Booked Out page that says you're connected. Your setup page now shows this step as done. That's it.",
+     "say": "Step five. You'll land on a page that says you're connected, and your setup page will show this step as done. That's it."
+    }
    ],
    "trouble": [
     "I picked the wrong account: tap your Connect link again and pick the right one. We use whichever account connected last.",
@@ -26,14 +49,41 @@
    "title": "How to add Booked Out to your Google Business Profile",
    "time": "About 2 minutes",
    "intro": "This lets us post updates, keep your hours and services right, and help with reviews on your Google profile. You stay the owner and can remove us any time.",
-   "before": ["Sign in with the Google account that OWNS your Business Profile (only an owner can add people)", "Our address to add: hello@getbookedoutsolutions.com"],
+   "before": [
+    "Sign in with the Google account that OWNS your Business Profile (only an owner can add people)",
+    "Our address to add: hello@getbookedoutsolutions.com"
+   ],
    "steps": [
-    {"title": "Open your Business Profile", "text": "On a computer, go to business.google.com, or search your business name on Google while signed in. On a phone, open the Google Maps app, tap your picture, then Your Business Profile.", "say": "Step one. Open your Google Business Profile. The easiest way is to go to business dot google dot com while signed in to the Google account that owns your profile."},
-    {"title": "Open Business Profile settings", "text": "Tap Menu (the three dots), then Business Profile settings.", "say": "Step two. Tap the menu, the three dots, then tap Business Profile settings."},
-    {"title": "Open People and access", "text": "Tap People and access. You'll see who manages the profile now.", "say": "Step three. Tap People and access."},
-    {"title": "Tap Add", "text": "Tap Add at the top left.", "say": "Step four. Tap Add, at the top left."},
-    {"title": "Enter our email and choose Manager", "text": "Type hello@getbookedoutsolutions.com. Under Access, choose Manager (not Owner). Tap Invite.", "say": "Step five. Type hello at get booked out solutions dot com. Under Access, choose Manager, not Owner. Then tap Invite."},
-    {"title": "Done", "text": "Google emails us the invitation and we accept it, usually the same day. Google can take up to 7 days to give a new manager every feature, which is normal.", "say": "That's it. Google sends us the invite and we accept it, usually the same day."}
+    {
+     "title": "Open your Business Profile",
+     "text": "Signed in to the Google account that owns your profile, search Google for: my business. Your profile panel shows at the top of the results. (You can also go to business.google.com and click your business name.) On a phone, open the Google Maps app, tap your picture, then Your Business Profile.",
+     "say": ""
+    },
+    {
+     "title": "Open Business Profile settings",
+     "text": "Click the three dots at the top right of your business panel, then Business Profile settings.",
+     "say": ""
+    },
+    {
+     "title": "Open People and access",
+     "text": "Tap People and access. You'll see who manages the profile now.",
+     "say": "Step three. Tap People and access."
+    },
+    {
+     "title": "Tap Add",
+     "text": "Tap Add at the top left.",
+     "say": "Step four. Tap Add, at the top left."
+    },
+    {
+     "title": "Enter our email and choose Manager",
+     "text": "Type hello@getbookedoutsolutions.com. Under Access, choose Manager (not Owner). Tap Invite.",
+     "say": "Step five. Type hello at get booked out solutions dot com. Under Access, choose Manager, not Owner. Then tap Invite."
+    },
+    {
+     "title": "Done",
+     "text": "Google emails us the invitation and we accept it, usually the same day. Google can take up to 7 days to give a new manager every feature, which is normal.",
+     "say": "That's it. Google sends us the invite and we accept it, usually the same day."
+    }
    ],
    "trouble": [
     "I don't see People and access: you're probably signed in as a manager, not an owner. Sign in with the owner account, or ask whoever set up the profile.",
@@ -47,14 +97,42 @@
    "title": "How to verify your Google Business Profile with a video",
    "time": "About 5 minutes, plus a short walk",
    "intro": "Google asks the owner to prove the business is real. Most of the time it asks for a short phone video. Google's rules are strict, so plan it before you press record.",
-   "before": ["Your phone (it has to be recorded on a phone, inside the Business Profile)", "Plan your route: where you'll start, what you'll show", "Something only the business can access: a key to the office or a branded van, a work tablet, a business invoice or utility bill with the business name"],
+   "before": [
+    "Your phone (it has to be recorded on a phone, inside the Business Profile)",
+    "Plan your route: where you'll start, what you'll show",
+    "Something only the business can access: a key to the office or a branded van, a work tablet, a business invoice or utility bill with the business name"
+   ],
    "steps": [
-    {"title": "Plan what to show", "text": "Google wants three things in one video: where you are (street signs, building number, nearby businesses), that the business exists (your sign, or for service businesses your tools, equipment, branded shirts or truck), and that you run it (unlock the door or van, open the work area, or show a business bill with your business name).", "say": "Step one. Plan your video before you record. Google wants to see three things. Where you are, like a street sign or building number. That the business is real, like your sign, tools or branded truck. And that you run it, like unlocking the office or van."},
-    {"title": "Start from your Business Profile", "text": "On your phone, open your Business Profile and tap Get verified. Enter your phone number if asked. Tap Business video, then Next. Allow camera, microphone and location if asked.", "say": "Step two. On your phone, open your Business Profile and tap Get verified. Choose Business video, tap Next, and allow the camera, microphone and location."},
-    {"title": "Record one continuous video", "text": "Tap Start recording. Keep it to one take, at least 30 seconds, with no cuts. Start outside with the street or building, show your sign or equipment, then show you unlocking or using something only the business can.", "say": "Step three. Tap Start recording. Do it in one take, at least thirty seconds, no stopping. Start outside, show the street, then your sign or equipment, then show yourself unlocking the door or the van."},
-    {"title": "Don't show private things", "text": "Don't show bank, tax or ID numbers, private information, or other people's faces.", "say": "Don't show bank or ID numbers, private papers, or other people's faces."},
-    {"title": "Review and upload", "text": "Tap stop, watch it back, tap Try again if something's missing, then tap Upload video.", "say": "Step four. Tap stop, watch it back, and if anything is missing tap Try again. When it looks good, tap Upload video."},
-    {"title": "Wait for Google", "text": "Google reviews it within about 5 business days. If it's rejected, Google says why: tap Review issues and record a new video with everything from the first one plus what was missing.", "say": "Google reviews it within about five business days. If it's rejected, Google tells you why. Just record a new one with what was missing."}
+    {
+     "title": "Plan what to show",
+     "text": "Google wants three things in one video: where you are (street signs, building number, nearby businesses), that the business exists (your sign, or for service businesses your tools, equipment, branded shirts or truck), and that you run it (unlock the door or van, open the work area, or show a business bill with your business name).",
+     "say": "Step one. Plan your video before you record. Google wants to see three things. Where you are, like a street sign or building number. That the business is real, like your sign, tools or branded truck. And that you run it, like unlocking the office or van."
+    },
+    {
+     "title": "Start from your Business Profile",
+     "text": "On your phone, open your Business Profile and tap Get verified. Enter your phone number if asked. Tap Business video, then Next. Allow camera, microphone and location if asked.",
+     "say": "Step two. On your phone, open your Business Profile and tap Get verified. Choose Business video, tap Next, and allow the camera, microphone and location."
+    },
+    {
+     "title": "Record one continuous video",
+     "text": "Tap Start recording. Keep it to one take, at least 30 seconds, with no cuts. Start outside with the street or building, show your sign or equipment, then show you unlocking or using something only the business can.",
+     "say": "Step three. Tap Start recording. Do it in one take, at least thirty seconds, no stopping. Start outside, show the street, then your sign or equipment, then show yourself unlocking the door or the van."
+    },
+    {
+     "title": "Don't show private things",
+     "text": "Don't show bank, tax or ID numbers, private information, or other people's faces.",
+     "say": "Don't show bank or ID numbers, private papers, or other people's faces."
+    },
+    {
+     "title": "Review and upload",
+     "text": "Tap stop, watch it back, tap Try again if something's missing, then tap Upload video.",
+     "say": "Step four. Tap stop, watch it back, and if anything is missing tap Try again. When it looks good, tap Upload video."
+    },
+    {
+     "title": "Wait for Google",
+     "text": "Google reviews it within about 5 business days. If it's rejected, Google says why: tap Review issues and record a new video with everything from the first one plus what was missing.",
+     "say": "Google reviews it within about five business days. If it's rejected, Google tells you why. Just record a new one with what was missing."
+    }
    ],
    "trouble": [
     "It won't let me upload a video I already recorded: that's Google's rule. It has to be recorded live inside the Business Profile.",
@@ -68,12 +146,31 @@
    "title": "How to put your card on file and sign the agreement",
    "time": "About 3 minutes",
    "intro": "Payments go through Square's secure checkout. Booked Out never sees or stores your full card number.",
-   "before": ["Your debit or credit card", "Your agreement (we email it with your checkout link)"],
+   "before": [
+    "Your debit or credit card",
+    "Your agreement (we email it with your checkout link)"
+   ],
    "steps": [
-    {"title": "Read the one-page agreement", "text": "It says what's in your package, the price, when the first charge happens, and how to cancel. If anything looks off, email us before you pay.", "say": "Step one. Read the one page agreement. It shows what's in your package, the price, when the first charge happens, and how to cancel."},
-    {"title": "Open secure checkout", "text": "Tap Open secure checkout on your setup page. It opens Square, the payment company.", "say": "Step two. Tap Open secure checkout. It opens Square, the payment company."},
-    {"title": "Enter your card", "text": "Type your card number, expiration date, security code and ZIP code into Square's form.", "say": "Step three. Enter your card into Square's form."},
-    {"title": "Confirm", "text": "Tap the button to confirm. Square emails you a receipt or confirmation.", "say": "Step four. Tap confirm. Square emails you a receipt."}
+    {
+     "title": "Read the one-page agreement",
+     "text": "It says what's in your package, the price, when the first charge happens, and how to cancel. If anything looks off, email us before you pay.",
+     "say": "Step one. Read the one page agreement. It shows what's in your package, the price, when the first charge happens, and how to cancel."
+    },
+    {
+     "title": "Open secure checkout",
+     "text": "Tap Open secure checkout on your setup page. It opens Square, the payment company.",
+     "say": "Step two. Tap Open secure checkout. It opens Square, the payment company."
+    },
+    {
+     "title": "Enter your card",
+     "text": "Type your card number, expiration date, security code and ZIP code into Square's form.",
+     "say": "Step three. Enter your card into Square's form."
+    },
+    {
+     "title": "Confirm",
+     "text": "Tap the button to confirm. Square emails you a receipt or confirmation.",
+     "say": "Step four. Tap confirm. Square emails you a receipt."
+    }
    ],
    "trouble": [
     "My card was declined: check the ZIP code matches your card's billing address, or try another card.",
@@ -86,13 +183,29 @@
    "title": "How to OK your posts",
    "time": "About 10 minutes once",
    "intro": "We write your posts ahead of time in your voice. Nothing goes out until you OK it.",
-   "before": ["Our email with your first months of posts"],
-   "steps": [
-    {"title": "Read the posts", "text": "Open the email (or your approvals sheet) and read each post. Each one is short and helpful, not a sales pitch.", "say": "Step one. Open the email with your posts and read each one."},
-    {"title": "Say OK or what to change", "text": "Reply OK to approve them all, or reply with the post numbers and what to change (for example: 'OK all except 4, say we're open Saturdays').", "say": "Step two. Reply OK to approve them all. Or tell us which ones to change and how, like, okay all except number four."},
-    {"title": "Done", "text": "After that they go out on their own, about one a week. We only check with you again for something new, like a holiday offer.", "say": "That's it. They go out on their own, about one a week."}
+   "before": [
+    "Our email with your first months of posts"
    ],
-   "trouble": ["Want to stop a post? Reply STOP and its number any time before it goes out."],
+   "steps": [
+    {
+     "title": "Read the posts",
+     "text": "Open the email (or your approvals sheet) and read each post. Each one is short and helpful, not a sales pitch.",
+     "say": "Step one. Open the email with your posts and read each one."
+    },
+    {
+     "title": "Say OK or what to change",
+     "text": "Reply OK to approve them all, or reply with the post numbers and what to change (for example: 'OK all except 4, say we're open Saturdays').",
+     "say": "Step two. Reply OK to approve them all. Or tell us which ones to change and how, like, okay all except number four."
+    },
+    {
+     "title": "Done",
+     "text": "After that they go out on their own, about one a week. We only check with you again for something new, like a holiday offer.",
+     "say": "That's it. They go out on their own, about one a week."
+    }
+   ],
+   "trouble": [
+    "Want to stop a post? Reply STOP and its number any time before it goes out."
+   ],
    "after": "We post them on schedule and show the results in your Friday report."
   },
   {
@@ -100,13 +213,29 @@
    "title": "How to send us job photos",
    "time": "About 5 minutes",
    "intro": "Real photos of your work, trucks and team do better than stock photos, every time.",
-   "before": ["Your phone's photo gallery"],
-   "steps": [
-    {"title": "Pick 5 to 10 photos", "text": "Your trucks, your team in uniform, your shop, and finished work (a clean install, a new panel, a repaired line). Before and after pairs are great.", "say": "Step one. Pick five to ten photos. Your trucks, your team, your shop, and finished work. Before and after pairs are great."},
-    {"title": "Keep them private-safe", "text": "Skip customers' faces, house numbers, street signs at a customer's home, and family photos inside homes.", "say": "Leave out customers' faces and house numbers."},
-    {"title": "Send them", "text": "Reply to our welcome email and attach the photos. On iPhone tap the photo icon; on Android tap the paperclip.", "say": "Step two. Reply to our welcome email and attach the photos."}
+   "before": [
+    "Your phone's photo gallery"
    ],
-   "trouble": ["Email says the photos are too big: send them in two or three emails."],
+   "steps": [
+    {
+     "title": "Pick 5 to 10 photos",
+     "text": "Your trucks, your team in uniform, your shop, and finished work (a clean install, a new panel, a repaired line). Before and after pairs are great.",
+     "say": "Step one. Pick five to ten photos. Your trucks, your team, your shop, and finished work. Before and after pairs are great."
+    },
+    {
+     "title": "Keep them private-safe",
+     "text": "Skip customers' faces, house numbers, street signs at a customer's home, and family photos inside homes.",
+     "say": "Leave out customers' faces and house numbers."
+    },
+    {
+     "title": "Send them",
+     "text": "Reply to our welcome email and attach the photos. On iPhone tap the photo icon; on Android tap the paperclip.",
+     "say": "Step two. Reply to our welcome email and attach the photos."
+    }
+   ],
+   "trouble": [
+    "Email says the photos are too big: send them in two or three emails."
+   ],
    "after": "We use them on your Google profile, posts and website, with your logo where it fits."
   },
   {
@@ -114,13 +243,30 @@
    "title": "How to accept our Google Ads link",
    "time": "About 1 minute",
    "intro": "Only for the Ads and Complete packages. This lets us run your ads inside your own Google Ads account. You keep ownership and billing.",
-   "before": ["Admin access to your Google Ads account"],
-   "steps": [
-    {"title": "Open Google Ads", "text": "Sign in at ads.google.com with the account that has admin access.", "say": "Step one. Sign in at ads dot google dot com."},
-    {"title": "Go to Access and security", "text": "Click the Admin icon, then Access and security.", "say": "Step two. Click Admin, then Access and security."},
-    {"title": "Accept our request", "text": "Open the Managers tab. Under Link request you'll see Booked Out Solutions. In the Actions column, click Accept and follow the prompts.", "say": "Step three. Open the Managers tab, find Booked Out Solutions under link requests, and click Accept."}
+   "before": [
+    "Admin access to your Google Ads account"
    ],
-   "trouble": ["I don't see Admin or Access and security: you need Administrator access. Forward this guide to whoever owns the account.", "You can also accept from the email Google sent all admins."],
+   "steps": [
+    {
+     "title": "Open Google Ads",
+     "text": "Sign in at ads.google.com with the account that has admin access.",
+     "say": "Step one. Sign in at ads dot google dot com."
+    },
+    {
+     "title": "Go to Access and security",
+     "text": "Click the Admin icon, then Access and security.",
+     "say": "Step two. Click Admin, then Access and security."
+    },
+    {
+     "title": "Accept our request",
+     "text": "Open the Managers tab. Under Link request you'll see Booked Out Solutions. In the Actions column, click Accept and follow the prompts.",
+     "say": "Step three. Open the Managers tab, find Booked Out Solutions under link requests, and click Accept."
+    }
+   ],
+   "trouble": [
+    "I don't see Admin or Access and security: you need Administrator access. Forward this guide to whoever owns the account.",
+    "You can also accept from the email Google sent all admins."
+   ],
    "after": "We set up your campaigns and send you the plan before anything spends."
   },
   {
@@ -128,13 +274,30 @@
    "title": "How to accept our Facebook and Instagram partner request",
    "time": "About 1 minute",
    "intro": "Only for the Ads and Complete packages. This lets us run ads for your Facebook Page and Instagram. You stay the owner.",
-   "before": ["Admin access to your Facebook Page or Meta business portfolio"],
-   "steps": [
-    {"title": "Open Meta Business Suite settings", "text": "On a computer go to business.facebook.com, then Settings.", "say": "Step one. On a computer, go to business dot facebook dot com and open Settings."},
-    {"title": "Open Requests", "text": "In the left menu, click Requests. Our request from Booked Out Solutions is listed there.", "say": "Step two. In the left menu, click Requests."},
-    {"title": "Accept", "text": "Click Accept on the Booked Out Solutions request and confirm.", "say": "Step three. Click Accept on the Booked Out Solutions request."}
+   "before": [
+    "Admin access to your Facebook Page or Meta business portfolio"
    ],
-   "trouble": ["Can't find Requests? You may be on your personal profile. Switch into your Page first, or open business.facebook.com/settings/requests directly.", "Your Page isn't in a business portfolio? Open your Page's settings, then Page access, and accept it there."],
+   "steps": [
+    {
+     "title": "Open Meta Business Suite settings",
+     "text": "On a computer go to business.facebook.com, then Settings.",
+     "say": "Step one. On a computer, go to business dot facebook dot com and open Settings."
+    },
+    {
+     "title": "Open Requests",
+     "text": "In the left menu, click Requests. Our request from Booked Out Solutions is listed there.",
+     "say": "Step two. In the left menu, click Requests."
+    },
+    {
+     "title": "Accept",
+     "text": "Click Accept on the Booked Out Solutions request and confirm.",
+     "say": "Step three. Click Accept on the Booked Out Solutions request."
+    }
+   ],
+   "trouble": [
+    "Can't find Requests? You may be on your personal profile. Switch into your Page first, or open business.facebook.com/settings/requests directly.",
+    "Your Page isn't in a business portfolio? Open your Page's settings, then Page access, and accept it there."
+   ],
    "after": "We set up your ads and send you the plan before anything spends."
   },
   {
@@ -142,15 +305,42 @@
    "title": "How to claim your business in ChatGPT",
    "time": "About 5 minutes",
    "intro": "ChatGPT now keeps a listing for businesses whether they claim it or not. Claiming it lets you fix what it says and see how often ChatGPT mentions you. OpenAI requires the owner to do this part; we prepare everything you need to paste.",
-   "before": ["A ChatGPT account (a free one works; sign up at chatgpt.com if needed)", "Your photo ID for OpenAI's ID check (done by their partner Persona)", "The business details we email you"],
-   "steps": [
-    {"title": "Open Business Hub", "text": "Go to chatgpt.com/business-hub and sign in.", "say": "Step one. Go to chat g p t dot com slash business hub, and sign in."},
-    {"title": "Find your business", "text": "Search your business name and pick your listing. Local businesses can claim a listing that already exists. If yours isn't there yet, tell us and we'll check again after your Google profile is live.", "say": "Step two. Search your business name and choose your listing. If it isn't there yet, just tell us."},
-    {"title": "Verify you run it", "text": "Pick one of the ways offered: a code to your business phone, a link to your business email, or your website's domain. We can help with the domain one.", "say": "Step three. Verify that you run the business, with your business phone, your business email, or your website."},
-    {"title": "Do the ID check", "text": "OpenAI uses Persona for a quick ID check. Follow the steps to photograph your ID. Have your business registration details handy in case it asks.", "say": "Step four. Do the quick I D check with Persona. You'll take a photo of your I D."},
-    {"title": "Paste our details", "text": "Once approved, paste in the corrected business details we sent you (name, address, phone, hours, services, website). OpenAI reviews edits before they show.", "say": "Step five. Once you're approved, paste in the details we sent you. That's it."}
+   "before": [
+    "A ChatGPT account (a free one works; sign up at chatgpt.com if needed)",
+    "Your photo ID for OpenAI's ID check (done by their partner Persona)",
+    "The business details we email you"
    ],
-   "trouble": ["Only submit public facts. Anything you submit can be shown to the public.", "Your listing is locked or someone else claimed it: use the support link in Business Hub, and tell us."],
+   "steps": [
+    {
+     "title": "Open Business Hub",
+     "text": "Go to chatgpt.com/business-hub and sign in.",
+     "say": "Step one. Go to chat g p t dot com slash business hub, and sign in."
+    },
+    {
+     "title": "Find your business",
+     "text": "Search your business name and pick your listing. Local businesses can claim a listing that already exists. If yours isn't there yet, tell us and we'll check again after your Google profile is live.",
+     "say": "Step two. Search your business name and choose your listing. If it isn't there yet, just tell us."
+    },
+    {
+     "title": "Verify you run it",
+     "text": "Pick one of the ways offered: a code to your business phone, a link to your business email, or your website's domain. We can help with the domain one.",
+     "say": "Step three. Verify that you run the business, with your business phone, your business email, or your website."
+    },
+    {
+     "title": "Do the ID check",
+     "text": "OpenAI uses Persona for a quick ID check. Follow the steps to photograph your ID. Have your business registration details handy in case it asks.",
+     "say": "Step four. Do the quick I D check with Persona. You'll take a photo of your I D."
+    },
+    {
+     "title": "Paste our details",
+     "text": "Once approved, paste in the corrected business details we sent you (name, address, phone, hours, services, website). OpenAI reviews edits before they show.",
+     "say": "Step five. Once you're approved, paste in the details we sent you. That's it."
+    }
+   ],
+   "trouble": [
+    "Only submit public facts. Anything you submit can be shown to the public.",
+    "Your listing is locked or someone else claimed it: use the support link in Business Hub, and tell us."
+   ],
    "after": "Each month, forward us your Insights (mentions and clicks) and we'll add them to your report."
   }
  ]
