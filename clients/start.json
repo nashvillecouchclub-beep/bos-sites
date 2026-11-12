@@ -24,7 +24,7 @@
   },
   "card": {
    "title": "Card on file and the one-page agreement",
-   "why": "Secure checkout through Square. Nothing is charged until the date on your agreement.",
+   "why": "Secure checkout through Square, the payment company. Booked Out never sees your full card number. Your one-page agreement shows exactly when the first charge happens.",
    "button": "Open secure checkout",
    "link": "{card_link}",
    "minutes": 3

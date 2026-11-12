@@ -48,5 +48,10 @@
   "id": "2026-11-12-start-chatgpt-step",
   "site": "getbookedoutsolutions.com",
   "do": "deploy"
+ },
+ {
+  "id": "2026-11-12-help-guides-and-demo-start",
+  "site": "getbookedoutsolutions.com",
+  "do": "deploy"
  }
 ]

@@ -11,6 +11,10 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 DATA = json.load(open(os.path.join(ROOT, 'clients', 'start.json')))
 OUT = os.path.join(ROOT, 'sites', 'getbookedoutsolutions.com', 'start')
 LIB = DATA['step_library']
+try:
+    GUIDES = {g['id'] for g in json.load(open(os.path.join(ROOT, 'clients', 'guides.json')))['guides']}
+except FileNotFoundError:
+    GUIDES = set()
 
 LOGO = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 34 34" width="34" height="34" aria-hidden="true">'
         '<rect x="1" y="4" width="32" height="29" rx="8" fill="#FFB224"/><rect x="8.5" y="0" width="4" height="9" rx="2" fill="#0A0F26"/>'
@@ -36,6 +40,7 @@ h1{font:800 34px/1.15 "Bricolage Grotesque",sans-serif;margin:34px 0 10px}
 .donebox li{list-style:none;padding:6px 0 6px 32px;position:relative}.donebox li:before{content:"\\2713";position:absolute;left:0;color:#FFB224;font-weight:700}
 .donebox ul{padding:0;margin:0}
 .foot{margin-top:36px;color:#8F97B5;font-size:16px}.foot a{color:#FFB224}
+.guide{margin:12px 0 0;text-align:center}.guide a{color:#FFB224;font-weight:600}
 .gotit{border-color:#FFB224}.gotit .btn{display:none}
 .all{background:#141A36;border:1px solid #FFB224;border-radius:16px;padding:22px;text-align:center;font-size:21px}
 """
@@ -70,6 +75,8 @@ def page(c):
             body += f'<p class="mins">About {lib.get("minutes", 1)} minute{"s" if lib.get("minutes", 1) != 1 else ""}</p>'
             if btn and link and '{' not in link:
                 body += f'<a class="btn" href="{html.escape(link)}">{html.escape(btn)}</a>'
+        if s['id'] in GUIDES:
+            body += f'<p class="guide"><a href="/help/{s["id"]}/">Step-by-step guide and video</a></p>'
         parts.append(f'<section class="{cls}"{live}><h2><span class="num">{n}</span>{html.escape(title)}</h2>{body}</section>')
     if not todo:
         parts.insert(0, '<div class="all">You\'re all set. There\'s nothing for you to do right now.</div>')
@@ -94,7 +101,8 @@ var n=s.querySelector('.num');if(n)n.textContent='\u2713';}}).catch(function(){{
 </script></body></html>"""
 
 
-for c in DATA['clients']:
+if __name__ == '__main__':
+  for c in DATA['clients']:
     d = os.path.join(OUT, c['code'])
     os.makedirs(d, exist_ok=True)
     open(os.path.join(d, 'index.html'), 'w').write(page(c))
