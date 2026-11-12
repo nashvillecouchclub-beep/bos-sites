@@ -28,5 +28,10 @@
   "id": "2026-11-11-bos-google-owner-trybidrescue-2",
   "site": "getbookedoutsolutions.com",
   "do": "deploy+search"
+ },
+ {
+  "id": "2026-11-12-bos-social-tip-cards",
+  "site": "getbookedoutsolutions.com",
+  "do": "deploy"
  }
 ]
