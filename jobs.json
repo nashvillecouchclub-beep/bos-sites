@@ -73,5 +73,10 @@
   "id": "deploy-meta-domain-tag-nov12",
   "site": "getbookedoutsolutions.com",
   "do": "deploy"
+ },
+ {
+  "id": "deploy-tip-cards-41-70-nov12",
+  "site": "getbookedoutsolutions.com",
+  "do": "deploy"
  }
 ]
