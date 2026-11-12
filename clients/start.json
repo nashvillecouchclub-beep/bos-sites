@@ -1,0 +1,94 @@
+{
+ "_about": "Public-safe client start pages. One entry per client: business name and the taps left, nothing private (no emails, phones, client data). Built by tools/make_start_pages.py into sites/getbookedoutsolutions.com/start/<code>/. Master client list with private details is the Google Sheet 'BOOKED OUT - client roster (master)'.",
+ "step_library": {
+  "connect": {
+   "title": "Connect your Google account",
+   "why": "One tap lets us post to your Google profile, add booked jobs to your calendar and send follow-ups from your own email. Pick your business Google account, then tap Allow. If Google shows a 'hasn't verified this app' notice, tap Advanced, then Go to Booked Out Solutions.",
+   "button": "Connect Google",
+   "link": "https://getbookedoutsolutions.com/connect/start?c={code}",
+   "minutes": 1
+  },
+  "gbp_manager": {
+   "title": "Add us to your Google profile",
+   "why": "Open your Google Business Profile, tap Menu, then Business Profile settings, then People and access, then Add, and enter hello@getbookedoutsolutions.com as a Manager. You stay the owner and can remove us any time.",
+   "button": "Open my Google profile",
+   "link": "https://business.google.com/",
+   "minutes": 2
+  },
+  "gbp_verify": {
+   "title": "Verify your Google profile",
+   "why": "Google asks the owner to prove the business is real, usually with a short phone video at the office. We'll tell you exactly what to film when Google opens the step.",
+   "button": "",
+   "link": "",
+   "minutes": 5
+  },
+  "card": {
+   "title": "Card on file and the one-page agreement",
+   "why": "Secure checkout through Square. Nothing is charged until the date on your agreement.",
+   "button": "Open secure checkout",
+   "link": "{card_link}",
+   "minutes": 3
+  },
+  "approve_posts": {
+   "title": "OK your first posts",
+   "why": "We wrote your first months of posts. Read them and say OK, or tell us what to change. After that they go out on their own, one a week.",
+   "button": "{approve_button}",
+   "link": "{approve_link}",
+   "minutes": 10
+  },
+  "photos": {
+   "title": "Send a few real job photos",
+   "why": "Reply to our welcome email with 5 to 10 photos from your phone: trucks, crew, finished work. Real photos beat stock every time.",
+   "button": "",
+   "link": "",
+   "minutes": 5
+  },
+  "ads_link": {
+   "title": "Accept our Google Ads link",
+   "why": "Only for the Ads and Complete packages. Accept the manager request Google emailed you.",
+   "button": "Open Google Ads",
+   "link": "https://ads.google.com/",
+   "minutes": 1
+  },
+  "meta_partner": {
+   "title": "Accept our Facebook partner request",
+   "why": "Only for the Ads and Complete packages. Open Business settings, then Requests, and accept Booked Out Solutions.",
+   "button": "Open Meta Business settings",
+   "link": "https://business.facebook.com/settings/requests",
+   "minutes": 1
+  }
+ },
+ "clients": [
+  {
+   "code": "stones-river",
+   "business": "Stones River Therapy and Wellness",
+   "first_name": "Jamie",
+   "kind": "therapy",
+   "steps": [
+    {
+     "id": "connect",
+     "status": "todo"
+    },
+    {
+     "id": "approve_posts",
+     "status": "todo",
+     "approve_button": "",
+     "approve_link": "",
+     "why": "We wrote 17 weekly Google posts, all checked against your therapy rules. They're in your Stones River folder as the post approvals sheet (full text in draft 37). Type OK next to each one you like, or write what to change. Nothing posts without your OK."
+    },
+    {
+     "id": "gbp_verify",
+     "status": "waiting",
+     "note": "Opens once your office is ready in December."
+    }
+   ],
+   "done": [
+    "Website live at stonesrivertherapy.com",
+    "Google Search Console set up",
+    "Practice phone line",
+    "SimplePractice booking button on your site",
+    "Weekly website check running"
+   ]
+  }
+ ]
+}
