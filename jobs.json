@@ -68,5 +68,10 @@
   "id": "deploy-meta-partner-video-nov12",
   "site": "getbookedoutsolutions.com",
   "do": "deploy"
+ },
+ {
+  "id": "deploy-meta-domain-tag-nov12",
+  "site": "getbookedoutsolutions.com",
+  "do": "deploy"
  }
 ]
