@@ -101,6 +101,47 @@
     "SimplePractice booking button on your site",
     "Weekly website check running"
    ]
+  },
+  {
+   "code": "demo-shop",
+   "business": "Smith Heating and Air (sample)",
+   "first_name": "Mike",
+   "kind": "home-service",
+   "demo": true,
+   "steps": [
+    {
+     "id": "connect",
+     "status": "todo"
+    },
+    {
+     "id": "gbp_manager",
+     "status": "todo"
+    },
+    {
+     "id": "card",
+     "status": "todo",
+     "card_link": "https://square.link/u/J4GhovLR"
+    },
+    {
+     "id": "approve_posts",
+     "status": "todo",
+     "approve_button": "",
+     "approve_link": ""
+    },
+    {
+     "id": "photos",
+     "status": "todo"
+    },
+    {
+     "id": "chatgpt_profile",
+     "status": "todo"
+    }
+   ],
+   "done": [
+    "Website built",
+    "Google Search Console set up",
+    "Weekly website check running"
+   ]
   }
  ]
 }
