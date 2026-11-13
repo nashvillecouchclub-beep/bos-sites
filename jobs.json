@@ -98,5 +98,10 @@
   "id": "deploy-free-30-days-new-prices-nov12",
   "site": "getbookedoutsolutions.com",
   "do": "deploy"
+ },
+ {
+  "id": "deploy-complete-3797-nov13",
+  "site": "getbookedoutsolutions.com",
+  "do": "deploy"
  }
 ]
