@@ -88,5 +88,10 @@
   "id": "search-srt-seo-fixes-nov12",
   "site": "stonesrivertherapy.com",
   "do": "search"
+ },
+ {
+  "id": "deploy-srt-email-signature-logo-nov12",
+  "site": "stonesrivertherapy.com",
+  "do": "deploy"
  }
 ]
