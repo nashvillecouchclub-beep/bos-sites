@@ -103,5 +103,10 @@
   "id": "deploy-complete-3797-nov13",
   "site": "getbookedoutsolutions.com",
   "do": "deploy"
+ },
+ {
+  "id": "deploy-charge-line-fix-nov13",
+  "site": "getbookedoutsolutions.com",
+  "do": "deploy"
  }
 ]
