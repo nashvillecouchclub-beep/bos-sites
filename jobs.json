@@ -108,5 +108,10 @@
   "id": "deploy-charge-line-fix-nov13",
   "site": "getbookedoutsolutions.com",
   "do": "deploy"
+ },
+ {
+  "id": "deploy-chatgpt-line-nov14",
+  "site": "getbookedoutsolutions.com",
+  "do": "deploy"
  }
 ]
