@@ -1,0 +1,7 @@
+{"tipno": 5, "kicker": "REVIEWS", "hook": "Ask for the review in the driveway",
+ "problem": "Tomorrow they're busy again. Most people mean to leave a review and never get to it.",
+ "steps": [{"big": "Ask before you pull out", "small": "While the relief is still fresh"},
+           {"big": "Text the link right then", "small": "Straight to the review box. One tap."},
+           {"big": "Ask everyone the same way", "small": "Google's rule: never offer anything for it"}],
+ "example": "If you were happy with today, would you mind leaving us a quick review? I'll text you the link now.",
+ "cta": {"line1": "Get one free tip like this every week", "line2": "The Booked Out Brief", "url": "getbookedoutsolutions.com/newsletter"}}

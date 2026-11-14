@@ -1,0 +1,38 @@
+{
+ "batch_id": "TEST-stones-river-sample",
+ "brand": "stones-river",
+ "title": "Your posts for the week of Nov 16 (sample)",
+ "intro": "Here are the posts we'd like to share for you this week. Read each one, then approve it or tell us what to change. Nothing is posted until you approve it.",
+ "items": [
+  {
+   "id": "facebook-01",
+   "platform": "facebook",
+   "date": "2026-11-17",
+   "title": "Three small ways to calm a racing mind at night",
+   "image": "/home/claude/bos-sites/content-system/out/stones-river/tip-01/feed.jpg",
+   "text": "Lying awake with your thoughts going in circles is one of the most common things adults describe when stress builds up. It is not a sign that something is wrong with you. A tired, busy mind often waits until the room is quiet to speak up.\n\nA few gentle things you can try tonight:\n\n1. Breathe out longer than you breathe in. Try in for a count of four and out for a count of six, for a few minutes. A longer out-breath is one of the simplest ways to tell your body it can slow down.\n2. Come back to the room. Name five things you can see, four you can hear and three you can feel. It gives your attention somewhere steady to rest.\n3. Park the worry. Keep a notebook by the bed, write the thought down in one line, and close the notebook. You are not ignoring it. You are setting it down until morning.\n\nA common trap is checking the clock. Turning the clock away from you often helps more than people expect.\n\nIf racing thoughts keep you up most nights, or you notice they are tied to something heavy you are carrying, that is a good reason to talk with someone. You do not have to sort it out alone.\n\nSave this for a night you need it.\n\nMore free articles: https://stonesrivertherapy.com/go/sr01f",
+   "audience": null,
+   "button": null
+  },
+  {
+   "id": "google-01",
+   "platform": "google",
+   "date": "2026-11-17",
+   "title": "Three small ways to calm a racing mind at night",
+   "image": "/home/claude/bos-sites/content-system/out/stones-river/tip-01/google.jpg",
+   "text": "Lying awake with your thoughts going in circles is one of the most common things adults describe when stress builds up. It is not a sign that something is wrong with you. A tired, busy mind often waits until the room is quiet to speak up.\n\n1. Breathe out longer than you breathe in. Try in for a count of four and out for a count of six, for a few minutes. A longer out-breath is one of the simplest ways to tell your body it can slow down.\n2. Come back to the room. Name five things you can see, four you can hear and three you can feel. It gives your attention somewhere steady to rest.\n3. Park the worry. Keep a notebook by the bed, write the thought down in one line, and close the notebook. You are not ignoring it. You are setting it down until morning.",
+   "audience": null,
+   "button": "Learn more (stonesrivertherapy.com/articles)"
+  },
+  {
+   "id": "linkedin-01",
+   "platform": "linkedin",
+   "date": "2026-11-17",
+   "title": "Three small ways to calm a racing mind at night",
+   "image": "/home/claude/bos-sites/content-system/out/stones-river/tip-01/linkedin.jpg",
+   "text": "Lying awake with your thoughts going in circles is one of the most common things adults describe when stress builds up. It is not a sign that something is wrong with you. A tired, busy mind often waits until the room is quiet to speak up.\n\nA few gentle things you can try tonight:\n\n1. Breathe out longer than you breathe in. Try in for a count of four and out for a count of six, for a few minutes. A longer out-breath is one of the simplest ways to tell your body it can slow down.\n2. Come back to the room. Name five things you can see, four you can hear and three you can feel. It gives your attention somewhere steady to rest.\n3. Park the worry. Keep a notebook by the bed, write the thought down in one line, and close the notebook. You are not ignoring it. You are setting it down until morning.\n\nA common trap is checking the clock. Turning the clock away from you often helps more than people expect.\n\nIf racing thoughts keep you up most nights, or you notice they are tied to something heavy you are carrying, that is a good reason to talk with someone. You do not have to sort it out alone.\n\nSave this for a night you need it.\n\nMore free articles: https://stonesrivertherapy.com/go/sr01l",
+   "audience": "Doctors, therapists, pastors and HR",
+   "button": null
+  }
+ ]
+}

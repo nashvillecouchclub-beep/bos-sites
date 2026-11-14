@@ -1,0 +1,8 @@
+name = "bookedout-approvals"
+main = "approvals-worker.js"
+compatibility_date = "2026-11-01"
+account_id = "38a4654108121557a3f2373ef382d669"
+
+[[kv_namespaces]]
+binding = "APPROVALS"
+id = "REPLACE_WITH_ID_FROM: npx wrangler kv namespace create APPROVALS"

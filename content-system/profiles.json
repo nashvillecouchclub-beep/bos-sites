@@ -1,0 +1,29 @@
+{
+ "_note": "Monthly profile checkup reads this. Every profile must: use the same business name and story as the website, have its bio filled close to the platform's limit with real website facts, link to OUR domain (never an old preview like a MailerLite page), and carry the newsletter link where the platform allows a second link. Update this file when a profile is added.",
+ "booked-out": {
+  "website": "https://getbookedoutsolutions.com/",
+  "newsletter": "https://getbookedoutsolutions.com/newsletter",
+  "name": "Booked Out Solutions",
+  "profiles": [
+   {"platform": "instagram", "handle": "@getbookedoutsolutions", "url": "https://www.instagram.com/getbookedoutsolutions", "bio_limit": 150, "check_via": "mini Chrome (signed in) or Buffer channel 6ac621c66a5c39ccb63ebedf"},
+   {"platform": "facebook", "url": "https://www.facebook.com/getbookedoutsolutions", "bio_limit": 255, "check_via": "public page + Buffer channel 6af873df62b70b94b02da886"},
+   {"platform": "x", "handle": "@BookedOutHQ", "url": "https://x.com/BookedOutHQ", "bio_limit": 160, "check_via": "public profile + Buffer channel 6af8743c62b70b94b02dab5d"},
+   {"platform": "youtube", "url": "https://www.youtube.com/channel/UCr0BoKD7Dki8urs58UPXfpQ", "bio_limit": 1000, "check_via": "public About tab"},
+   {"platform": "pinterest", "url": "https://www.pinterest.com/bookedoutsolutions", "bio_limit": 500, "check_via": "public profile; Metricool brand 7412435"},
+   {"platform": "google_business", "url": "", "bio_limit": 750, "check_via": "not verified yet (needs a verified profile); list as waiting"},
+   {"platform": "chatgpt_business", "url": "", "bio_limit": null, "check_via": "waiting on OpenAI ID reset"}
+  ]
+ },
+ "stones-river": {
+  "website": "https://stonesrivertherapy.com/",
+  "newsletter": null,
+  "name": "Stones River Therapy",
+  "rule": "Jamie's accounts: CHECK ONLY from public pages. Never sign in, never change anything; list fixes for Rickey to raise with Jamie.",
+  "profiles": [
+   {"platform": "google_business", "check_via": "public Google Maps listing"},
+   {"platform": "facebook", "check_via": "public page"},
+   {"platform": "linkedin", "check_via": "public page"},
+   {"platform": "psychology_today", "check_via": "public listing, if one exists"}
+  ]
+ }
+}

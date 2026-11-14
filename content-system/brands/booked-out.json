@@ -1,0 +1,32 @@
+{
+ "id": "booked-out",
+ "name": "Booked Out Solutions",
+ "domain": "getbookedoutsolutions.com",
+ "site_dir": "sites/getbookedoutsolutions.com",
+ "kind": "agency",
+ "audience": "local service business owners (every wave: trades, clinics, shops)",
+ "colors": {"bg": "#0A0F26", "bg2": "#0E1536", "text": "#FFFFFF", "body": "#ECEFFB", "muted": "#A9B2D6", "accent": "#FFB224", "accent_ink": "#0A0F26", "blue": "#3552D8"},
+ "fonts": {"display": {"family": "Bricolage Grotesque", "file": "sites/getbookedoutsolutions.com/fonts/bricolage-grotesque.woff2"},
+           "body": {"family": "Instrument Sans", "file": "sites/getbookedoutsolutions.com/fonts/instrument-sans.woff2"}},
+ "logo_svg": "sites/getbookedoutsolutions.com/favicon.svg",
+ "platforms": ["facebook", "instagram", "x", "pinterest", "google", "linkedin", "newsletter", "article", "video"],
+ "cta": {
+  "newsletter": {"url": "https://getbookedoutsolutions.com/newsletter", "line": "Get one free tip like this every week in The Booked Out Brief:", "short": "Free weekly tips"},
+  "free-look": {"url": "https://getbookedoutsolutions.com/free-look", "line": "Want a free, no-call look at your own Google profile, reviews and old quotes?", "short": "Free look at your shop"},
+  "instagram_line": {"newsletter": "Want one free tip like this every week? Newsletter link in our bio.", "free-look": "Want a free look at your own Google profile, reviews and old quotes? Link in bio."},
+  "mix": {"newsletter": 3, "free-look": 1}
+ },
+ "comment_prompt_style": "specific, one-word or one-number answers (YES/NO, a number, PASS/FAIL)",
+ "rules": {
+  "no_prices": true,
+  "no_income_claims": true,
+  "no_promised_results": true,
+  "no_client_stories": false,
+  "no_testimonials": true,
+  "crisis_line_required": false,
+  "comment_prompt_banned": [],
+  "banned_phrases": ["in your voice", "launch price", "we work for you", "we're new"]
+ },
+ "go_prefix": "bo",
+ "utm_source_names": {"facebook": "facebook", "instagram": "instagram", "x": "x", "pinterest": "pinterest", "google": "google_business", "linkedin": "linkedin", "newsletter": "newsletter", "article": "website", "video": "video"}
+}

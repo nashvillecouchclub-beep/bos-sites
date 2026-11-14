@@ -1,0 +1,7 @@
+{"tipno": 7, "kicker": "PHONE CALLS", "hook": "A missed call is a missed job",
+ "problem": "Most people who hit voicemail don't leave a message. They call the next shop.",
+ "steps": [{"big": "Turn on missed-call text back", "small": "Most business phone apps have it built in"},
+           {"big": "Text back within 5 minutes", "small": "Short, human, with a real name"},
+           {"big": "Ask one easy question", "small": "So they reply instead of calling someone else"}],
+ "example": "Sorry we missed your call. This is [your name] at [your shop]. What's going on?",
+ "cta": {"line1": "Get one free tip like this every week", "line2": "The Booked Out Brief", "url": "getbookedoutsolutions.com/newsletter"}}

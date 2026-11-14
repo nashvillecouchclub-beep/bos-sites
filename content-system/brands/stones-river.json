@@ -1,0 +1,38 @@
+{
+ "id": "stones-river",
+ "name": "Stones River Therapy",
+ "domain": "stonesrivertherapy.com",
+ "site_dir": "sites/stonesrivertherapy.com",
+ "kind": "client",
+ "client_contact": "Jamie (owner). Jamie approves every piece; Jamie replies to her own comments and messages; we never reply for her.",
+ "audience": "adults in Tennessee looking for individual or couples therapy",
+ "colors": {"bg": "#EEE9E3", "bg2": "#E3DAD0", "text": "#2C2622", "body": "#3A322C", "muted": "#6B6058", "accent": "#86665F", "accent_ink": "#FBF8F5", "sage": "#6E7865", "taupe": "#9C8C7D"},
+ "fonts": {"display": {"family": "Cormorant Garamond", "file": "sites/stonesrivertherapy.com/assets/fonts/cg-500.woff2"},
+           "display_italic": {"family": "Cormorant Garamond", "file": "sites/stonesrivertherapy.com/assets/fonts/cg-500i.woff2", "style": "italic"},
+           "body": {"family": "Jost", "file": "sites/stonesrivertherapy.com/assets/fonts/jost-400.woff2"},
+           "body_light": {"family": "Jost", "file": "sites/stonesrivertherapy.com/assets/fonts/jost-300.woff2", "weight": 300}},
+ "logo_svg": "sites/stonesrivertherapy.com/logo/flower-only.svg",
+ "platforms": ["facebook", "google", "linkedin", "article", "video"],
+ "cta": {
+  "newsletter": null,
+  "consult": {"url": "https://stonesrivertherapy.com/book.html", "line": "If you'd like to talk it through, you can book a free 15-minute consult:", "short": "Free 15-minute consult"},
+  "articles": {"url": "https://stonesrivertherapy.com/articles", "line": "More free articles:", "short": "Read more"},
+  "mix": {"consult": 1, "articles": 2}
+ },
+ "comment_prompt_style": "save/share style only: 'Save this for a hard day', 'Which of these would you try first? Just the number.' Never ask anyone to share personal or health details publicly.",
+ "rules": {
+  "no_prices": true,
+  "no_income_claims": true,
+  "no_promised_results": true,
+  "no_client_stories": true,
+  "no_testimonials": true,
+  "crisis_line_required": true,
+  "crisis_line_text": "If you're in crisis or thinking about suicide, call or text 988 (Suicide and Crisis Lifeline), any time.",
+  "adults_only": true,
+  "comment_prompt_banned": ["share your story", "tell us about", "tell me about", "what happened", "your diagnosis", "your trauma", "your marriage", "comment below with your", "dm me your", "how are you feeling", "what are you struggling", "share your experience", "in the comments, share"],
+  "banned_phrases": ["my client", "a client of mine", "one client", "clients tell me", "testimonial", "5 stars", "guaranteed", "cure", "fix your marriage", "you will feel better"]
+ },
+ "go_prefix": "sr",
+ "never_auto_reply": true,
+ "utm_source_names": {"facebook": "facebook", "google": "google_business", "linkedin": "linkedin", "article": "website", "video": "video"}
+}

@@ -1,0 +1,7 @@
+{"week_start":"2026-11-16","week_end":"2026-11-22","brand":"booked-out",
+ "followers":{"instagram":[10,14],"facebook":[3,5],"x":[2,2],"pinterest":[null,null]},
+ "newsletter":{"subscribers":[0,3],"source":"test"},"free_look_requests":1,"clicks":{"bo07f":4,"bo01f":2},
+ "posts":[{"platform":"facebook","tip":7,"kicker":"PHONE CALLS","headline":"A missed call is a missed job","impressions":120,"engagements":9,"comments":2,"clicks":4},
+          {"platform":"facebook","tip":1,"kicker":"OLD QUOTES","headline":"The quote you already gave","impressions":80,"engagements":2,"comments":0,"clicks":1},
+          {"platform":"x","tip":7,"kicker":"PHONE CALLS","headline":"A missed call","impressions":5}],
+ "notes":["TEST DATA ONLY"]}
