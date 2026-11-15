@@ -11,9 +11,10 @@
 //   log:<iso>:<token>:<item>  one row per tap (90 days), for the weekly task's read-and-act pass
 //   fin:<token>           time the page was finished (every item answered)
 //   test:<token>          the TEST save done at deploy (never a client answer)
-//   alert:last            result of the last alert email
-// Alert email: every saved tap is mailed to Booked Out (env.ALERT_TO) through FormSubmit, as a backup copy
-// and the per-answer alert. No secrets in this file. Nothing here sends anything to a client.
+//   html:<token>          the page itself (built by tools/make_client_page.py)
+//   alert:last            result of the last alert email (when ALERT_TO is set)
+// Alert email: optional (env.ALERT_TO via FormSubmit). OFF since Nov 15: FormSubmit rate-limits Worker IPs (429).
+// Alerts are sent by the client-pages scheduled task instead. No secrets in this file. Nothing here sends anything to a client.
 
 const TOKEN = /^[a-f0-9]{32,64}$/;
 const ITEM = /^[a-z0-9][a-z0-9-]{0,60}$/;

@@ -123,5 +123,10 @@
   "id": "deploy-website-v3-nov15",
   "site": "getbookedoutsolutions.com",
   "do": "deploy"
+ },
+ {
+  "id": "deploy-client-pages-nov15",
+  "site": "getbookedoutsolutions.com",
+  "do": "deploy"
  }
 ]

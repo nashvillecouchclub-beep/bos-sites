@@ -1,3 +1,8 @@
 # Connect Booked Out (one Google Allow per client) - proxied to the Cloudflare worker, URL stays on our domain
 /connect            https://bookedout-connect.rickey-38a.workers.dev/connect            200!
 /connect/*          https://bookedout-connect.rickey-38a.workers.dev/connect/:splat     200!
+
+# Client one-tap pages (Nov 15) - served and saved by the bookedout-answers worker, URL stays on our domain
+/c/*                    https://bookedout-answers.rickey-38a.workers.dev/c/:splat                    200!
+/api/client-answer      https://bookedout-answers.rickey-38a.workers.dev/api/client-answer           200!
+/api/client-answer/*    https://bookedout-answers.rickey-38a.workers.dev/api/client-answer/:splat    200!

@@ -10,3 +10,8 @@
   X-Robots-Tag: noindex, nofollow
 /welcome.html
   X-Robots-Tag: noindex, nofollow
+/c/*
+  X-Robots-Tag: noindex, nofollow
+  Referrer-Policy: no-referrer
+/api/*
+  X-Robots-Tag: noindex, nofollow
