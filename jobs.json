@@ -128,5 +128,10 @@
   "id": "deploy-client-pages-nov15",
   "site": "getbookedoutsolutions.com",
   "do": "deploy"
+ },
+ {
+  "id": "deploy-price-switcher-nov15",
+  "site": "getbookedoutsolutions.com",
+  "do": "deploy"
  }
 ]
