@@ -3,6 +3,7 @@
 // Netlify proxies /api/client-answer* on our domain to this worker, so clients only ever see our domain.
 // Routes:
 //   POST /api/client-answer        {token, answers:[{item, answer, note}], test?}  -> saves, returns {saved:true}
+//   POST /api/client-answer        {token, question:{item|'_general', note}}       -> saves a question (not an answer)
 //   GET  /api/client-answer/state?t=<token>                                         -> that page's saved answers
 // Storage (KV binding KV):
 //   page:<token>          the page register (written by the weekly client-pages task through the Cloudflare API)
@@ -11,6 +12,8 @@
 //   log:<iso>:<token>:<item>  one row per tap (90 days), for the weekly task's read-and-act pass
 //   agg:<token>           all answers for the page in one key (fast, no list() lag)
 //   fin:<token>           time the page was finished (every item answered)
+//   q:<token>             questions the client typed [{id,item,title,note,time}] (item '_general' = page-level); never answers
+//   qlog:<time>:<token>   one row per question (90 days)
 //   test:<token>          the TEST save done at deploy (never a client answer)
 //   html:<token>          the page itself (built by tools/make_client_page.py)
 //   alert:last            result of the last alert email (when ALERT_TO is set)
@@ -57,6 +60,7 @@ async function answer(req, env, ctx) {
     await env.KV.put('test:' + token, JSON.stringify({ time: now, note: String(b.note || '').slice(0, 200) }), { expirationTtl: 60 * 60 * 24 * 30 });
     return json({ saved: true, test: true, time: now });
   }
+  if (b.question) return await question(env, page, token, b.question, now);
   const list = Array.isArray(b.answers) ? b.answers.slice(0, 25) : [];
   if (!list.length) return json({ saved: false, error: 'no answers' }, 400);
   const rows = [];
@@ -86,6 +90,21 @@ async function answer(req, env, ctx) {
   return json({ saved: true, time: now, answered, total, finished });
 }
 
+// Questions (Rickey Nov 15 12:20 pm): kept apart from answers, never count as answering a card.
+async function question(env, page, token, q, now) {
+  const item = String(q.item || '');
+  if (item !== '_general' && !(ITEM.test(item) && page.items && page.items[item])) return json({ saved: false, error: 'unknown item' }, 400);
+  const note = String(q.note || '').slice(0, 2000).trim();
+  if (!note) return json({ saved: false, error: 'empty question' }, 400);
+  const row = { id: now + '-' + Math.random().toString(36).slice(2, 7), client: page.client, token, item,
+    title: item === '_general' ? 'General question' : (page.items[item].title || item), note, time: now };
+  const all = JSON.parse((await env.KV.get('q:' + token)) || '[]');
+  all.push(row);
+  await env.KV.put('q:' + token, JSON.stringify(all.slice(-200)));
+  await env.KV.put(`qlog:${now}:${token}`, JSON.stringify(row), { expirationTtl: 60 * 60 * 24 * 90 });
+  return json({ saved: true, question: true, time: now, id: row.id });
+}
+
 async function state(u, env) {
   const token = u.searchParams.get('t') || '';
   if (!TOKEN.test(token)) return json({ error: 'bad page' }, 400);
@@ -96,7 +115,8 @@ async function state(u, env) {
     const r = JSON.parse((await env.KV.get(k.name)) || 'null');
     if (r && (!out[r.item] || out[r.item].time < r.time)) out[r.item] = { answer: r.answer, note: r.note, time: r.time };
   }
-  return json({ answers: out, finished: Boolean(await env.KV.get('fin:' + token)) });
+  const qs = JSON.parse((await env.KV.get('q:' + token)) || '[]').map((r) => ({ id: r.id, item: r.item, note: r.note, time: r.time }));
+  return json({ answers: out, questions: qs, finished: Boolean(await env.KV.get('fin:' + token)) });
 }
 
 async function alert(env, page, token, rows, answered, total, finished) {

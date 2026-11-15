@@ -9,6 +9,8 @@ does this through the Cloudflare dashboard API in the mini's Chrome). Specs and 
 Spec: {token, client, client_name, week, title, kick, heading, signoff, footer:[..], done_intro, done:[..],
        sections:[{key, title, desc, batch?, items:[{id, meta, title, body:[..], sign?, serp?, choice?, kind?, guide?, input?}]}]}
 Rules: max 15 items a page. Instruction cards use kind "todo" (Done / I need help).
+Every page gets an "Ask a question" button on each card and a "Have a question about anything?" box at the bottom
+(Rickey Nov 15 12:20 pm). Questions save apart from answers (worker q:<token>) and never count as answering a card.
 """
 import json, os, re, sys
 

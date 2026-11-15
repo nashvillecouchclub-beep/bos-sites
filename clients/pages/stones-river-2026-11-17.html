@@ -77,6 +77,13 @@ textarea{min-height:6rem}
 .confirm .bg{font:500 1.6rem/1.2 var(--display)}
 .confirm .sm{margin-top:.3rem;font-size:.95rem;opacity:.92}
 .confirm button{margin-top:.8rem;background:transparent;border:1px solid rgba(255,255,255,.5);color:#fff;border-radius:99px;padding:.45rem 1.1rem;font:inherit;cursor:pointer}
+/* questions (Nov 15 12:20 pm) */
+.btn.ask{background:transparent;border:2px dashed var(--line);color:var(--plum);flex:1 1 100%;min-height:2.9rem;font-size:1rem}
+.qlist{margin-top:.6rem}
+.qitem{background:#fff;border:1px solid var(--line);border-left:4px solid var(--rose);border-radius:10px;padding:.6rem .8rem;margin:.5rem 0 0;font-size:.95rem}
+.qitem b{font-weight:500;color:var(--plum);display:block;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase}
+.general{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:1.2rem 1.15rem;margin:1.8rem 0 0}
+.general h2{font-size:1.9rem;font-weight:400;margin:0 0 .3rem}
 footer{margin:2.4rem 0 7rem;color:var(--muted);font-size:.85rem}
 :focus-visible{outline:3px solid var(--rose);outline-offset:3px}
 </style>
@@ -93,6 +100,7 @@ footer{margin:2.4rem 0 7rem;color:var(--muted);font-size:.85rem}
 </header>
 <div class="prog" aria-label="Your progress"><div class="wrap"><span><b id="pn">0 of 0</b> answered</span><div class="track"><i id="pt"></i></div></div></div>
 <main class="wrap"><div id="main"></div>
+<section class="general" id="general"><h2>Have a question about anything?</h2><p class="sec-p" style="margin:0">Ask about anything on this page, or anything else. Rickey will get back to you.</p><label class="l" for="qt-_general">Your question</label><textarea id="qt-_general"></textarea><div class="btns"><button class="btn big" type="button" data-act="sendq" data-id="_general">Send my question</button></div><div class="qlist" id="ql-_general"></div></section>
 <div class="finish" id="finish" role="status"><h2>All done. Thank you!</h2><p>Every answer is saved. We'll take it from here, and you'll get a short email confirming what happens next.</p></div></main>
 <footer class="wrap" id="foot"></footer>
 <div class="confirm" id="confirm" role="status" aria-live="assertive"><div class="bg" id="cbig"></div><div class="sm" id="csmall"></div><button type="button" id="cclose">OK</button></div>
@@ -101,9 +109,18 @@ var PAGE={"kick": "Stones River Therapy and Wellness", "heading": "Jamie, a few 
 var TOKEN=(location.pathname.match(/\/c\/([a-f0-9]{32,64})/)||[])[1]||"";
 var API="/api/client-answer";
 var ALL={},answers={},SECTIONS=PAGE.sections,LK="bo-answers-"+TOKEN;
+var questions=[],QK="bo-questions-"+TOKEN;
+function keepQ(){try{localStorage.setItem(QK,JSON.stringify(questions))}catch(e){}}
+function addQ(q){if(!q||!q.id||questions.some(function(x){return x.id===q.id}))return;questions.push(q)}
+function showQ(){var by={};questions.forEach(function(q){(by[q.item]=by[q.item]||[]).push(q)});document.querySelectorAll(".qlist").forEach(function(el){var id=el.id.slice(3),l=by[id]||[];el.innerHTML=l.map(function(q){return'<div class="qitem"><b>Your question, sent</b>'+esc(q.note)+"</div>"}).join("")})}
 function keep(){try{localStorage.setItem(LK,JSON.stringify(answers))}catch(e){}}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]})}
 function renderBody(b){var h="";(b||[]).forEach(function(x){if(typeof x==="string")h+="<p>"+esc(x)+"</p>";else if(x.ol)h+="<ol>"+x.ol.map(function(i){return"<li>"+esc(i)+"</li>"}).join("")+"</ol>";else if(x.ul)h+="<ul>"+x.ul.map(function(i){return"<li>"+esc(i)+"</li>"}).join("")+"</ul>";else if(x.h)h+="<h4>"+esc(x.h)+"</h4>";else if(x.sig)h+='<div class="sig">'+esc(x.sig)+"</div>";else if(x.note)h+='<div class="note">'+esc(x.note)+"</div>";else if(x.link)h+='<p><a href="'+esc(x.link)+'" target="_blank" rel="noopener">'+esc(x.text||x.link)+"</a></p>"});return h}
+function askHTML(id){
+  return '<div class="btns"><button class="btn ask" type="button" data-act="ask" data-id="'+id+'">Ask a question</button></div>'
+   +'<div class="chbox" id="qb-'+id+'"><label class="l" for="qt-'+id+'">Your question</label><textarea id="qt-'+id+'"></textarea><div class="btns"><button class="btn big" type="button" data-act="sendq" data-id="'+id+'">Send my question</button></div></div>'
+   +'<div class="qlist" id="ql-'+id+'"></div>';
+}
 function cardHTML(it){
   var todo=it.kind==="todo",long=!todo&&it.body.length>4;
   var first=long?it.body.slice(0,2):it.body,rest=long?it.body.slice(2):[];
@@ -125,7 +142,8 @@ function cardHTML(it){
     h+='<button class="btn chg" type="button" data-act="chg" data-id="'+it.id+'">Change this</button></div>';
     h+='<div class="chbox" id="cb-'+it.id+'"><label class="l" for="ta-'+it.id+'">What should we change?</label><textarea id="ta-'+it.id+'"></textarea><div class="btns"><button class="btn big" type="button" data-act="send" data-id="'+it.id+'">Send</button></div></div>';
   }
-  h+='<div class="state" id="st-'+it.id+'" aria-live="polite"></div></article>';
+  h+='<div class="state" id="st-'+it.id+'" aria-live="polite"></div>';
+  h+=askHTML(it.id)+'</article>';
   return h;
 }
 function render(){
@@ -164,9 +182,22 @@ function save(list,okBig){
     box("",j.finished?"Got it! That was the last one.":okBig,j.finished?"Every answer is saved. Thank you!":"Saved. Nothing posts or changes until we set it up.")})
   .catch(function(){if(done)return;done=true;clearTimeout(t);box("err",FAIL,FAILS)});
 }
+function saveQ(id){
+  var ta=document.getElementById("qt-"+id),note=ta.value.trim();
+  if(!note){ta.focus();box("err","Please type your question first.","Then tap Send my question.");return}
+  box("wait","Sending...","One moment.");
+  var done=false,t=setTimeout(function(){if(!done){done=true;box("err",FAIL,FAILS)}},10000);
+  fetch(API,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:TOKEN,question:{item:id,note:note}})})
+  .then(function(r){return r.json().then(function(j){if(!r.ok||!j.saved)throw new Error(j.error||"not saved");return j})})
+  .then(function(j){if(done)return;done=true;clearTimeout(t);addQ({id:j.id,item:id,note:note,time:j.time});keepQ();showQ();ta.value="";var qb=document.getElementById("qb-"+id);if(qb)qb.classList.remove("show");
+    box("","Got it! Your question is sent.","Rickey will get back to you.")})
+  .catch(function(){if(done)return;done=true;clearTimeout(t);box("err",FAIL,FAILS)});
+}
 function rec(id,answer,note){return{item:id,answer:answer,note:note||""}}
 document.addEventListener("click",function(e){
   var b=e.target.closest("[data-act]");if(!b)return;var act=b.getAttribute("data-act"),id=b.getAttribute("data-id");
+  if(act==="ask"){var qb=document.getElementById("qb-"+id);qb.classList.toggle("show");if(qb.classList.contains("show"))document.getElementById("qt-"+id).focus();return}
+  if(act==="sendq"){saveQ(id);return}
   if(act==="yes")save([rec(id,"approved")],"Got it! Approved: "+ALL[id].title);
   else if(act==="pick"){var v=b.getAttribute("data-v");save([rec(id,v)],"Got it! Your answer: "+v)}
   else if(act==="chg"||act==="help"){var cb=document.getElementById("cb-"+id);cb.classList.toggle("show");if(cb.classList.contains("show"))document.getElementById("ta-"+id).focus()}
@@ -180,9 +211,10 @@ document.addEventListener("click",function(e){
     save(list,"Got it! Approved all "+list.length+(list.length<sec.items.length?" (the ones you asked to change stay as change requests)":"")+".")}
 });
 render();
+try{JSON.parse(localStorage.getItem(QK)||"[]").forEach(addQ);showQ()}catch(e){}
 try{var loc=JSON.parse(localStorage.getItem(LK)||"{}");Object.keys(loc).forEach(function(id){if(ALL[id]){answers[id]=loc[id];showState(id)}})}catch(e){}
 progress();
-fetch(API+"/state?t="+TOKEN,{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){Object.keys(j.answers||{}).forEach(function(id){if(ALL[id]&&(!answers[id]||!answers[id].time||answers[id].time<=j.answers[id].time)){answers[id]=j.answers[id];answers[id].item=id;showState(id)}});keep();progress()}).catch(function(){});
+fetch(API+"/state?t="+TOKEN,{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){Object.keys(j.answers||{}).forEach(function(id){if(ALL[id]&&(!answers[id]||!answers[id].time||answers[id].time<=j.answers[id].time)){answers[id]=j.answers[id];answers[id].item=id;showState(id)}});keep();(j.questions||[]).forEach(addQ);keepQ();showQ();progress()}).catch(function(){});
 </script>
 </body>
 </html>
