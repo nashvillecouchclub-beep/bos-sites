@@ -9,6 +9,7 @@
 //                         {client, client_name, week, created, items:{<id>:{title, choices?}}}
 //   ans:<token>:<item>    latest answer {client, token, item, title, answer, note, time}
 //   log:<iso>:<token>:<item>  one row per tap (90 days), for the weekly task's read-and-act pass
+//   agg:<token>           all answers for the page in one key (fast, no list() lag)
 //   fin:<token>           time the page was finished (every item answered)
 //   test:<token>          the TEST save done at deploy (never a client answer)
 //   html:<token>          the page itself (built by tools/make_client_page.py)
@@ -73,7 +74,11 @@ async function answer(req, env, ctx) {
     await env.KV.put(`ans:${token}:${r.item}`, JSON.stringify(r));
     await env.KV.put(`log:${now}:${token}:${r.item}`, JSON.stringify(r), { expirationTtl: 60 * 60 * 24 * 90 });
   }
-  const answered = (await env.KV.list({ prefix: `ans:${token}:` })).keys.length;
+  // agg:<token> holds every answer for the page in one key (KV list() can lag up to a minute)
+  const agg = JSON.parse((await env.KV.get('agg:' + token)) || '{}');
+  for (const r of rows) agg[r.item] = { answer: r.answer, note: r.note, time: r.time };
+  await env.KV.put('agg:' + token, JSON.stringify(agg));
+  const answered = Object.keys(agg).filter((k) => page.items && page.items[k]).length;
   const total = Object.keys(page.items || {}).length;
   let finished = false;
   if (answered >= total && !(await env.KV.get('fin:' + token))) { finished = true; await env.KV.put('fin:' + token, now); }
@@ -85,11 +90,11 @@ async function state(u, env) {
   const token = u.searchParams.get('t') || '';
   if (!TOKEN.test(token)) return json({ error: 'bad page' }, 400);
   if (!(await env.KV.get('page:' + token))) return json({ error: 'unknown page' }, 404);
-  const out = {};
+  const out = JSON.parse((await env.KV.get('agg:' + token)) || '{}');
   const keys = (await env.KV.list({ prefix: `ans:${token}:` })).keys;
   for (const k of keys) {
     const r = JSON.parse((await env.KV.get(k.name)) || 'null');
-    if (r) out[r.item] = { answer: r.answer, note: r.note, time: r.time };
+    if (r && (!out[r.item] || out[r.item].time < r.time)) out[r.item] = { answer: r.answer, note: r.note, time: r.time };
   }
   return json({ answers: out, finished: Boolean(await env.KV.get('fin:' + token)) });
 }

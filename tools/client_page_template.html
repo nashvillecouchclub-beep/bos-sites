@@ -100,7 +100,8 @@ footer{margin:2.4rem 0 7rem;color:var(--muted);font-size:.85rem}
 var PAGE=/*__PAGE__*/null;
 var TOKEN=(location.pathname.match(/\/c\/([a-f0-9]{32,64})/)||[])[1]||"";
 var API="/api/client-answer";
-var ALL={},answers={},SECTIONS=PAGE.sections;
+var ALL={},answers={},SECTIONS=PAGE.sections,LK="bo-answers-"+TOKEN;
+function keep(){try{localStorage.setItem(LK,JSON.stringify(answers))}catch(e){}}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]})}
 function renderBody(b){var h="";(b||[]).forEach(function(x){if(typeof x==="string")h+="<p>"+esc(x)+"</p>";else if(x.ol)h+="<ol>"+x.ol.map(function(i){return"<li>"+esc(i)+"</li>"}).join("")+"</ol>";else if(x.ul)h+="<ul>"+x.ul.map(function(i){return"<li>"+esc(i)+"</li>"}).join("")+"</ul>";else if(x.h)h+="<h4>"+esc(x.h)+"</h4>";else if(x.sig)h+='<div class="sig">'+esc(x.sig)+"</div>";else if(x.note)h+='<div class="note">'+esc(x.note)+"</div>";else if(x.link)h+='<p><a href="'+esc(x.link)+'" target="_blank" rel="noopener">'+esc(x.text||x.link)+"</a></p>"});return h}
 function cardHTML(it){
@@ -159,7 +160,7 @@ function save(list,okBig){
   var done=false,t=setTimeout(function(){if(!done){done=true;box("err",FAIL,FAILS)}},10000);
   fetch(API,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:TOKEN,answers:list.map(function(r){return{item:r.item,answer:r.answer,note:r.note}})})})
   .then(function(r){return r.json().then(function(j){if(!r.ok||!j.saved)throw new Error(j.error||"not saved");return j})})
-  .then(function(j){if(done)return;done=true;clearTimeout(t);list.forEach(function(r){r.time=j.time;answers[r.item]=r;showState(r.item)});progress();
+  .then(function(j){if(done)return;done=true;clearTimeout(t);list.forEach(function(r){r.time=j.time;answers[r.item]=r;showState(r.item)});keep();progress();
     box("",j.finished?"Got it! That was the last one.":okBig,j.finished?"Every answer is saved. Thank you!":"Saved. Nothing posts or changes until we set it up.")})
   .catch(function(){if(done)return;done=true;clearTimeout(t);box("err",FAIL,FAILS)});
 }
@@ -178,8 +179,10 @@ document.addEventListener("click",function(e){
     if(!list.length){box("","Nothing left to approve here.","The ones you asked to change stay as they are.");return}
     save(list,"Got it! Approved all "+list.length+(list.length<sec.items.length?" (the ones you asked to change stay as change requests)":"")+".")}
 });
-render();progress();
-fetch(API+"/state?t="+TOKEN,{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){Object.keys(j.answers||{}).forEach(function(id){if(ALL[id]){answers[id]=j.answers[id];answers[id].item=id;showState(id)}});progress()}).catch(function(){});
+render();
+try{var loc=JSON.parse(localStorage.getItem(LK)||"{}");Object.keys(loc).forEach(function(id){if(ALL[id]){answers[id]=loc[id];showState(id)}})}catch(e){}
+progress();
+fetch(API+"/state?t="+TOKEN,{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){Object.keys(j.answers||{}).forEach(function(id){if(ALL[id]&&(!answers[id]||!answers[id].time||answers[id].time<=j.answers[id].time)){answers[id]=j.answers[id];answers[id].item=id;showState(id)}});keep();progress()}).catch(function(){});
 </script>
 </body>
 </html>
