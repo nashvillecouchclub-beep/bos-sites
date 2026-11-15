@@ -113,5 +113,10 @@
   "id": "deploy-chatgpt-line-nov14",
   "site": "getbookedoutsolutions.com",
   "do": "deploy"
+ },
+ {
+  "id": "deploy-social-rewrite-and-footer-icons-nov14",
+  "site": "getbookedoutsolutions.com",
+  "do": "deploy"
  }
 ]

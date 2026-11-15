@@ -1,0 +1,33 @@
+@font-face{font-family:Brico;src:url(../sites/getbookedoutsolutions.com/fonts/bricolage-grotesque.woff2)}
+@font-face{font-family:Inst;src:url(../sites/getbookedoutsolutions.com/fonts/instrument-sans.woff2)}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#070B1E}
+.card{position:relative;width:100%;height:100%;overflow:hidden;color:#ECEFFB;font-family:Inst,sans-serif;
+ background:linear-gradient(160deg,#0E1536 0%,#0A0F26 45%,#060918 100%);padding:84px 84px 72px;display:flex;flex-direction:column}
+.glow{position:absolute;border-radius:50%;filter:blur(90px);opacity:.55}
+.g1{width:620px;height:620px;right:-220px;top:-200px;background:radial-gradient(circle,#FFB224 0%,rgba(255,178,36,0) 70%);opacity:.28}
+.g2{width:700px;height:700px;left:-300px;bottom:-320px;background:radial-gradient(circle,#3552D8 0%,rgba(53,82,216,0) 70%);opacity:.45}
+.grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:54px 54px;mask-image:radial-gradient(ellipse at 70% 20%,#000 0%,transparent 70%);-webkit-mask-image:radial-gradient(ellipse at 70% 20%,#000 0%,transparent 70%)}
+header,.kicker,h1,.steps,footer{position:relative;z-index:2}
+header{display:flex;align-items:center;gap:18px}
+.logo svg{width:62px;height:62px;display:block}
+.name{font-family:Brico;font-weight:700;font-size:32px;letter-spacing:-.3px}
+.tipno{margin-left:auto;font-family:Brico;font-weight:700;font-size:26px;color:#FFB224;letter-spacing:2px;border:2px solid rgba(255,178,36,.45);padding:8px 18px;border-radius:999px}
+.mid{position:relative;z-index:2;flex:1;display:flex;flex-direction:column;justify-content:center;padding:40px 0 20px}
+.kicker{align-self:flex-start;display:inline-flex;align-items:center;gap:14px;font-weight:700;font-size:25px;letter-spacing:4px;color:#FFB224}
+.dot{width:12px;height:12px;border-radius:50%;background:#FFB224;box-shadow:0 0 18px #FFB224}
+h1{--maxh:400px;margin-top:26px;font-family:Brico;font-weight:800;font-size:92px;line-height:1.02;letter-spacing:-2.5px;color:#fff;max-height:none}
+.steps{list-style:none;margin-top:64px;background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.12);border-radius:28px;padding:34px 38px;display:flex;flex-direction:column;gap:22px;box-shadow:0 30px 60px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08)}
+.steps li{display:flex;align-items:center;gap:22px;font-size:33px;font-weight:600;line-height:1.2;color:#ECEFFB}
+.num{flex:none;width:52px;height:52px;border-radius:50%;background:#FFB224;color:#0A0F26;font-family:Brico;font-weight:800;font-size:27px;display:flex;align-items:center;justify-content:center}
+footer{margin-top:auto;display:flex;align-items:center;justify-content:space-between;font-size:24px;color:#A9B2D6}
+.save{display:flex;align-items:center;gap:10px}.save svg{width:26px;height:26px;color:#FFB224}
+.url{font-weight:600;color:#ECEFFB}
+body.pin .card{padding:80px 76px 70px}
+body.pin h1{font-size:96px;--maxh:520px}
+
+
+.mark{position:absolute;right:-60px;top:120px;width:520px;height:520px;z-index:1;opacity:.07}
+.mark path{fill:none;stroke:#FFB224;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
+body.pin .mark{width:560px;height:560px;top:160px}
+.kicker:after{content:"";display:block;width:90px;height:2px;background:linear-gradient(90deg,#FFB224,transparent);margin-left:6px}

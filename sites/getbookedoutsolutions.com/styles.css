@@ -585,3 +585,10 @@ footer .legal{margin-top:40px;padding-top:22px;border-top:1px solid var(--inklin
 .ask-rickey{margin-top:14px;font-size:15px}
 .hero .ask-rickey{color:#d6dcf5}
 .hero .ask-rickey a{color:#fff;font-weight:600}
+
+footer .social{margin-top:34px;display:flex;flex-wrap:wrap;align-items:center;gap:14px 18px}
+footer .social>span{color:#fff;font-weight:600;font-size:16px}
+footer .social .icons{display:flex;gap:10px}
+footer .social a{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,178,36,.45);color:var(--amber);text-decoration:none;transition:background .2s ease-out,color .2s ease-out,transform .2s ease-out}
+footer .social a:hover,footer .social a:focus-visible{background:var(--amber);color:#0A0F26;transform:translateY(-2px)}
+footer .social svg{display:block}
