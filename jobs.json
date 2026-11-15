@@ -118,5 +118,10 @@
   "id": "deploy-social-rewrite-and-footer-icons-nov14",
   "site": "getbookedoutsolutions.com",
   "do": "deploy"
+ },
+ {
+  "id": "deploy-website-v3-nov15",
+  "site": "getbookedoutsolutions.com",
+  "do": "deploy"
  }
 ]

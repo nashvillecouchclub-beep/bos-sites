@@ -72,7 +72,7 @@
     });
   });
 
-  /* free look form: opens the owner's own email, filled in */
+  /* free report form: opens the owner's own email, filled in */
   var form = d.querySelector("[data-lookform]");
   if (form) {
     var q = /[?&]trade=([a-z]+)/.exec(location.search || "");
@@ -84,15 +84,23 @@
       need.forEach(function (n) { var f = form.querySelector("[name=" + n + "]"); if (!f.value.trim()) { ok = false; f.style.borderColor = "#E5484D"; } else f.style.borderColor = ""; });
       if (!ok) { var first = form.querySelector("[name=name]"); if (first) first.focus(); return; }
       function v(n) { var f = form.querySelector("[name=" + n + "]"); return f && f.value ? f.value.trim() : ""; }
-      var lines = ["Hi Rickey,", "", "Please send my free look.", "", "Name: " + v("name"), "Shop: " + v("shop"), "Trade: " + v("trade"), "Town: " + v("town")];
+      var lines = ["Hi Rickey,", "", "Please send my free report.", "", "Name: " + v("name"), "Shop: " + v("shop"), "Trade: " + v("trade"), "Town: " + v("town")];
       if (v("jobs")) lines.push("Jobs a week: " + v("jobs"));
       lines.push("Costing me most: " + v("problem"));
       if (v("decides")) lines.push("Who decides: " + v("decides"));
       if (v("start")) lines.push("Could start this month: " + v("start"));
       if (v("note")) lines.push("Note: " + v("note"));
-      var href = "mailto:" + form.getAttribute("data-to") + "?subject=" + encodeURIComponent("Free look for " + v("shop")) + "&body=" + encodeURIComponent(lines.join("\n"));
-      var note = d.getElementById("sent-note"); if (note) note.hidden = false;
-      try { window.location.href = href; } catch (e) { /* the note above tells them what to do */ }
+      var href = "mailto:" + form.getAttribute("data-to") + "?subject=" + encodeURIComponent("Free report for " + v("shop")) + "&body=" + encodeURIComponent(lines.join("\n"));
+      var note = d.getElementById("sent-note"), to = form.getAttribute("data-to"), text = lines.join("\n");
+      if (note) { note.hidden = false; note.innerHTML = '<b style="display:block;font-size:1.1em;margin-bottom:8px">Your request is ready. One tap to send it.</b>'
+        + '<a class="btn" style="display:flex;justify-content:center;margin:10px 0" target="_blank" rel="noopener" href="' + href.replace(/"/g, "&quot;") + '">Open my email and send</a>'
+        + '<button type="button" class="btn ghost" data-copyreq style="display:flex;width:100%;justify-content:center;margin:0 0 10px">Copy my request</button>'
+        + 'If your email doesn\'t open, tap Copy and paste it into an email to <a href="mailto:' + to + '">' + to + '</a>. That\'s all we need.';
+        var cb = note.querySelector("[data-copyreq]"); cb.addEventListener("click", function () { var t = "To: " + to + "\n\n" + text, done = function () { cb.textContent = "Copied. Paste it into an email to " + to; };
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, function () { fb(); }); else fb();
+          function fb() { var ta = d.createElement("textarea"); ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0"; d.body.appendChild(ta); ta.select(); try { d.execCommand("copy"); done(); } catch (e) {} ta.remove(); } });
+        note.scrollIntoView({ block: "center", behavior: "smooth" }); }
+      try { window.location.href = href; } catch (e) { /* the note above gives the other ways */ }
     });
   }
 
@@ -151,7 +159,7 @@
   box.appendChild(panel); box.appendChild(bubble);
   var log = panel.querySelector(".chat-log");
   function add(who, text) { var m = el("div", "chat-m " + who); m.textContent = text; log.appendChild(m); log.scrollTop = log.scrollHeight; }
-  function open() { box.classList.add("open"); try { sessionStorage.setItem(KEY, "1"); } catch (e) {} if (!log.children.length) add("bot", "Hi, I'm Booker, Booked Out's AI assistant. Ask me anything: what we do, the packages, the free look, how it works."); panel.querySelector(".chat-in").focus(); }
+  function open() { box.classList.add("open"); try { sessionStorage.setItem(KEY, "1"); } catch (e) {} if (!log.children.length) add("bot", "Hi, I'm Booker, Booked Out's AI assistant. Ask me anything: what we do, the packages, the free report, how it works."); panel.querySelector(".chat-in").focus(); }
   bubble.addEventListener("click", open);
   window.bosOpenChat = function () { box.classList.add("show"); open(); };
   panel.querySelector(".chat-x").addEventListener("click", function () { box.classList.remove("open"); });
