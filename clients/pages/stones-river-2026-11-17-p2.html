@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Jamie, your launch list (page 2)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#EFE8DF;--card:#F7F2EC;--sage:#6F8466;--plum:#4A2B40;--rose:#A9779A;--ink:#2E2629;--muted:#6B5F5A;--line:#D9CEC2;--display:"Cormorant Garamond",Georgia,serif;--body:"Jost","Helvetica Neue",Arial,sans-serif}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:300 17px/1.65 var(--body);-webkit-font-smoothing:antialiased}
+.wrap{max-width:40rem;margin:0 auto;padding:0 1.1rem}
+h1,h2,h3{font-family:var(--display);font-weight:500;line-height:1.15;margin:0}
+header{background:var(--plum);color:#F7F2EC;padding:2rem 0 2.2rem}
+.kick{font:500 .7rem/1.3 var(--body);letter-spacing:.18em;text-transform:uppercase;opacity:.8}
+header h1{font-size:2.5rem;font-weight:400;margin:.5rem 0 .6rem}
+header p{margin:.4rem 0 0;opacity:.92}
+.promise{margin-top:1rem;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);border-radius:12px;padding:.7rem .9rem;font-size:.95rem}
+.prog{position:sticky;top:0;z-index:5;background:rgba(247,242,236,.97);border-bottom:1px solid var(--line);padding:.6rem 0}
+.prog .wrap{display:flex;align-items:center;gap:.8rem}
+.prog b{font-weight:500}
+.track{flex:1;height:.5rem;background:var(--line);border-radius:99px;overflow:hidden}
+.track i{display:block;height:100%;width:0;background:var(--sage);transition:width .3s}
+section{margin:1.8rem 0 0}
+.sec-h{font-size:1.9rem;font-weight:400;margin:0 0 .3rem}
+.sec-p{color:var(--muted);margin:0 0 1rem;font-size:.95rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:1.2rem 1.15rem;margin:0 0 1.1rem;border-left:6px solid var(--line)}
+.card.todo{background:#fff}
+.card.ok{border-left-color:var(--sage)}
+.card.ch{border-left-color:var(--rose)}
+.meta{font:500 .72rem/1.3 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.card h3{font-size:1.65rem;margin:.35rem 0 .5rem}
+.body p{margin:0 0 .75rem}
+.body ol,.body ul{margin:0 0 .8rem;padding-left:1.3rem}
+.body li{margin:.25rem 0}
+.body h4{font:500 1.3rem/1.2 var(--display);margin:1.1rem 0 .4rem}
+.body a{color:var(--plum)}
+.sig{font-size:.85rem;color:var(--muted);border-top:1px dashed var(--line);padding-top:.6rem;margin-top:.6rem;white-space:pre-line}
+details summary{cursor:pointer;color:var(--plum);font-weight:500;padding:.3rem 0;list-style:none}
+details summary::-webkit-details-marker{display:none}
+details[open] summary .o{display:none}
+details:not([open]) summary .c{display:none}
+.serp{background:#fff;border:1px solid var(--line);border-radius:10px;padding:.8rem .9rem;margin:.4rem 0 .9rem;font-family:Arial,sans-serif}
+.serp .u{font-size:.8rem;color:#2f6b3a}.serp .t{font-size:1.05rem;color:#1a0dab;margin:.15rem 0}.serp .d{font-size:.85rem;color:#4d5156;line-height:1.45}
+.note{background:#fff;border:1px solid var(--line);border-radius:10px;padding:.7rem .9rem;font-size:.92rem;color:var(--muted);margin:.4rem 0 .8rem}
+.btns{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem}
+.btn{appearance:none;border:2px solid transparent;border-radius:999px;min-height:3.2rem;padding:.6rem 1.2rem;font:500 1.05rem/1.2 var(--body);cursor:pointer;flex:1 1 9rem;text-align:center;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.btn.yes{background:var(--sage);color:#fff}
+.btn.chg{background:transparent;border-color:var(--plum);color:var(--plum)}
+.btn.pick{background:#fff;border-color:var(--line);color:var(--ink)}
+.btn.pick.on{background:var(--plum);border-color:var(--plum);color:#fff}
+.btn.big{background:var(--plum);color:#fff;width:100%}
+.btn.link{background:#fff;border-color:var(--line);color:var(--plum)}
+.btn:disabled{opacity:.55}
+.chbox{display:none;margin-top:.8rem}
+.chbox.show{display:block}
+label.l{display:block;font-weight:500;margin:.6rem 0 .35rem}
+textarea,input.in{width:100%;font:300 1rem/1.5 var(--body);border:1px solid #b9ab9c;border-radius:10px;padding:.7rem;background:#fff;color:var(--ink)}
+textarea{min-height:6rem}
+.state{margin-top:.9rem;font-weight:500;font-size:.98rem}
+.state.ok{color:var(--sage)}.state.ch{color:var(--plum)}
+.state small{display:block;font-weight:300;color:var(--muted);white-space:pre-wrap}
+.done-card{background:#E6EADF;border:1px solid #c7d0bf;border-radius:16px;padding:1.1rem 1.15rem;margin:0 0 1.1rem;border-left:6px solid var(--sage)}
+.done-card h3{font-size:1.5rem;margin:.3rem 0 .3rem}
+.finish{display:none;background:var(--sage);color:#fff;border-radius:16px;padding:1.2rem 1.15rem;margin:1.6rem 0 0}
+.finish.show{display:block}
+.finish h2{font-size:1.9rem;font-weight:400;margin:0 0 .3rem}
+.confirm{display:none;position:fixed;left:.8rem;right:.8rem;bottom:.9rem;z-index:20;max-width:38rem;margin:0 auto;background:var(--plum);color:#F7F2EC;border-radius:18px;padding:1.2rem 1.2rem 1.1rem;box-shadow:0 14px 40px rgba(0,0,0,.3)}
+.confirm.show{display:block}
+.confirm.err{background:#8a3b2e}
+.confirm.wait{background:var(--sage)}
+.confirm .bg{font:500 1.6rem/1.2 var(--display)}
+.confirm .sm{margin-top:.3rem;font-size:.95rem;opacity:.92}
+.confirm button{margin-top:.8rem;background:transparent;border:1px solid rgba(255,255,255,.5);color:#fff;border-radius:99px;padding:.45rem 1.1rem;font:inherit;cursor:pointer}
+footer{margin:2.4rem 0 7rem;color:var(--muted);font-size:.85rem}
+:focus-visible{outline:3px solid var(--rose);outline-offset:3px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="kick" id="kick"></div>
+    <h1 id="h1"></h1>
+    <p>Read each card, then tap <b style="font-weight:500">Approve</b>, or tap <b style="font-weight:500">Change this</b> and tell us what to change.</p>
+    <p>Each tap saves right away. You can stop and come back any time, on any device.</p>
+    <div class="promise">Nothing posts, sends or goes live from this page. It only saves your answers for Booked Out Solutions.</div>
+  </div>
+</header>
+<div class="prog" aria-label="Your progress"><div class="wrap"><span><b id="pn">0 of 0</b> answered</span><div class="track"><i id="pt"></i></div></div></div>
+<main class="wrap"><div id="main"></div>
+<div class="finish" id="finish" role="status"><h2>All done. Thank you!</h2><p>Every answer is saved. We'll take it from here, and you'll get a short email confirming what happens next.</p></div></main>
+<footer class="wrap" id="foot"></footer>
+<div class="confirm" id="confirm" role="status" aria-live="assertive"><div class="bg" id="cbig"></div><div class="sm" id="csmall"></div><button type="button" id="cclose">OK</button></div>
+<script>
+var PAGE={"kick": "Stones River Therapy and Wellness", "heading": "Jamie, your launch list (page 2)", "signoff": "Jamie Hallor, MSW, LCSW | Stones River Therapy and Wellness PLLC", "footer": ["This is launch week, so you'll get a few short pages this week instead of one. Everything is aimed to be done before Sunday, Nov 22.", "Every piece follows your standards: no client stories, no reviews or testimonials, no promised results, never \"best\", \"#1\" or \"certified\", Tennessee and adults only, and the 988 line on hard topics.", "If you or someone you know is in crisis, call or text 988, any time.", "Made for Jamie by Booked Out Solutions. Questions? Just reply to our email."], "done_intro": "", "done": [], "sections": [{"key": "site", "title": "Your website", "desc": "These go up in one bundled update once your website account has room again. Your OK now means they're ready the moment it does. Nothing changes on your site from this page.", "items": [{"id": "site-other-articles", "meta": "Website · Nov 24, Dec 1, Dec 8", "title": "Three more articles, one a week", "body": ["Written and waiting. Each comes to you in its own week's batch so you can read it properly before it goes up:", {"ul": ["Nov 24: The holidays as a couple", "Dec 1: Still on edge after something hard", "Dec 8: Feeling like roommates"]}, "Approve here means: yes, we can keep writing one article a week for you to OK. You still OK each article before it goes up."]}, {"id": "site-articles-section", "meta": "Website · new page", "title": "An \"Articles\" section on your site", "body": ["A simple Articles page that lists your articles, newest first, with a link to it in your site menu. Each article page carries your contact details, fees link and the 988 line at the bottom."]}, {"id": "site-search-fixes", "meta": "Website · behind the scenes", "title": "Small fixes so Google and AI search can find you", "body": ["None of these change how your site looks:", {"ul": ["A shorter home page title, so Google doesn't cut it off.", "Your name, credentials and practice details added to the hidden page info search engines read.", "A small file that helps AI search tools describe your practice correctly.", "Dates on your site map, and the \"page not found\" page kept out of search."]}, "We always use your full name, \"Stones River Therapy and Wellness,\" because a different nearby business has a similar name."]}, {"id": "site-accessibility", "meta": "Website · easier to read and use", "title": "Six fixes so more people can use your site", "body": ["From a check of your site for people with low vision and people who use a keyboard or screen reader:", {"ol": ["Darker footer text, so it's easier to read.", "A slightly darker link color, so links stand out.", "Darker small gray text on the cards.", "When someone jumps to a section, the heading no longer hides under the top menu.", "Footer headings set up in the right order for screen readers.", "Menu text a little bigger and easier to tap."]}, "Your colors and look stay the same."]}, {"id": "site-support-person", "meta": "Website · Book page and free consult page", "title": "The \"bring a support person\" line", "body": ["A short, welcoming line for people who are nervous about a first visit. Our suggested wording:", "\"If it would help you feel more at ease, you're welcome to bring a support person with you to your first visit. Just mention it when you call so we can plan for it.\"", {"note": "Change the wording to anything you'd rather say, or tell us where it should go."}]}, {"id": "site-booking-path", "meta": "Website · every page", "title": "A smoother path to your free consult", "body": ["A clear \"Book a free 15-minute call\" button near the top of every page, going straight to your booking page. Your phone number stays right next to it for people who'd rather call.", "Nothing about your booking system changes."]}]}, {"key": "q", "title": "One quick choice", "desc": "Only you can answer this one.", "items": [{"id": "linkedin-route", "meta": "Question · LinkedIn", "title": "How should your LinkedIn posts go out?", "choice": ["Booked Out posts them for me", "I'll post them myself", "Skip LinkedIn for now"], "body": ["Your LinkedIn posts are written for other professionals who refer people to you (doctors, pastors, other therapists). You OK every post first either way.", "If we post them for you, you tap Allow once on LinkedIn's own page, and every 60 days LinkedIn asks for one more tap to keep it connected. If you'd rather post them yourself, we'll send you each approved post ready to copy."]}]}, {"key": "todo", "title": "Things only you can do", "desc": "We never sign in to your accounts for you. Tap Done when finished, or I need help and Rickey will walk you through it.", "items": [{"id": "baa-check", "kind": "todo", "meta": "To do · about 2 minutes", "title": "Check your Google health privacy agreement", "body": ["Google offers a health privacy agreement (it's called a Business Associate Agreement, or BAA) for Google Workspace accounts like your stonesrivertherapy.com email. It needs to be accepted in your own account, and only you can see that page.", {"ol": ["On a computer, go to admin.google.com and sign in with your stonesrivertherapy.com account.", "Open Account, then Account settings, then Legal and compliance.", "Find the HIPAA Business Associate Amendment. If it says it's accepted, you're done. If not, open it, read it, and accept it if you agree.", "Tap Done below."]}, "We can't see your account, so this one is yours. If the page looks different from these steps, tap I need help."]}, {"id": "referral-sender", "kind": "todo", "meta": "To do · about 10 minutes, with Rickey", "title": "Set up your referral emails in your own Google account", "body": ["Your 5 referral emails to local offices send from your own email, so replies come straight to you. You set it up yourself in your own Google account, with Rickey walking you through each step. Nothing sends until it's set up and you've OK'd the emails.", "Tap I need help to pick a time with Rickey this week, or Done once it's set up."]}]}]};
+var TOKEN=(location.pathname.match(/\/c\/([a-f0-9]{32,64})/)||[])[1]||"";
+var API="/api/client-answer";
+var ALL={},answers={},SECTIONS=PAGE.sections,LK="bo-answers-"+TOKEN;
+function keep(){try{localStorage.setItem(LK,JSON.stringify(answers))}catch(e){}}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]})}
+function renderBody(b){var h="";(b||[]).forEach(function(x){if(typeof x==="string")h+="<p>"+esc(x)+"</p>";else if(x.ol)h+="<ol>"+x.ol.map(function(i){return"<li>"+esc(i)+"</li>"}).join("")+"</ol>";else if(x.ul)h+="<ul>"+x.ul.map(function(i){return"<li>"+esc(i)+"</li>"}).join("")+"</ul>";else if(x.h)h+="<h4>"+esc(x.h)+"</h4>";else if(x.sig)h+='<div class="sig">'+esc(x.sig)+"</div>";else if(x.note)h+='<div class="note">'+esc(x.note)+"</div>";else if(x.link)h+='<p><a href="'+esc(x.link)+'" target="_blank" rel="noopener">'+esc(x.text||x.link)+"</a></p>"});return h}
+function cardHTML(it){
+  var todo=it.kind==="todo",long=!todo&&it.body.length>4;
+  var first=long?it.body.slice(0,2):it.body,rest=long?it.body.slice(2):[];
+  var h='<article class="card'+(todo?' todo':'')+'" id="c-'+it.id+'"><div class="meta">'+esc(it.meta)+'</div><h3>'+esc(it.title)+'</h3>';
+  if(it.serp)h+='<div class="serp"><div class="u">'+esc(it.serp.u)+'</div><div class="t">'+esc(it.serp.t)+'</div><div class="d">'+esc(it.serp.d)+'</div></div>';
+  h+='<div class="body">'+renderBody(first);
+  if(rest.length)h+='<details><summary><span class="o">Read all of it ▾</span><span class="c">Show less ▴</span></summary>'+renderBody(rest)+(it.sign?'<div class="sig">'+esc(PAGE.signoff)+'</div>':'')+'</details>';
+  else if(it.sign)h+='<div class="sig">'+esc(PAGE.signoff)+'</div>';
+  h+='</div>';
+  if(todo){
+    if(it.guide)h+='<div class="btns"><a class="btn link" href="'+esc(it.guide)+'" target="_blank" rel="noopener">Open the step-by-step guide</a></div>';
+    if(it.input)h+='<label class="l" for="in-'+it.id+'">'+esc(it.input)+'</label><input class="in" id="in-'+it.id+'" type="text" maxlength="200" autocomplete="off">';
+    h+='<div class="btns"><button class="btn yes" type="button" data-act="done" data-id="'+it.id+'">Done</button><button class="btn chg" type="button" data-act="help" data-id="'+it.id+'">I need help</button></div>';
+    h+='<div class="chbox" id="cb-'+it.id+'"><label class="l" for="ta-'+it.id+'">What\'s getting in the way? (optional)</label><textarea id="ta-'+it.id+'"></textarea><div class="btns"><button class="btn big" type="button" data-act="sendhelp" data-id="'+it.id+'">Ask for help</button></div></div>';
+  }else{
+    h+='<div class="btns">';
+    if(it.choice)it.choice.forEach(function(c){h+='<button class="btn pick" type="button" data-act="pick" data-id="'+it.id+'" data-v="'+esc(c)+'">'+esc(c)+'</button>'});
+    else h+='<button class="btn yes" type="button" data-act="yes" data-id="'+it.id+'">Approve</button>';
+    h+='<button class="btn chg" type="button" data-act="chg" data-id="'+it.id+'">Change this</button></div>';
+    h+='<div class="chbox" id="cb-'+it.id+'"><label class="l" for="ta-'+it.id+'">What should we change?</label><textarea id="ta-'+it.id+'"></textarea><div class="btns"><button class="btn big" type="button" data-act="send" data-id="'+it.id+'">Send</button></div></div>';
+  }
+  h+='<div class="state" id="st-'+it.id+'" aria-live="polite"></div></article>';
+  return h;
+}
+function render(){
+  document.getElementById("kick").textContent=PAGE.kick;document.getElementById("h1").textContent=PAGE.heading;
+  var h="";
+  SECTIONS.forEach(function(s){
+    h+='<section><h2 class="sec-h">'+esc(s.title)+'</h2><p class="sec-p">'+esc(s.desc)+'</p>';
+    if(s.batch)h+='<div class="btns" style="margin:0 0 1rem"><button class="btn yes" type="button" data-act="all" data-sec="'+esc(s.key)+'">'+esc(s.batch)+'</button></div>';
+    s.items.forEach(function(it){ALL[it.id]=it;it.sec=s.key;h+=cardHTML(it)});
+    h+='</section>';
+  });
+  if(PAGE.done&&PAGE.done.length){h+='<section><h2 class="sec-h">Already done</h2>'+(PAGE.done_intro?'<p class="sec-p">'+esc(PAGE.done_intro)+'</p>':'');PAGE.done.forEach(function(d){h+='<div class="done-card"><div class="meta">'+esc(d.meta)+' ✓</div><h3>'+esc(d.title)+'</h3><div>'+esc(d.text)+'</div></div>'});h+='</section>'}
+  document.getElementById("main").innerHTML=h;
+  document.getElementById("foot").innerHTML=(PAGE.footer||[]).map(function(p){return"<p>"+esc(p)+"</p>"}).join("");
+}
+function showState(id){
+  var a=answers[id],c=document.getElementById("c-"+id),st=document.getElementById("st-"+id);if(!c)return;
+  c.classList.remove("ok","ch");
+  c.querySelectorAll(".pick").forEach(function(b){b.classList.toggle("on",!!a&&a.answer===b.getAttribute("data-v"))});
+  if(!a){st.innerHTML="";st.className="state";return}
+  if(a.answer==="change"){c.classList.add("ch");st.className="state ch";st.innerHTML="You asked for a change.<small>"+esc(a.note||"")+"</small>"}
+  else if(a.answer==="help"){c.classList.add("ch");st.className="state ch";st.innerHTML="You asked for help. We'll reach out.<small>"+esc(a.note||"")+"</small>"}
+  else if(a.answer==="done"){c.classList.add("ok");st.className="state ok";st.innerHTML="✓ Done"+(a.note?"<small>"+esc(a.note)+"</small>":"")}
+  else{c.classList.add("ok");st.className="state ok";st.innerHTML=(a.answer==="approved"?"✓ Approved":"✓ Your answer: "+esc(a.answer))}
+}
+function progress(){var ids=Object.keys(ALL),n=ids.filter(function(i){return answers[i]}).length;document.getElementById("pn").textContent=n+" of "+ids.length;document.getElementById("pt").style.width=(ids.length?n/ids.length*100:0)+"%";document.getElementById("finish").classList.toggle("show",ids.length>0&&n===ids.length)}
+function box(kind,big,small){var c=document.getElementById("confirm");c.className="confirm show"+(kind?" "+kind:"");document.getElementById("cbig").textContent=big;document.getElementById("csmall").textContent=small||""}
+document.getElementById("cclose").onclick=function(){document.getElementById("confirm").className="confirm"};
+var FAIL="Not saved yet, please tell Rickey.",FAILS="Your answer didn't reach us. Check your internet and tap again, or just reply to our email.";
+function save(list,okBig){
+  box("wait","Saving...","One moment.");
+  var done=false,t=setTimeout(function(){if(!done){done=true;box("err",FAIL,FAILS)}},10000);
+  fetch(API,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:TOKEN,answers:list.map(function(r){return{item:r.item,answer:r.answer,note:r.note}})})})
+  .then(function(r){return r.json().then(function(j){if(!r.ok||!j.saved)throw new Error(j.error||"not saved");return j})})
+  .then(function(j){if(done)return;done=true;clearTimeout(t);list.forEach(function(r){r.time=j.time;answers[r.item]=r;showState(r.item)});keep();progress();
+    box("",j.finished?"Got it! That was the last one.":okBig,j.finished?"Every answer is saved. Thank you!":"Saved. Nothing posts or changes until we set it up.")})
+  .catch(function(){if(done)return;done=true;clearTimeout(t);box("err",FAIL,FAILS)});
+}
+function rec(id,answer,note){return{item:id,answer:answer,note:note||""}}
+document.addEventListener("click",function(e){
+  var b=e.target.closest("[data-act]");if(!b)return;var act=b.getAttribute("data-act"),id=b.getAttribute("data-id");
+  if(act==="yes")save([rec(id,"approved")],"Got it! Approved: "+ALL[id].title);
+  else if(act==="pick"){var v=b.getAttribute("data-v");save([rec(id,v)],"Got it! Your answer: "+v)}
+  else if(act==="chg"||act==="help"){var cb=document.getElementById("cb-"+id);cb.classList.toggle("show");if(cb.classList.contains("show"))document.getElementById("ta-"+id).focus()}
+  else if(act==="send"){var note=document.getElementById("ta-"+id).value.trim();if(!note){document.getElementById("ta-"+id).focus();box("err","Please type what to change first.","Then tap Send.");return}
+    save([rec(id,"change",note)],"Got it! We'll change it: "+ALL[id].title);document.getElementById("cb-"+id).classList.remove("show")}
+  else if(act==="sendhelp"){save([rec(id,"help",document.getElementById("ta-"+id).value.trim())],"Got it! We'll help you with this one.");document.getElementById("cb-"+id).classList.remove("show")}
+  else if(act==="done"){var inp=document.getElementById("in-"+id);save([rec(id,"done",inp?inp.value.trim():"")],"Got it! Marked as done.")}
+  else if(act==="all"){var sec=SECTIONS.filter(function(s){return s.key===b.getAttribute("data-sec")})[0];
+    var list=sec.items.filter(function(it){return !answers[it.id]||answers[it.id].answer!=="change"}).map(function(it){return rec(it.id,"approved")});
+    if(!list.length){box("","Nothing left to approve here.","The ones you asked to change stay as they are.");return}
+    save(list,"Got it! Approved all "+list.length+(list.length<sec.items.length?" (the ones you asked to change stay as change requests)":"")+".")}
+});
+render();
+try{var loc=JSON.parse(localStorage.getItem(LK)||"{}");Object.keys(loc).forEach(function(id){if(ALL[id]){answers[id]=loc[id];showState(id)}})}catch(e){}
+progress();
+fetch(API+"/state?t="+TOKEN,{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){Object.keys(j.answers||{}).forEach(function(id){if(ALL[id]&&(!answers[id]||!answers[id].time||answers[id].time<=j.answers[id].time)){answers[id]=j.answers[id];answers[id].item=id;showState(id)}});keep();progress()}).catch(function(){});
+</script>
+</body>
+</html>
