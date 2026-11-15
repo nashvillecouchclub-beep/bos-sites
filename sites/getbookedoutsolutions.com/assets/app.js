@@ -509,16 +509,21 @@ G.BOLogo={css,months,build,yearLabel};
   if (pick) {
     var data = JSON.parse(pick.getAttribute("data-pick"));
     var boxes = all("input[data-level]", pick);
+    var forced = null;
     var update = function () {
       var has = {}; boxes.forEach(function (b) { if (b.checked) has[b.getAttribute("data-level")] = 1; });
-      var k = has.office || (has.ads && has.metro) ? "complete" : has.ads ? "ads" : has.metro ? "metro_lock" : "core";
+      var k = forced || (has.office || (has.ads && has.metro) ? "complete" : has.ads ? "ads" : has.metro ? "metro_lock" : "core");
+      all("[data-switch]").forEach(function (s) { var on = s.getAttribute("data-switch") === k; s.setAttribute("aria-pressed", on ? "true" : "false"); s.className = on ? "btn" : "btn ghost"; });
+      var pre = d.querySelector('.pkg[data-pkg="' + k + '"] a.btn.ghost');
+      all("[data-pick-prepay]").forEach(function (a) { if (pre) a.href = pre.href; });
       all("[data-pick-name]").forEach(function (e) { e.textContent = data[k].name; });
       all("[data-pick-price]").forEach(function (e) { e.textContent = data[k].line; });
       all("[data-pick-day]").forEach(function (e) { e.textContent = data[k].day; });
       all(".pkg").forEach(function (p) { p.classList.toggle("on", p.getAttribute("data-pkg") === k); });
       var pb = d.getElementById("pay"); if (pb && data[k].pay) pb.setAttribute("data-href", data[k].pay);
     };
-    boxes.forEach(function (b) { b.addEventListener("change", update); }); update();
+    boxes.forEach(function (b) { b.addEventListener("change", function () { forced = null; update(); }); }); update();
+    all("[data-switch]").forEach(function (s) { s.addEventListener("click", function () { forced = s.getAttribute("data-switch"); update(); if (typeof setPay === "function") setPay(); }); });
     var agree = d.getElementById("agree"), pay = d.getElementById("pay");
     if (agree && pay) {
       var setPay = function () {
