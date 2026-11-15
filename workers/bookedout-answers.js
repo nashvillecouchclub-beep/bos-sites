@@ -27,6 +27,14 @@ export default {
       if (p === '/api/client-answer' && req.method === 'POST') return await answer(req, env, ctx);
       if (p === '/api/client-answer/state' && req.method === 'GET') return await state(u, env);
       if (p === '/api/client-answer/ping') return json({ ok: true, at: new Date().toISOString() });
+      const m = p.match(/^\/c\/([a-f0-9]{32,64})$/);
+      if (m && req.method === 'GET') {
+        if (!u.pathname.endsWith('/')) return Response.redirect(`https://getbookedoutsolutions.com/c/${m[1]}/`, 301);
+        const html = await env.KV.get('html:' + m[1]);
+        return new Response(html || GONE, { status: html ? 200 : 404, headers: {
+          'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store',
+          'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'no-referrer', 'x-frame-options': 'SAMEORIGIN' } });
+      }
       return new Response('Booked Out answers', { status: 200 });
     } catch (e) {
       return json({ saved: false, error: 'server' }, 500);
@@ -110,6 +118,8 @@ async function alert(env, page, token, rows, answered, total, finished) {
   } catch (e) { res = 'error ' + String(e && e.message || e); }
   await env.KV.put('alert:last', JSON.stringify({ at: new Date().toISOString(), res }));
 }
+
+const GONE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Page not found | Booked Out Solutions</title><style>body{margin:0;font:18px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#EFE8DF;color:#2E2629}main{max-width:34rem;margin:0 auto;padding:3rem 1.2rem}h1{font-weight:500}</style></head><body><main><h1>This page isn\'t here</h1><p>This link may be from an older week. Please use the newest link in your email from Booked Out Solutions, or just reply to that email and we\'ll send it again.</p><p>Booked Out Solutions</p></main></body></html>';
 
 function json(o, s = 200) {
   return new Response(JSON.stringify(o), { status: s, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-robots-tag': 'noindex' } });
