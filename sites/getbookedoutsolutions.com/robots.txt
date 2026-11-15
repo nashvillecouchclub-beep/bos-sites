@@ -3,5 +3,7 @@ Allow: /
 Disallow: /price-
 Disallow: /first-shop-
 Disallow: /welcome.html
+Disallow: /c/
+Disallow: /api/
 
 Sitemap: https://getbookedoutsolutions.com/sitemap.xml
