@@ -4,7 +4,9 @@
 
 - Worker name: `bookedout-freereport` (on the account's workers.dev subdomain, the same one the other proxied workers use)
 - Script: `workers/bookedout-freereport.js` (one ES module, no build step). Compatibility date 2026-11-01 or later.
-- KV binding: `KV` (a new namespace just for this worker, for example `bookedout-freereport`)
+- KV binding: `KV` = namespace `bookedout-freereport-kv` (id af5c56f58df745f986b252814cd44056)
+- DEPLOYED Nov 16 2026 about 5:36 pm Central from the dashboard (code from this branch, LIVE=off, cron every 15 minutes).
+  Secrets STATUS_KEY, LOOKUP_URL and LOOKUP_KEY are NOT set yet (status, fill and mark-sent answer 403 until STATUS_KEY is added).
 - Cron trigger: `*/15 * * * *` (every 15 minutes)
 - Secrets (added in the dashboard, never in this repo):
   - `STATUS_KEY` (long random string; needed for status, mark-sent and fill)
