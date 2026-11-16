@@ -39,3 +39,14 @@ Endpoints for later jobs (all need `k` = STATUS_KEY):
   headers. Everything else is the static site. Tests: `node workers/test-pages-frontdoor.mjs`.
 - `_routes.json` limits the front door to those paths (static pages never run it, so they use no worker requests).
 - `tools/make_manifest.py` leaves `_worker.js` and `_routes.json` out of files.json so the Netlify fallback never serves it.
+
+### Live switch (Nov 16 2026, about 5:55 pm Central)
+- getbookedoutsolutions.com and www now point at the Pages project (proxied CNAMEs to getbookedoutsolutions.pages.dev).
+  www goes to the bare address by the zone Redirect Rule "Redirect from WWW to root" (301, path and query kept).
+- Zone Worker routes (so the proxied paths work even before this PR is merged, and stay as a second path after):
+  `getbookedoutsolutions.com/api/free-report*` and `/r/*` -> bookedout-freereport;
+  `/c/*` and `/api/client-answer*` -> bookedout-answers; `/connect` and `/connect/*` -> bookedout-connect.
+- Email records were not touched (MX smtp.google.com, SPF, google._domainkey DKIM, _dmarc, MailerLite DKIM CNAME,
+  verification TXTs, wildcard CNAME to uixie.porkbun.com).
+- Fallback until Nov 23: put the bare-address records back to A 75.2.60.5 and A 99.83.231.61 (DNS only) and www back to
+  CNAME getbookedoutsolutions.netlify.app (DNS only). The Netlify project bookedout-solutions is untouched.
