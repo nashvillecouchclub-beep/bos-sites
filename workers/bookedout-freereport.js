@@ -171,7 +171,8 @@ async function out(env, url, init, f) {
 }
 
 // ---------- the watch list (read by the watchdog; nothing is emailed) ----------
-// level: "warn" (75% of the clock) or "problem" (overdue). The 2-agent checkers and the watchdog act on these.
+// level: "warn" (75% of the clock) or "problem" (overdue); "test" for fake TEST shops (never counted as problems).
+// The 2-agent checkers and the watchdog act on warn and problem.
 async function sendAlert(env, subject, message, f, level = 'warn', id = '') {
   const at = new Date().toISOString();
   const entry = { at, level, id, subject: String(subject).slice(0, 200), message: String(message).slice(0, 5000) };
@@ -469,10 +470,10 @@ async function tick(env, now = new Date(), f) {
     if (rec.status !== 'new') {
       const due = Date.parse(rec.due), warn = Date.parse(rec.warn), at = now.getTime();
       if (at >= due && !rec.alerts.overdue) {
-        await sendAlert(env, `OVERDUE free report: ${rec.business_name}`, alertText(rec, 'This free report is past its 1 business day promise and is not marked sent.'), f, 'problem', id);
+        await sendAlert(env, `OVERDUE free report: ${rec.business_name}`, alertText(rec, 'This free report is past its 1 business day promise and is not marked sent.'), f, rec.test ? 'test' : 'problem', id);
         rec.alerts.overdue = now.toISOString(); rec.alerts.warn = rec.alerts.warn || now.toISOString(); changed = true; log.push('overdue ' + id);
       } else if (at >= warn && at < due && !rec.alerts.warn) {
-        await sendAlert(env, `Free report due soon: ${rec.business_name}`, alertText(rec, 'This free report is 75% of the way to its due time and is not marked sent.'), f, 'warn', id);
+        await sendAlert(env, `Free report due soon: ${rec.business_name}`, alertText(rec, 'This free report is 75% of the way to its due time and is not marked sent.'), f, rec.test ? 'test' : 'warn', id);
         rec.alerts.warn = now.toISOString(); changed = true; log.push('warn ' + id);
       }
     }

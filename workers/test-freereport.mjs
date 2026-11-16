@@ -267,7 +267,9 @@ await test('Bigger shops are flagged for the Booker call now option (status list
   const st = await (await W.fetch(new Request('https://x/api/free-report/status?k=' + env.STATUS_KEY), env, {})).json();
   assert.equal(st.open[0].big_shop, true); assert.equal(st.open[0].test, true);
   await T.tick(env, at('2026-11-18T10:31:00-06:00'), f);
-  const w = [...env.KV.m.entries()].filter(([k]) => k.startsWith('watch:')).map(([, v]) => JSON.parse(v)).find((x) => x.level === 'problem');
+  const w = [...env.KV.m.entries()].filter(([k]) => k.startsWith('watch:')).map(([, v]) => JSON.parse(v)).find((x) => x.level === 'test');
+  const st2 = await (await W.fetch(new Request('https://x/api/free-report/status?k=' + env.STATUS_KEY), env, {})).json();
+  assert.equal(st2.problems, 0, 'fake TEST shops never count as problems');
   assert.match(w.message, /FLAG: Booker call now option first/);
   assert.match(w.message, /TEST request/);
   assert.equal(f.calls.length, 0);
