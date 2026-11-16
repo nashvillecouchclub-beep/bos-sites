@@ -6,3 +6,8 @@
 /c/*                    https://bookedout-answers.rickey-38a.workers.dev/c/:splat                    200!
 /api/client-answer      https://bookedout-answers.rickey-38a.workers.dev/api/client-answer           200!
 /api/client-answer/*    https://bookedout-answers.rickey-38a.workers.dev/api/client-answer/:splat    200!
+
+# Free report (Nov 16) - saved and built by the bookedout-freereport worker, URL stays on our domain
+/api/free-report        https://bookedout-freereport.rickey-38a.workers.dev/api/free-report          200!
+/api/free-report/*      https://bookedout-freereport.rickey-38a.workers.dev/api/free-report/:splat   200!
+/r/*                    https://bookedout-freereport.rickey-38a.workers.dev/r/:splat                 200!
