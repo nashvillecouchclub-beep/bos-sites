@@ -11,10 +11,12 @@
   - `LOOKUP_URL` and `LOOKUP_KEY` (optional; the lookup worker. Without them the Google parts of each report say "pending check")
 - Plain variables (optional):
   - `LIVE` = `off` (default). Leave it off until GO LIVE. While off, nothing is ever sent to a business owner.
-  - `ALERT_FORM_URL` = `https://getbookedoutsolutions.com/` (default). Must be the address that answers without a redirect.
-- Routes: none on the worker itself. The site's `_redirects` proxies these paths to it:
+- Routes: none on the worker itself. On Cloudflare Pages the site's `_worker.js` passes these paths to it
+  (on the Netlify fallback, `_redirects` does the same):
   - `/api/free-report`, `/api/free-report/*`, `/r/*`
-- Site setup (host Forms settings): form detection ON; email notifications for forms `free-report` and `bo-alert` to the site owner's inbox.
+- No host forms and no alert emails (Nov 16 Pages move). Every lead is kept in KV as `lead:<id>` (no expiry);
+  clock trouble goes to `watch:` entries (warn = 75% of the clock, problem = overdue) that the watchdog reads from
+  `GET /api/free-report/status?k=...` (`watch` and `problems`).
 - Check after deploy: `GET /api/free-report/ping` returns `{"ok":true,"live":false}`.
 - Tests: `node workers/test-freereport.mjs` (no network, fake shop only).
 
@@ -25,3 +27,12 @@ Endpoints for later jobs (all need `k` = STATUS_KEY):
   - ai: `{"question":"...","chatgpt":{"named":true,"correct":true,"note":""},"gemini":{...}}`
   - booking: `{"score":7,"fixes":["...","...","..."]}`
   - category: `{"main_category":"...","big_job":"...","match":false,"note":""}`
+
+## getbookedoutsolutions.com on Cloudflare Pages (Nov 16)
+
+- Pages project `getbookedoutsolutions`, connected to this repo (production branch `main`), no build command,
+  build output `sites/getbookedoutsolutions.com`. A merge to `main` deploys by itself.
+- `sites/getbookedoutsolutions.com/_worker.js` is the front door: it passes `/connect*`, `/c/*`, `/api/client-answer*`,
+  `/api/free-report*` and `/r/*` to our workers (Pages `_redirects` can't proxy to another address) and adds the noindex
+  headers. Everything else is the static site. Tests: `node workers/test-pages-frontdoor.mjs`.
+- `tools/make_manifest.py` leaves `_worker.js` out of files.json so the Netlify fallback never serves it.

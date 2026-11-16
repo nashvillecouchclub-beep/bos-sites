@@ -461,8 +461,8 @@ G.BOLogo={css,months,build,yearLabel};
     });
   });
 
-  /* free report form (Nov 16): sends the same answers to the site form "free-report" (emailed to Rickey)
-     and to /api/free-report (the free report machine). Either one getting it is enough. No mailto. */
+  /* free report form (Nov 16, Pages move): sends the answers to /api/free-report, the free report machine,
+     which saves every request. One quiet retry, then the error message. No mailto, no host form service. */
   var form = d.querySelector("[data-lookform]");
   if (form) {
     var t0 = Date.now();
@@ -523,19 +523,16 @@ G.BOLogo={css,months,build,yearLabel};
         say("error", "Sorry, that didn't go through. Please try again in a minute, or email hello@getbookedoutsolutions.com.");
       };
       var send = function () {
-        var body = new URLSearchParams();
-        body.append("form-name", "free-report"); body.append("subject", "Free report request: " + data.business_name);
-        Object.keys(data).forEach(function (k) { body.append(k, data[k]); }); body.append("bot-field", "");
-        var a = fetch("/", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: body.toString() })
-          .then(function (r) { if (!r.ok) throw new Error("form " + r.status); });
         var w = {}; Object.keys(data).forEach(function (k) { w[k] = data[k]; }); w.elapsed_ms = Date.now() - t0;
-        var b = fetch("/api/free-report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(w) })
-          .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!(r.ok && j.saved) && !j.duplicate) throw new Error("api " + r.status); }); });
-        var left = 2, done = false;
-        [a, b].forEach(function (p) {
-          p.then(function () { if (!done) { done = true; btn.removeAttribute("aria-busy"); thanks(data); } },
-            function () { if (--left === 0 && !done) fail(); });
-        });
+        var tries = 0;
+        var go = function () {
+          tries++;
+          fetch("/api/free-report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(w) })
+            .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!(r.ok && j.saved) && !j.duplicate) throw new Error("api " + r.status); }); })
+            .then(function () { btn.removeAttribute("aria-busy"); thanks(data); },
+              function () { if (tries < 2) setTimeout(go, 1500); else fail(); });
+        };
+        go();
       };
       /* the answer service ignores anything sent less than 3 seconds after the page opened */
       setTimeout(send, Math.max(0, 3100 - (Date.now() - t0)));

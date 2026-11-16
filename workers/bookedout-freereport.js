@@ -1,17 +1,18 @@
 // Booked Out Solutions - free report worker "bookedout-freereport" (Nov 16 2026).
 // Saves each free report request from getbookedoutsolutions.com, builds the one-page report,
-// and keeps the 1-business-day clock. Netlify proxies /api/free-report* and /r/* on our domain
-// to this worker, so visitors only ever see our domain.
+// and keeps the 1-business-day clock. The site (Cloudflare Pages, its _worker.js) passes /api/free-report*
+// and /r/* on our domain to this worker, so visitors only ever see our domain.
 //
 // Routes:
 //   POST /api/free-report                 the form (JSON) -> {saved:true, id}
 //   GET  /api/free-report/ping            health check
-//   GET  /api/free-report/status?k=KEY    open requests with due times (evening list and TV)
+//   GET  /api/free-report/status?k=KEY    open requests with due times, plus the watch list (watchdog)
 //   POST /api/free-report/mark-sent       {id, k} -> status "sent", clock stops
 //   POST /api/free-report/fill            {id, k, section, data} -> a later job fills a pending section
 //                                         section: "google" | "reviews" | "ai" | "booking" | "category"
 //   GET  /r/<token>/                      the report page (noindex, no-store, no-referrer)
-// Cron (every 15 minutes): build new reports, then tell Rickey: built (check and send), 75% of the clock, overdue.
+// Cron (every 15 minutes): build new reports; put clock trouble (75% of the clock, overdue) on the watch list.
+// Rickey is out of the workflow (Nov 16): nothing here emails him. The watchdog reads the watch list and the agents fix it.
 //
 // Storage (KV binding KV):
 //   req:<id>      the request and its clock {status: new | built | sent, ...}
@@ -19,14 +20,15 @@
 //   tok:<token>   report token -> id
 //   rep:<id>      the report page HTML
 //   rl:<email>    one request per email per 10 minutes
-//   alert:last    result of the last alert post
+//   lead:<id>     every lead, kept for good (no expiry): name, business, contact, trade, town, when, page
+//   watch:<time>:<id>  a problem for the watchdog (warn = 75% of the clock, problem = overdue), kept 30 days
+//   alert:last    the last watch entry written
 //
 // Settings (names only, values are added in the Cloudflare dashboard, never here):
 //   LOOKUP_URL, LOOKUP_KEY   optional; the lookup worker. Without them the Google parts say "pending check".
 //   STATUS_KEY               needed for status, mark-sent and fill.
-//   ALERT_FORM_URL           where alerts are posted as the hidden site form "bo-alert" (default our site).
 //   LIVE                     "off" by default. While off, nothing is ever sent to a business owner.
-// Alerts go to Rickey only (the site form emails the site owner). No secrets in this file.
+// No outbound alerts at all (no host forms, no email). No secrets in this file.
 
 const SITE = 'https://getbookedoutsolutions.com';
 const TZ = 'America/Chicago';
@@ -151,16 +153,16 @@ function chicagoText(date) {
 }
 
 // ---------- the LIVE guard ----------
-// Before GO LIVE (LIVE is not "on") the worker never emails or texts a business owner. It only tells Rickey.
+// Before GO LIVE (LIVE is not "on") the worker never emails or texts a business owner.
 function isLive(env) { return String((env && env.LIVE) || 'off').trim().toLowerCase() === 'on'; }
 async function deliverToOwner(env, rec) {
   if (!isLive(env)) return { sent: false, blocked: true, reason: 'LIVE is off: nothing goes to a business before GO LIVE' };
-  // No automatic owner email exists yet. After GO LIVE, Rickey checks each report and sends it himself.
-  return { sent: false, blocked: false, reason: 'no automatic owner email yet; Rickey sends after checking' };
+  // No automatic owner email is wired in here yet; the 2-agent check and auto-send job adds it (no Rickey check).
+  return { sent: false, blocked: false, reason: 'no automatic owner email wired in yet' };
 }
-// Every outside call goes through here. Only the alert form and the lookup worker are allowed.
+// Every outside call goes through here. Only the lookup worker is allowed.
 function allowed(env, url) {
-  const ok = [env.ALERT_FORM_URL || SITE + '/', env.LOOKUP_URL].filter(Boolean);
+  const ok = [env.LOOKUP_URL].filter(Boolean);
   return ok.includes(url);
 }
 async function out(env, url, init, f) {
@@ -168,17 +170,16 @@ async function out(env, url, init, f) {
   return (f || fetch)(url, init);
 }
 
-// ---------- alerts to Rickey (hidden site form "bo-alert", emailed to the site owner) ----------
-async function sendAlert(env, subject, message, f) {
-  const url = env.ALERT_FORM_URL || SITE + '/';
-  const body = new URLSearchParams({ 'form-name': 'bo-alert', subject: String(subject).slice(0, 200), message: String(message).slice(0, 5000) });
-  let res = '';
-  try {
-    const r = await out(env, url, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: body.toString() }, f);
-    res = String(r.status);
-  } catch (e) { res = 'error ' + String((e && e.message) || e); }
-  if (env.KV) await env.KV.put('alert:last', JSON.stringify({ at: new Date().toISOString(), subject, res }));
-  return res;
+// ---------- the watch list (read by the watchdog; nothing is emailed) ----------
+// level: "warn" (75% of the clock) or "problem" (overdue). The 2-agent checkers and the watchdog act on these.
+async function sendAlert(env, subject, message, f, level = 'warn', id = '') {
+  const at = new Date().toISOString();
+  const entry = { at, level, id, subject: String(subject).slice(0, 200), message: String(message).slice(0, 5000) };
+  if (env.KV) {
+    await env.KV.put(`watch:${at}:${level}:${id || 'x'}`, JSON.stringify(entry), { expirationTtl: 30 * DAY });
+    await env.KV.put('alert:last', JSON.stringify({ at, level, subject: entry.subject }));
+  }
+  return 'kv';
 }
 
 // ---------- lookup (only for real requests; each call costs us a little) ----------
@@ -401,6 +402,8 @@ async function submit(req, env, now = new Date()) {
     big_shop: BIG.includes(c.revenue), test: isTestRequest(c) };
   await putJ(env, 'req:' + id, rec, KEEP);
   await env.KV.put('open:' + id, '1', { expirationTtl: KEEP });
+  await putJ(env, 'lead:' + id, { id, received: rec.received, first_name: c.first_name, business_name: c.business_name, email: c.email,
+    phone: c.phone, trade: c.trade, town: c.town, revenue: c.revenue || '', consent: !!c.consent, page: c.page || '', test: rec.test });
   return json({ saved: true, id });
 }
 
@@ -438,7 +441,7 @@ function alertText(rec, why) {
     rec.complete ? 'Report is complete.' : `Still pending: ${(rec.pending || []).join(', ') || 'none'}`,
     rec.lookup_error ? `Lookup problem: ${rec.lookup_error}` : '',
     rec.test ? 'This is a TEST request (fake shop). Do not send.' : '',
-    `Request id: ${rec.id}. Mark it sent once it is out.`,
+    `Request id: ${rec.id}.`,
     'Nothing has been sent to this business.');
   return lines.filter((x, i, a) => x !== '' || a[i - 1] !== '').join('\n');
 }
@@ -457,8 +460,6 @@ async function tick(env, now = new Date(), f) {
       builds++;
       await build(env, rec, f);
       changed = true;
-      await sendAlert(env, `${rec.test ? 'TEST ' : ''}Free report built: check and send, ${rec.business_name}${rec.big_shop ? ' (Booker call now option first)' : ''}`,
-        alertText(rec, 'A free report is built. Please check it and send it.'), f);
       rec.alerts.built = now.toISOString(); log.push('built ' + id);
     } else if (rec.status === 'built' && rec.sections.reviews && rec.sections.reviews.task && !rec.sections.reviews.newest_review && (rec.sections.reviews.tries || 0) < 4) {
       rec.sections.reviews.tries = (rec.sections.reviews.tries || 0) + 1;
@@ -468,10 +469,10 @@ async function tick(env, now = new Date(), f) {
     if (rec.status !== 'new') {
       const due = Date.parse(rec.due), warn = Date.parse(rec.warn), at = now.getTime();
       if (at >= due && !rec.alerts.overdue) {
-        await sendAlert(env, `OVERDUE free report: ${rec.business_name}`, alertText(rec, 'This free report is past its 1 business day promise and is not marked sent.'), f);
+        await sendAlert(env, `OVERDUE free report: ${rec.business_name}`, alertText(rec, 'This free report is past its 1 business day promise and is not marked sent.'), f, 'problem', id);
         rec.alerts.overdue = now.toISOString(); rec.alerts.warn = rec.alerts.warn || now.toISOString(); changed = true; log.push('overdue ' + id);
       } else if (at >= warn && at < due && !rec.alerts.warn) {
-        await sendAlert(env, `Free report due soon: ${rec.business_name}`, alertText(rec, 'This free report is 75% of the way to its due time and is not marked sent.'), f);
+        await sendAlert(env, `Free report due soon: ${rec.business_name}`, alertText(rec, 'This free report is 75% of the way to its due time and is not marked sent.'), f, 'warn', id);
         rec.alerts.warn = now.toISOString(); changed = true; log.push('warn ' + id);
       }
     }
@@ -517,7 +518,11 @@ async function status(u, env) {
       overdue: now >= Date.parse(r.due), complete: !!r.complete, pending: r.pending || [], report: `${SITE}/r/${r.token}/` });
   }
   list.sort((a, b) => a.due.localeCompare(b.due));
-  return json({ open: list, count: list.length, live: isLive(env) });
+  const watch = [];
+  for (const k of (await env.KV.list({ prefix: 'watch:' })).keys.slice(-50)) {
+    const w = await getJ(env, k.name); if (w) watch.push({ at: w.at, level: w.level, id: w.id, subject: w.subject });
+  }
+  return json({ open: list, count: list.length, live: isLive(env), watch, problems: watch.filter((w) => w.level === 'problem').length });
 }
 
 async function report(token, u, env) {

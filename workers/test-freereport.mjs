@@ -19,7 +19,7 @@ function kv() {
     async list({ prefix }) { return { keys: [...m.keys()].filter((k) => k.startsWith(prefix)).map((name) => ({ name })) }; },
   };
 }
-// A fake fetch that records every call and answers like the alert form and the lookup worker.
+// A fake fetch that records every call and answers like the lookup worker.
 function fakeFetch(fixture) {
   const calls = [];
   const f = async (url, init) => {
@@ -135,25 +135,28 @@ await test('LIVE off (default): owner delivery is blocked and makes no call', as
   assert.equal(f.calls.length, 0);
   assert.equal(T.isLive({ LIVE: 'on' }), true);
 });
-await test('Full run with LIVE off: only Rickey alert form and lookup are called, never the owner', async () => {
-  const env = { KV: kv(), LOOKUP_URL: 'https://lookup.test/', LOOKUP_KEY: 'fake' };
+await test('Full run with LIVE off: only the lookup is called; clock trouble goes to the watch list, never an email', async () => {
+  const env = { KV: kv(), LOOKUP_URL: 'https://lookup.test/', LOOKUP_KEY: 'fake', STATUS_KEY: 'k'.repeat(32) };
   const f = fakeFetch(FIX);
   const now = at('2026-11-17T10:30:00-06:00');
   const j = await (await T.submit(post({ ...SHOP, email: 'owner@fakeshop-test.com', business_name: 'Test Shop Heating and Air' }), env, now)).json();
+  assert.ok(env.KV.m.has('lead:' + j.id), 'every lead is kept');
+  assert.equal(JSON.parse(env.KV.m.get('lead:' + j.id)).business_name, 'Test Shop Heating and Air');
   await T.tick(env, at('2026-11-17T10:45:00-06:00'), f);
+  assert.equal([...env.KV.m.keys()].filter((k) => k.startsWith('watch:')).length, 0, 'a built report is not a problem');
   await T.tick(env, at('2026-11-18T05:00:00-06:00'), f); // past 75%
   await T.tick(env, at('2026-11-18T10:31:00-06:00'), f); // overdue
   await T.tick(env, at('2026-11-18T11:00:00-06:00'), f); // nothing new
-  const urls = f.calls.map((c) => c.url);
-  for (const u of urls) assert.ok(u === 'https://getbookedoutsolutions.com/' || u === 'https://lookup.test/', 'unexpected call to ' + u);
-  const alerts = f.calls.filter((c) => c.url === 'https://getbookedoutsolutions.com/').map((c) => new URLSearchParams(c.init.body));
-  assert.equal(alerts.length, 3, 'built + 75% + overdue, once each');
-  for (const a of alerts) assert.equal(a.get('form-name'), 'bo-alert');
-  assert.match(alerts[0].get('subject'), /check and send/);
-  assert.match(alerts[1].get('subject'), /due soon/);
-  assert.match(alerts[2].get('subject'), /OVERDUE/);
-  assert.match(alerts[0].get('message'), /Still pending: 3 ChatGPT and Gemini test, 4 Booking test, 5 Main category/);
-  assert.match(alerts[0].get('message'), /Nothing has been sent to this business/);
+  for (const c of f.calls) assert.equal(c.url, 'https://lookup.test/', 'unexpected call to ' + c.url);
+  const watch = [...env.KV.m.entries()].filter(([k]) => k.startsWith('watch:')).map(([, v]) => JSON.parse(v));
+  assert.equal(watch.length, 2, '75% + overdue, once each');
+  assert.deepEqual(watch.map((w) => w.level).sort(), ['problem', 'warn']);
+  const over = watch.find((w) => w.level === 'problem');
+  assert.match(over.subject, /OVERDUE/); assert.equal(over.id, j.id);
+  assert.match(over.message, /Still pending: 3 ChatGPT and Gemini test, 4 Booking test, 5 Main category/);
+  assert.match(over.message, /Nothing has been sent to this business/);
+  const st = await (await W.fetch(new Request('https://x/api/free-report/status?k=' + env.STATUS_KEY), env, {})).json();
+  assert.equal(st.problems, 1); assert.equal(st.watch.length, 2);
   const rec = JSON.parse(env.KV.m.get('req:' + j.id));
   assert.equal(rec.status, 'built');
   assert.equal(f.calls.filter((c) => c.url === 'https://lookup.test/').length, 2, 'one profile call and one reviews call');
@@ -169,7 +172,8 @@ await test('Fake shops never use the paid lookup; mark-sent stops the clock', as
   const ok = await W.fetch(new Request('https://x/api/free-report/mark-sent', { method: 'POST', body: JSON.stringify({ id: j.id, k: env.STATUS_KEY }) }), env, {});
   assert.equal((await ok.json()).status, 'sent');
   await T.tick(env, at('2026-11-18T12:00:00-06:00'), f);
-  assert.equal(f.calls.length, 1, 'only the built alert; no overdue after sent');
+  assert.equal(f.calls.length, 0, 'no outside calls at all for a fake shop');
+  assert.equal([...env.KV.m.keys()].filter((k) => k.startsWith('watch:')).length, 0, 'no overdue after sent');
   const st = await (await W.fetch(new Request('https://x/api/free-report/status?k=' + env.STATUS_KEY), env, {})).json();
   assert.equal(st.count, 0);
 });
@@ -255,15 +259,18 @@ await test('Report page served with noindex, no-store and no-referrer', async ()
   assert.equal(r.headers.get('referrer-policy'), 'no-referrer');
   assert.equal((await W.fetch(new Request(`https://getbookedoutsolutions.com/r/${'b'.repeat(48)}/`), env, {})).status, 404);
 });
-await test('Alert flags bigger shops for the Booker call now option', async () => {
-  const env = { KV: kv() };
+await test('Bigger shops are flagged for the Booker call now option (status list and watch text)', async () => {
+  const env = { KV: kv(), STATUS_KEY: 'k'.repeat(32) };
   const f = fakeFetch(FIX);
   await T.submit(post({ ...SHOP, revenue: '$1M to $3M' }), env, at('2026-11-17T10:30:00-06:00'));
   await T.tick(env, at('2026-11-17T10:45:00-06:00'), f);
-  const a = new URLSearchParams(f.calls[0].init.body);
-  assert.match(a.get('subject'), /Booker call now option first/);
-  assert.match(a.get('message'), /FLAG: Booker call now option first/);
-  assert.match(a.get('subject'), /^TEST /);
+  const st = await (await W.fetch(new Request('https://x/api/free-report/status?k=' + env.STATUS_KEY), env, {})).json();
+  assert.equal(st.open[0].big_shop, true); assert.equal(st.open[0].test, true);
+  await T.tick(env, at('2026-11-18T10:31:00-06:00'), f);
+  const w = [...env.KV.m.entries()].filter(([k]) => k.startsWith('watch:')).map(([, v]) => JSON.parse(v)).find((x) => x.level === 'problem');
+  assert.match(w.message, /FLAG: Booker call now option first/);
+  assert.match(w.message, /TEST request/);
+  assert.equal(f.calls.length, 0);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
