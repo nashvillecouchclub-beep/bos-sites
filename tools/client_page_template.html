@@ -100,7 +100,7 @@ footer{margin:2.4rem 0 7rem;color:var(--muted);font-size:.85rem}
 </header>
 <div class="prog" aria-label="Your progress"><div class="wrap"><span><b id="pn">0 of 0</b> answered</span><div class="track"><i id="pt"></i></div></div></div>
 <main class="wrap"><div id="main"></div>
-<section class="general" id="general"><h2>Have a question about anything?</h2><p class="sec-p" style="margin:0">Ask about anything on this page, or anything else. Rickey will get back to you.</p><label class="l" for="qt-_general">Your question</label><textarea id="qt-_general"></textarea><div class="btns"><button class="btn big" type="button" data-act="sendq" data-id="_general">Send my question</button></div><div class="qlist" id="ql-_general"></div></section>
+<section class="general" id="general"><h2>Have a question about anything?</h2><p class="sec-p" style="margin:0">Ask about anything on this page, or anything else. We will get back to you soon.</p><label class="l" for="qt-_general">Your question</label><textarea id="qt-_general"></textarea><div class="btns"><button class="btn big" type="button" data-act="sendq" data-id="_general">Send my question</button></div><div class="qlist" id="ql-_general"></div></section>
 <div class="finish" id="finish" role="status"><h2>All done. Thank you!</h2><p>Every answer is saved. We'll take it from here, and you'll get a short email confirming what happens next.</p></div></main>
 <footer class="wrap" id="foot"></footer>
 <div class="confirm" id="confirm" role="status" aria-live="assertive"><div class="bg" id="cbig"></div><div class="sm" id="csmall"></div><button type="button" id="cclose">OK</button></div>
@@ -172,7 +172,7 @@ function showState(id){
 function progress(){var ids=Object.keys(ALL),n=ids.filter(function(i){return answers[i]}).length;document.getElementById("pn").textContent=n+" of "+ids.length;document.getElementById("pt").style.width=(ids.length?n/ids.length*100:0)+"%";document.getElementById("finish").classList.toggle("show",ids.length>0&&n===ids.length)}
 function box(kind,big,small){var c=document.getElementById("confirm");c.className="confirm show"+(kind?" "+kind:"");document.getElementById("cbig").textContent=big;document.getElementById("csmall").textContent=small||""}
 document.getElementById("cclose").onclick=function(){document.getElementById("confirm").className="confirm"};
-var FAIL="Not saved yet, please tell Rickey.",FAILS="Your answer didn't reach us. Check your internet and tap again, or just reply to our email.";
+var FAIL="Not saved yet. Please tap again, or just reply to our email.",FAILS="Your answer didn't reach us. Check your internet and tap again, or just reply to our email.";
 function save(list,okBig){
   box("wait","Saving...","One moment.");
   var done=false,t=setTimeout(function(){if(!done){done=true;box("err",FAIL,FAILS)}},10000);
@@ -190,7 +190,7 @@ function saveQ(id){
   fetch(API,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:TOKEN,question:{item:id,note:note}})})
   .then(function(r){return r.json().then(function(j){if(!r.ok||!j.saved)throw new Error(j.error||"not saved");return j})})
   .then(function(j){if(done)return;done=true;clearTimeout(t);addQ({id:j.id,item:id,note:note,time:j.time});keepQ();showQ();ta.value="";var qb=document.getElementById("qb-"+id);if(qb)qb.classList.remove("show");
-    box("","Got it! Your question is sent.","Rickey will get back to you.")})
+    box("","Got it! Your question is sent.","We will get back to you soon.")})
   .catch(function(){if(done)return;done=true;clearTimeout(t);box("err",FAIL,FAILS)});
 }
 function rec(id,answer,note){return{item:id,answer:answer,note:note||""}}
