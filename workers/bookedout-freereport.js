@@ -221,7 +221,7 @@ async function reviewsCall(env, task, f) {
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // Visitor text rules: no long dashes, no emojis (also cleans text that comes from Google reviews).
 function plain(s) {
-  return String(s == null ? '' : s).replace(/\s*[‒-―]\s*/g, ', ').replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}️‍]/gu, '').replace(/\s{2,}/g, ' ').trim();
+  return String(s == null ? '' : s).replace(/\s*[\u2012-\u2015]\s*/g, ', ').replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, '').replace(/\s{2,}/g, ' ').trim();
 }
 const t = (s) => esc(plain(s));
 const money = (n) => '$' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');

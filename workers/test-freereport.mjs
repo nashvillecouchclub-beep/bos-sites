@@ -45,11 +45,11 @@ const ct = (d) => T.chicagoText(d);
 const FIX = {
   google: { has_google_profile: true, rating: 4.4, review_count: 61, rank_for_keyword: 7, reviews_pending: true, reviews_task_id: 'task-1',
     top3: [{ name: 'Fake Air One', rating: 4.8, review_count: 310 }, { name: 'Fake Air Two', rating: 4.7, review_count: 190 }, { name: 'Fake Air Three', rating: 4.9, review_count: 140 }] },
-  reviews: { newest_review: { rating: 5, text: 'Great work — fast and fair \u{1F600}', date: 'Nov 10 2026' }, owner_reply_on_newest: false },
+  reviews: { newest_review: { rating: 5, text: 'Great work \u2014 fast and fair \u{1F600}', date: 'Nov 10 2026' }, owner_reply_on_newest: false },
 };
 // Visible text only (tags, styles and attributes removed)
 const visible = (html) => html.replace(/<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' ');
-const DASH = /[‒-―]/, EMOJI = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}]/u;
+const DASH = /[\u2012-\u2015]/, EMOJI = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}]/u;
 
 // ---------- validation ----------
 await test('valid fake shop passes and phone is tidied', () => {
