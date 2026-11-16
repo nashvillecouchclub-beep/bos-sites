@@ -72,35 +72,84 @@
     });
   });
 
-  /* free report form: opens the owner's own email, filled in */
+  /* free report form (Nov 16): sends the same answers to the site form "free-report" (emailed to Rickey)
+     and to /api/free-report (the free report machine). Either one getting it is enough. No mailto. */
   var form = d.querySelector("[data-lookform]");
   if (form) {
-    var q = /[?&]trade=([a-z]+)/.exec(location.search || "");
+    var t0 = Date.now();
+    var q = /[?&](?:t|trade)=([a-z]+)/.exec(location.search || "");
     if (q) { var map = { hvac: "Heating and air", plumbing: "Plumbing", electrical: "Electrical" }, sel = form.querySelector("[name=trade]"); if (map[q[1]] && sel) sel.value = map[q[1]]; }
+    var RULES = {
+      first_name: function (v) { return v.length >= 1 && v.length <= 60 ? "" : "Please add your first name."; },
+      business_name: function (v) { return v.length >= 2 && v.length <= 120 ? "" : "Please add your business name."; },
+      email: function (v) { return /^[^\s@<>()",;:]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(v) && v.length <= 160 ? "" : "Please check your email address. It should look like name@yourbusiness.com."; },
+      phone: function (v) { var n = v.replace(/\D/g, ""); if (n.length === 11 && n.charAt(0) === "1") n = n.slice(1); return /^[2-9]\d{9}$/.test(n) ? "" : "Please add a phone number with area code, like 615 555 0123."; },
+      town: function (v) { return v.length >= 2 && v.length <= 80 ? "" : "Please add the town your business is in."; },
+      note: function (v) { return v.length <= 1000 ? "" : "Please keep this under 1,000 characters."; }
+    };
+    var fld = function (n) { return form.querySelector("[name=" + n + "]"); };
+    var val = function (n) { var f = fld(n); if (!f) return ""; if (f.type === "checkbox") return f.checked; return (f.value || "").trim(); };
+    var setErr = function (n, m) {
+      var f = fld(n), e = d.getElementById("e-" + n); if (!f) return;
+      f.setAttribute("aria-invalid", m ? "true" : "false");
+      if (f.parentNode && f.parentNode.classList) f.parentNode.classList.toggle("bad", !!m);
+      if (e) { e.textContent = m; e.hidden = !m; }
+    };
+    Object.keys(RULES).forEach(function (n) {
+      var f = fld(n); if (!f) return;
+      f.addEventListener("blur", function () { if (val(n)) setErr(n, RULES[n](val(n))); });
+      f.addEventListener("input", function () { if (f.getAttribute("aria-invalid") === "true" && !RULES[n](val(n))) setErr(n, ""); });
+    });
+    var btn = form.querySelector("button[type=submit]"), lbl = form.querySelector("[data-btn-label]"), msg = d.getElementById("form-msg"), busy = false;
+    var say = function (state, text) {
+      form.setAttribute("data-state", state);
+      if (msg) { msg.className = "formmsg " + state; msg.textContent = text || ""; msg.hidden = !text; }
+    };
+    var thanks = function (data) {
+      var box = d.getElementById("form-thanks"), fields = form.querySelector("[data-fields]");
+      say("sent", "");
+      if (fields) fields.hidden = true;
+      if (!box) return;
+      box.textContent = "";
+      var h = d.createElement("h3"); h.textContent = "Thanks, " + data.first_name + "."; box.appendChild(h);
+      var p = d.createElement("p");
+      p.textContent = "We've got your request for " + data.business_name + ". Your free report is on its way: we'll email it to " + data.email
+        + " within one business day, usually much sooner. Nothing to install and no call needed. If you ticked the box, our assistant may give you a quick call to ask one or two questions first.";
+      box.appendChild(p); box.hidden = false;
+      try { box.focus({ preventScroll: true }); } catch (e) { box.focus(); }
+      box.scrollIntoView({ block: "center", behavior: still ? "auto" : "smooth" });
+    };
     form.addEventListener("submit", function (ev) {
-      ev.preventDefault();
-      if (form.querySelector(".hp").value) return;
-      var need = ["name", "shop", "town"], ok = true;
-      need.forEach(function (n) { var f = form.querySelector("[name=" + n + "]"); if (!f.value.trim()) { ok = false; f.style.borderColor = "#E5484D"; } else f.style.borderColor = ""; });
-      if (!ok) { var first = form.querySelector("[name=name]"); if (first) first.focus(); return; }
-      function v(n) { var f = form.querySelector("[name=" + n + "]"); return f && f.value ? f.value.trim() : ""; }
-      var lines = ["Hi Rickey,", "", "Please send my free report.", "", "Name: " + v("name"), "Shop: " + v("shop"), "Trade: " + v("trade"), "Town: " + v("town")];
-      if (v("jobs")) lines.push("Jobs a week: " + v("jobs"));
-      lines.push("Costing me most: " + v("problem"));
-      if (v("decides")) lines.push("Who decides: " + v("decides"));
-      if (v("start")) lines.push("Could start this month: " + v("start"));
-      if (v("note")) lines.push("Note: " + v("note"));
-      var href = "mailto:" + form.getAttribute("data-to") + "?subject=" + encodeURIComponent("Free report for " + v("shop")) + "&body=" + encodeURIComponent(lines.join("\n"));
-      var note = d.getElementById("sent-note"), to = form.getAttribute("data-to"), text = lines.join("\n");
-      if (note) { note.hidden = false; note.innerHTML = '<b style="display:block;font-size:1.1em;margin-bottom:8px">Your request is ready. One tap to send it.</b>'
-        + '<a class="btn" style="display:flex;justify-content:center;margin:10px 0" target="_blank" rel="noopener" href="' + href.replace(/"/g, "&quot;") + '">Open my email and send</a>'
-        + '<button type="button" class="btn ghost" data-copyreq style="display:flex;width:100%;justify-content:center;margin:0 0 10px">Copy my request</button>'
-        + 'If your email doesn\'t open, tap Copy and paste it into an email to <a href="mailto:' + to + '">' + to + '</a>. That\'s all we need.';
-        var cb = note.querySelector("[data-copyreq]"); cb.addEventListener("click", function () { var t = "To: " + to + "\n\n" + text, done = function () { cb.textContent = "Copied. Paste it into an email to " + to; };
-          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, function () { fb(); }); else fb();
-          function fb() { var ta = d.createElement("textarea"); ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0"; d.body.appendChild(ta); ta.select(); try { d.execCommand("copy"); done(); } catch (e) {} ta.remove(); } });
-        note.scrollIntoView({ block: "center", behavior: "smooth" }); }
-      try { window.location.href = href; } catch (e) { /* the note above gives the other ways */ }
+      ev.preventDefault(); if (busy) return;
+      var bad = [];
+      Object.keys(RULES).forEach(function (n) { var m = RULES[n](val(n)); setErr(n, m); if (m) bad.push(n); });
+      if (bad.length) { say("error", bad.length === 1 ? "Please fix the field marked above." : "Please fix the " + bad.length + " fields marked above."); fld(bad[0]).focus(); return; }
+      var data = { first_name: val("first_name"), business_name: val("business_name"), email: val("email"), phone: val("phone"),
+        trade: val("trade"), town: val("town"), note: val("note"), revenue: val("revenue"), consent: val("consent") ? "yes" : "no", page: location.pathname };
+      if (val("bot-field")) { thanks(data); return; }
+      busy = true; btn.disabled = true; btn.setAttribute("aria-busy", "true"); if (lbl) lbl.textContent = "Sending...";
+      say("sending", "Sending your request...");
+      var fail = function () {
+        busy = false; btn.disabled = false; btn.removeAttribute("aria-busy"); if (lbl) lbl.textContent = "Get your free report";
+        say("error", "Sorry, that didn't go through. Please try again in a minute, or email hello@getbookedoutsolutions.com.");
+      };
+      var send = function () {
+        var body = new URLSearchParams();
+        body.append("form-name", "free-report"); body.append("subject", "Free report request: " + data.business_name);
+        Object.keys(data).forEach(function (k) { body.append(k, data[k]); }); body.append("bot-field", "");
+        var a = fetch("/", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: body.toString() })
+          .then(function (r) { if (!r.ok) throw new Error("form " + r.status); });
+        var w = {}; Object.keys(data).forEach(function (k) { w[k] = data[k]; }); w.elapsed_ms = Date.now() - t0;
+        var b = fetch("/api/free-report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(w) })
+          .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!(r.ok && j.saved) && !j.duplicate) throw new Error("api " + r.status); }); });
+        var left = 2, done = false;
+        [a, b].forEach(function (p) {
+          p.then(function () { if (!done) { done = true; btn.removeAttribute("aria-busy"); thanks(data); } },
+            function () { if (--left === 0 && !done) fail(); });
+        });
+      };
+      /* the answer service ignores anything sent less than 3 seconds after the page opened */
+      setTimeout(send, Math.max(0, 3100 - (Date.now() - t0)));
     });
   }
 

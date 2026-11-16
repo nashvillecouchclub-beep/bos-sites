@@ -5,5 +5,7 @@ Disallow: /first-shop-
 Disallow: /welcome.html
 Disallow: /c/
 Disallow: /api/
+Disallow: /r/
+Disallow: /forms.html
 
 Sitemap: https://getbookedoutsolutions.com/sitemap.xml

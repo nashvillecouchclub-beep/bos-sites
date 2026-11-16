@@ -138,5 +138,10 @@
   "id": "deploy-price-switcher-manifest-nov15",
   "site": "getbookedoutsolutions.com",
   "do": "deploy"
+ },
+ {
+  "id": "deploy-free-report-form-nov16",
+  "site": "getbookedoutsolutions.com",
+  "do": "deploy"
  }
 ]
