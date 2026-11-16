@@ -35,4 +35,5 @@ Endpoints for later jobs (all need `k` = STATUS_KEY):
 - `sites/getbookedoutsolutions.com/_worker.js` is the front door: it passes `/connect*`, `/c/*`, `/api/client-answer*`,
   `/api/free-report*` and `/r/*` to our workers (Pages `_redirects` can't proxy to another address) and adds the noindex
   headers. Everything else is the static site. Tests: `node workers/test-pages-frontdoor.mjs`.
-- `tools/make_manifest.py` leaves `_worker.js` out of files.json so the Netlify fallback never serves it.
+- `_routes.json` limits the front door to those paths (static pages never run it, so they use no worker requests).
+- `tools/make_manifest.py` leaves `_worker.js` and `_routes.json` out of files.json so the Netlify fallback never serves it.

@@ -5,7 +5,7 @@ for d in sorted(os.listdir(root)):
     base = os.path.join(root, d); m = {}
     for r, _, fs in os.walk(base):
         for f in fs:
-            if f.startswith('.') or f in ('files.json', '_worker.js'): continue
+            if f.startswith('.') or f in ('files.json', '_worker.js', '_routes.json'): continue
             p = os.path.join(r, f); m['/' + os.path.relpath(p, base).replace(os.sep, '/')] = hashlib.sha1(open(p, 'rb').read()).hexdigest()
     json.dump(dict(sorted(m.items())), open(os.path.join(base, 'files.json'), 'w'), indent=0)
     print(d, len(m), 'files')
