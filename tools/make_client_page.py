@@ -7,7 +7,7 @@ Both are uploaded to the bookedout-answers KV as html:<token> and page:<token> (
 does this through the Cloudflare dashboard API in the mini's Chrome). Specs and tokens never go in this public repo.
 
 Spec: {token, client, client_name, week, title, kick, heading, signoff, footer:[..], done_intro, done:[..],
-       sections:[{key, title, desc, batch?, items:[{id, meta, title, body:[..], sign?, serp?, choice?, kind?, guide?, input?}]}]}
+       sections:[{key, title, desc, batch?, items:[{id, meta, title, body:[..], sign?, serp?, choice?, kind?, guide?, input?, sha?}]}]}
 Rules: max 15 items a page. Instruction cards use kind "todo" (Done / I need help).
 Every page gets an "Ask a question" button on each card and a "Have a question about anything?" box at the bottom
 (Rickey Nov 15 12:20 pm). Questions save apart from answers (worker q:<token>) and never count as answering a card.
@@ -32,7 +32,8 @@ def build(spec):
     data = json.dumps(page, ensure_ascii=False).replace("</", "<\\/")
     html = tpl.replace("/*__PAGE__*/null", data).replace("__TITLE__", spec.get("title", "A few things to OK"))
     reg = {"client": spec["client"], "client_name": spec["client_name"], "week": spec.get("week", ""),
-           "items": {it["id"]: ({"title": it["title"], "choices": it["choice"]} if it.get("choice") else {"title": it["title"]})
+           "items": {it["id"]: {**({"title": it["title"], "choices": it["choice"]} if it.get("choice") else {"title": it["title"]}),
+                                  **({"sha": it["sha"]} if it.get("sha") else {})}
                      for it in items}}
     return html, reg
 
