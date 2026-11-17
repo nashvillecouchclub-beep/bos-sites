@@ -143,5 +143,10 @@
   "id": "deploy-free-report-form-nov16",
   "site": "getbookedoutsolutions.com",
   "do": "deploy"
+ },
+ {
+  "id": "2026-11-16-bos-pages-move",
+  "site": "getbookedoutsolutions.com",
+  "do": "deploy"
  }
 ]

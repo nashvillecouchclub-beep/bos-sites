@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "description": "Only these paths run the _worker.js front door; every other page is served straight from Pages (with _headers).",
+  "include": ["/connect", "/connect/*", "/c/*", "/api/*", "/r/*", "/files.json"],
+  "exclude": []
+}

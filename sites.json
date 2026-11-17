@@ -9,6 +9,12 @@
   "dir": "sites/getbookedoutsolutions.com",
   "netlify_site_id": "b80f6b45-1fcc-4ea1-8d84-f6acc0081c47",
   "client_email": "rickey@trybidrescue.com",
-  "indexnow_key": "4238c2688b4166643c4a4d166cfaf886"
+  "indexnow_key": "4238c2688b4166643c4a4d166cfaf886",
+  "host": "cloudflare-pages",
+  "pages_project": "getbookedoutsolutions",
+  "pages_build_output": "sites/getbookedoutsolutions.com",
+  "pages_deploy": "automatic: Cloudflare Pages builds from bos-sites main on every merge (no job needed)",
+  "netlify_fallback_until": "2026-11-23",
+  "netlify_note": "netlify_site_id kept only so the siteops deploy job keeps the Netlify copy current as the 7-day fallback; remove it after netlify_fallback_until"
  }
 }
