@@ -1,0 +1,60 @@
+# Free report: the two checkers (Nov 16 night)
+
+Rickey does not check free reports (his rule, Nov 16 4:46 pm). Two separate Claude agents do. Checker 1 and checker 2 are
+different agents in different runs. Neither one may see the other's notes before it gives its own verdict. A report goes to
+the owner only after both pass the same version (`hash`), and only when LIVE is on.
+
+How each checker works:
+1. `GET /api/free-report/review?k=STATUS_KEY` and take the items whose `needs` is your slot ("checker 1" or "checker 2").
+   Soonest `due` first.
+2. Open the item's `report` link and read the whole page. Compare it with the item's `sections` (the lookup data) and
+   its form fields (`first_name`, `business_name`, `town`, `trade`, `revenue`).
+3. Send one mark: `POST /api/free-report/check`
+   `{"id","k","checker":1|2,"agent":"checker-<slot>-<run id>","result":"pass"|"fail","hash":"<the hash you read>","notes":"..."}`.
+   Fail notes say exactly what is wrong and what the fix is, in one or two lines.
+4. A fail holds the report and puts it on the watch list. The fixing agent corrects the data with `/fill`, which makes a new
+   version, and then both checkers read it again from the start.
+
+## Checker 1: facts and data (the doer's check)
+Fail the report if any of these is not true:
+- Every number and fact on the page traces to the lookup data or the owner's own form answers: stars, review count, rank,
+  the top 3 names and counts, the review gap, the newest review text and date, whether it got a reply, the ChatGPT and
+  Gemini result and question, the booking score and fixes, and the main category. If a fact isn't in `sections`, fail it.
+- No guessed numbers. The budget line shows only when the owner picked a revenue range, and its math is right:
+  6% of the low end and 8% of the high end, divided by 12. "Rather not say" or blank means no budget line.
+- No section says "Pending check" (`pending` is empty and `complete` is true).
+- The owner's first name, business name, town and trade are right everywhere, with the same spelling as the form.
+  The report belongs to this request, not another one.
+- The "No Google profile" wording appears only when `has_google_profile` is false. When it does, there is no rank line.
+- The 3 fixes fit what was found. For example, there is no "reply to your newest review" fix when it already has a reply.
+- The trade's price link is right (hvac, plumbing or electrical price page; free-look page for other trades).
+
+## Checker 2: wording, rules and risk (the second agent)
+Fail the report if any of these is not true:
+- The locked free report wording is unchanged. It is called the "free report", never "free look" or "free check".
+  The header line is "Built from your real Google listing and a few quick checks. It is yours to keep."
+  The next step reads "Start your free 30 days" and "Nothing is charged for 30 days. Cancel any time with one reply."
+  The budget line reads "Shops your size spend 6 to 8% of revenue to grow; for you that's ... Core is $997."
+- Nothing promises or implies jobs, calls, revenue, a ranking or a result ("you will rank", "more jobs guaranteed", and so on).
+- There are no long dashes and no emojis anywhere in what the owner sees, including review text.
+- It doesn't lead with AI, names none of our tools or how we run (no Claude, no agents, no stack), and says
+  "example business" for any example.
+- Nothing is rude about the owner, his competitors or his reviewers. A competitor is only named when it is in the top 3
+  lookup data.
+- No health, legal or personal details beyond what the owner gave. Nothing from the owner's private note
+  ("What's going on?") is shown on the page.
+- It is not a fake TEST shop sent as real (the review list shows `test`), and the owner's email looks like a real
+  business or personal address.
+- Then re-check checker 1's two riskiest facts yourself (rank and review gap) against `sections`.
+
+## Timing (scheduled task, created only when GO LIVE is near)
+- One cloud scheduled task, "Free report checkers", runs every hour from 7 am to 7 pm Central on weekdays, plus once at
+  9 pm, 5 am and 7 am. The clock is 1 business day and the cron builds a report within 15 minutes, so a request is checked
+  within about 1 to 2 hours on a weekday and long before 75% of its clock.
+- Each run starts two fresh sub-agents one after the other: checker 1, then checker 2 (a new agent that does not see
+  checker 1's notes). The run itself sends nothing. The worker sends after the second pass.
+- If an item is past 75% of its clock and still needs a fill, the run fills it first (AI test, booking test, category).
+  If it can't, it writes the problem to the watchdog inbox. Overdue items show as `problems` in `/status`, and the
+  watchdog picks them up.
+- The prompt must include: "Never ask Rickey for an Allow: if a step needs one, skip it and list it at the end."
+  Rickey gets no email from this task.
