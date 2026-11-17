@@ -275,5 +275,169 @@ await test('Bigger shops are flagged for the Booker call now option (status list
   assert.equal(f.calls.length, 0);
 });
 
+// ---------- the 2-agent check and the automatic send (Nov 16 4:46 pm: no check by Rickey) ----------
+const KEY = 'k'.repeat(32);
+const REAL = { ...SHOP, email: 'owner@fakeshop-test.com', business_name: 'Test Shop Heating and Air' }; // not a TEST marker, so it can "send" in tests
+const FILLS = {
+  google: { ...FIX.google, keyword: 'hvac Smyrna' }, reviews: FIX.reviews,
+  ai: { question: 'Who is the best heating and air company in Smyrna?', chatgpt: { named: false }, gemini: { named: true, correct: true } },
+  booking: { score: 6, fixes: ['Put the phone number at the top.', 'Make the quote button bigger.', 'Cut the form to 4 fields.'] },
+  category: { main_category: 'HVAC contractor', big_job: 'new systems', match: true },
+};
+const call = (env, path, body) => W.fetch(new Request('https://x' + path, body ? { method: 'POST', body: JSON.stringify(body) } : {}), env, {});
+// a full fake that also answers the Gmail token and send calls and the Resend call
+function sendFetch(opts = {}) {
+  const calls = [];
+  const f = async (url, init) => {
+    calls.push({ url, init });
+    if (url === 'https://oauth2.googleapis.com/token') return new Response(JSON.stringify({ access_token: 'tok' }), { status: opts.tokenStatus || 200 });
+    if (url === 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send') return new Response(JSON.stringify({ id: 'gm-1' }), { status: opts.sendStatus || 200 });
+    if (url === 'https://api.resend.com/emails') return new Response(JSON.stringify({ id: 're-1' }), { status: 200 });
+    return new Response('ok', { status: 200 });
+  };
+  f.calls = calls;
+  return f;
+}
+const GMAIL = { SEND_ROUTE: 'gmail', GMAIL_CLIENT_ID: 'id', GMAIL_CLIENT_SECRET: 'sec', GMAIL_REFRESH_TOKEN: 'ref' };
+// a built, complete report for a non-test shop
+async function ready(extra = {}, shop = REAL) {
+  const env = { KV: kv(), STATUS_KEY: KEY, ...extra };
+  const j = await (await T.submit(post(shop), env, at('2026-11-17T10:30:00-06:00'))).json();
+  await T.tick(env, at('2026-11-17T10:45:00-06:00'), sendFetch());
+  for (const [section, data] of Object.entries(FILLS)) await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section, data });
+  const rec = () => JSON.parse(env.KV.m.get('req:' + j.id));
+  return { env, id: j.id, rec };
+}
+const mark = (env, id, checker, agent, result, hash, notes) => T.check(new Request('https://x/', { method: 'POST', body: JSON.stringify({ id, k: KEY, checker, agent, result, hash, notes }) }), env, at('2026-11-17T11:00:00-06:00'), env._f);
+const watchOf = (env) => [...env.KV.m.entries()].filter(([k]) => k.startsWith('watch:')).map(([, v]) => JSON.parse(v));
+
+await test('Review list needs the key and shows a complete report waiting for checker 1, with the lookup data', async () => {
+  const { env, id, rec } = await ready();
+  assert.equal((await call(env, '/api/free-report/review?k=nope')).status, 403);
+  const r = await (await call(env, '/api/free-report/review?k=' + KEY)).json();
+  assert.equal(r.count, 1);
+  const w = r.waiting[0];
+  assert.equal(w.id, id); assert.equal(w.complete, true); assert.equal(w.needs, 'checker 1');
+  assert.equal(w.hash, rec().hash); assert.match(w.hash, /^[a-f0-9]{32}$/);
+  assert.equal(w.sections.google.review_count, 61, 'lookup data is there to trace facts');
+  assert.equal(w.business_name, 'Test Shop Heating and Air'); assert.equal(w.first_name, 'Testy');
+});
+await test('Check rules: no pass on pending sections, checker 1 first, two different agents, current version only', async () => {
+  const env = { KV: kv(), STATUS_KEY: KEY };
+  const j = await (await T.submit(post(REAL), env, at('2026-11-17T10:30:00-06:00'))).json();
+  await T.tick(env, at('2026-11-17T10:45:00-06:00'), sendFetch());
+  const h0 = JSON.parse(env.KV.m.get('req:' + j.id)).hash;
+  assert.equal((await mark(env, j.id, 1, 'checker-a', 'pass', h0)).status, 409, 'pending sections cannot pass');
+  const { env: e2, id, rec } = await ready();
+  const h = rec().hash;
+  assert.equal((await mark(e2, id, 2, 'checker-b', 'pass', h)).status, 409, 'checker 1 must pass first');
+  assert.equal((await mark(e2, id, 1, 'checker-a', 'pass', 'f'.repeat(32))).status, 409, 'old version');
+  assert.equal((await mark(e2, id, 1, 'checker-a', 'pass', h)).status, 200);
+  assert.equal((await mark(e2, id, 2, 'checker-a', 'pass', h)).status, 409, 'same agent twice');
+  assert.equal(rec().status, 'built');
+  const bad = await T.check(new Request('https://x/', { method: 'POST', body: JSON.stringify({ id, k: 'nope', checker: 2, agent: 'b', result: 'pass', hash: h }) }), e2);
+  assert.equal(bad.status, 403);
+});
+await test('Two passes with LIVE off: status checked, nothing sent, no outside call, no email to anyone', async () => {
+  const f = sendFetch();
+  const { env, id, rec } = await ready({ ...GMAIL, _f: f });
+  const h = rec().hash;
+  await mark(env, id, 1, 'checker-a', 'pass', h);
+  const r = await (await mark(env, id, 2, 'checker-b', 'pass', h)).json();
+  assert.equal(r.status, 'checked'); assert.equal(r.sent, false); assert.match(r.blocked, /LIVE is off/);
+  await T.tick(env, at('2026-11-17T11:15:00-06:00'), f);
+  assert.equal(f.calls.length, 0, 'no calls at all');
+  assert.equal(rec().status, 'checked'); assert.ok(env.KV.m.has('open:' + id));
+  assert.equal(watchOf(env).length, 0);
+});
+await test('Two passes with LIVE on (Gmail route): the owner gets one plain email with his report link, clock stops', async () => {
+  const f = sendFetch();
+  const { env, id, rec } = await ready({ ...GMAIL, LIVE: 'on', _f: f });
+  const h = rec().hash;
+  await mark(env, id, 1, 'checker-a', 'pass', h);
+  assert.equal(f.calls.length, 0, 'one pass never sends');
+  const r = await (await mark(env, id, 2, 'checker-b', 'pass', h)).json();
+  assert.equal(r.sent, true); assert.equal(rec().status, 'sent'); assert.equal(rec().sent_by, 'auto'); assert.equal(rec().send_route, 'gmail');
+  assert.ok(!env.KV.m.has('open:' + id));
+  assert.deepEqual(f.calls.map((c) => c.url), ['https://oauth2.googleapis.com/token', 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send']);
+  const raw = JSON.parse(f.calls[1].init.body).raw.replace(/-/g, '+').replace(/_/g, '/');
+  const msg = Buffer.from(raw, 'base64').toString('utf8');
+  assert.match(msg, /^From: Rickey Hallor <rickey@getbookedoutsolutions\.com>\r\nTo: owner@fakeshop-test\.com\r\nSubject: Your free report for Test Shop Heating and Air\r\n/);
+  const body = Buffer.from(msg.split('\r\n\r\n')[1], 'base64').toString('utf8');
+  assert.ok(body.includes(`https://getbookedoutsolutions.com/r/${rec().token}/`));
+  assert.match(body, /^Hi Testy,/); assert.match(body, /P\.O\. Box 1166, Smyrna, TN 37167/); assert.match(body, /Reply "stop"/);
+  assert.doesNotMatch(body, DASH); assert.doesNotMatch(body, EMOJI); assert.doesNotMatch(body, /\bAI\b|guarantee|rank #|more jobs|more calls/i);
+  await T.tick(env, at('2026-11-18T12:00:00-06:00'), f);
+  assert.equal(f.calls.length, 2, 'sent once only, no overdue after');
+  assert.equal(watchOf(env).length, 0);
+});
+await test('A change after the checks clears both marks; the new version needs both checks again', async () => {
+  const f = sendFetch();
+  const { env, id, rec } = await ready({ ...GMAIL, _f: f });
+  const h = rec().hash;
+  await mark(env, id, 1, 'checker-a', 'pass', h); await mark(env, id, 2, 'checker-b', 'pass', h);
+  assert.equal(rec().status, 'checked');
+  await call(env, '/api/free-report/fill', { id, k: KEY, section: 'booking', data: { score: 7, fixes: ['Put the phone number at the top.'] } });
+  assert.equal(rec().status, 'built'); assert.notEqual(rec().hash, h); assert.deepEqual(rec().checks, {});
+  env.LIVE = 'on';
+  await T.tick(env, at('2026-11-17T11:30:00-06:00'), f);
+  assert.equal(f.calls.length, 0, 'never sent on old marks');
+});
+await test('A failed check holds the report and puts it on the watch list; the fix sends it back for both checks', async () => {
+  const { env, id, rec } = await ready();
+  const h = rec().hash;
+  await mark(env, id, 1, 'checker-a', 'pass', h);
+  const r = await (await mark(env, id, 2, 'checker-b', 'fail', h, 'Booking score not in the lookup data')).json();
+  assert.equal(r.status, 'held');
+  const w = watchOf(env);
+  assert.equal(w.length, 1); assert.equal(w[0].level, 'problem'); assert.equal(w[0].id, id);
+  assert.match(w[0].message, /Booking score not in the lookup data/);
+  const st = await (await call(env, '/api/free-report/status?k=' + KEY)).json();
+  assert.equal(st.problems, 1); assert.equal(st.open[0].status, 'held');
+  await call(env, '/api/free-report/fill', { id, k: KEY, section: 'booking', data: { score: 5, fixes: ['Put the phone number at the top.'] } });
+  assert.equal(rec().status, 'built');
+  const rv = await (await call(env, '/api/free-report/review?k=' + KEY)).json();
+  assert.equal(rv.waiting[0].needs, 'checker 1');
+});
+await test('A failed send goes to the watch list (not to Rickey) and is tried again on the next run', async () => {
+  const f = sendFetch({ sendStatus: 500 });
+  const { env, id, rec } = await ready({ ...GMAIL, LIVE: 'on', _f: f });
+  const h = rec().hash;
+  await mark(env, id, 1, 'checker-a', 'pass', h);
+  const r = await (await mark(env, id, 2, 'checker-b', 'pass', h)).json();
+  assert.equal(r.sent, false); assert.equal(rec().status, 'checked'); assert.equal(rec().send_fails, 1);
+  const w = watchOf(env);
+  assert.equal(w.length, 1); assert.equal(w[0].level, 'problem'); assert.match(w[0].subject, /send failed/);
+  const ok = sendFetch();
+  await T.tick(env, at('2026-11-17T11:15:00-06:00'), ok);
+  assert.equal(rec().status, 'sent');
+  for (const c of [...f.calls, ...ok.calls]) assert.ok(!/getbookedoutsolutions\.com/.test(c.url), 'no email or form post to us');
+});
+await test('Fake TEST shops are never sent, even with LIVE on and two passes', async () => {
+  const f = sendFetch();
+  const { env, id, rec } = await ready({ ...GMAIL, LIVE: 'on', _f: f }, SHOP);
+  const h = rec().hash;
+  await mark(env, id, 1, 'checker-a', 'pass', h); await mark(env, id, 2, 'checker-b', 'pass', h);
+  await T.tick(env, at('2026-11-17T11:15:00-06:00'), f);
+  assert.equal(f.calls.length, 0); assert.equal(rec().status, 'checked');
+  assert.match(T.sendBlock({ LIVE: 'on' }, rec()), /TEST/);
+});
+await test('Send routes: Resend works, a route with no settings fails softly, an unknown route is refused', async () => {
+  const f = sendFetch();
+  const m = T.ownerEmail({}, { first_name: 'Testy', business_name: 'Test Shop\r\nBcc: x@y.com', email: 'owner@fakeshop-test.com', token: 'a'.repeat(48) });
+  assert.doesNotMatch(T.mime(m), /\r\nBcc:/, 'no header injection from the business name');
+  const r1 = await T.sendMail({ LIVE: 'on', SEND_ROUTE: 'resend', RESEND_KEY: 'x' }, m, f);
+  assert.equal(r1.ok, true); assert.equal(f.calls[0].url, 'https://api.resend.com/emails');
+  assert.equal(JSON.parse(f.calls[0].init.body).to[0], 'owner@fakeshop-test.com');
+  assert.deepEqual(await T.sendMail({ LIVE: 'on', SEND_ROUTE: 'gmail' }, m, f), { ok: false, route: 'gmail', error: 'gmail route not set up' });
+  assert.equal((await T.sendMail({ LIVE: 'on', SEND_ROUTE: 'cloudflare' }, m, f)).error, 'cloudflare route not set up');
+  const sent = [];
+  assert.equal((await T.sendMail({ LIVE: 'on', SEND_ROUTE: 'cloudflare', EMAIL: { send: async (x) => { sent.push(x); return { messageId: 'cf-1' }; } } }, m, f)).id, 'cf-1');
+  assert.equal(sent[0].to, 'owner@fakeshop-test.com');
+  assert.equal((await T.sendMail({ LIVE: 'on', SEND_ROUTE: 'smtp' }, m, f)).error, 'unknown SEND_ROUTE');
+  const off = await T.sendMail({ SEND_ROUTE: 'resend', RESEND_KEY: 'x' }, m, f);
+  assert.equal(off.ok, false, 'with LIVE off even a direct sendMail call is blocked'); assert.match(off.error, /blocked outbound/);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
