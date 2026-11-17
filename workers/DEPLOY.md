@@ -19,12 +19,30 @@
 - No host forms and no alert emails (Nov 16 Pages move). Every lead is kept in KV as `lead:<id>` (no expiry);
   clock trouble goes to `watch:` entries (warn = 75% of the clock, problem = overdue) that the watchdog reads from
   `GET /api/free-report/status?k=...` (`watch` and `problems`).
+- 2-agent check and automatic send (Nov 16 night; Rickey's Nov 16 4:46 pm rule: no check by Rickey):
+  built report -> checker 1 pass -> checker 2 pass (a different agent, same report version) -> sent to the owner by the
+  picked route, only when `LIVE` = `on`. A fail sets status `held` and writes a `problem` watch entry; a fill after a check
+  clears both marks. A failed send writes a `problem` watch entry and is tried again every 15 minutes. Fake TEST shops
+  are never sent. Nothing emails Rickey.
+- Send route settings (add only when the route is being set up; all secrets in the dashboard):
+  - `SEND_ROUTE` = `gmail` (picked), `cloudflare` or `resend` (backups). `SEND_FROM` optional
+    (default `Rickey Hallor <rickey@getbookedoutsolutions.com>`).
+  - gmail: `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` (an OAuth client in our own Google Cloud
+    project, scope `https://www.googleapis.com/auth/gmail.send` only, consent given once by rickey@getbookedoutsolutions.com).
+  - cloudflare: a `send_email` binding named `EMAIL` (Cloudflare Email Sending, Workers Paid). Check the binding's call
+    shape on Cloudflare's docs before switching to it.
+  - resend: `RESEND_KEY` (domain verified in Resend first; read Resend's acceptable-use policy first).
 - Check after deploy: `GET /api/free-report/ping` returns `{"ok":true,"live":false}`.
 - Tests: `node workers/test-freereport.mjs` (no network, fake shop only).
 
 Endpoints for later jobs (all need `k` = STATUS_KEY):
-- `GET /api/free-report/status?k=...` open requests, soonest due first
-- `POST /api/free-report/mark-sent` `{"id":"fr-...","k":"..."}`
+- `GET /api/free-report/status?k=...` open requests, soonest due first, with check marks, `needs`, `watch`, `problems`
+- `GET /api/free-report/review?k=...` reports waiting for the 2-agent check (status built, held or checked), each with
+  `hash`, `sections` (the lookup data), `needs` ("checker 1", "checker 2", "send" or "fill pending sections first")
+- `POST /api/free-report/check` `{"id":"fr-...","k":"...","checker":1,"agent":"checker-1-<run id>","result":"pass|fail","hash":"<hash read>","notes":"..."}`
+  - 409 when: the hash is old, the report still has pending sections (pass), checker 2 passes before checker 1,
+    or both slots would carry the same agent name.
+- `POST /api/free-report/mark-sent` `{"id":"fr-...","k":"..."}` (only for a report sent some other way; recorded as manual)
 - `POST /api/free-report/fill` `{"id":"fr-...","k":"...","section":"ai|booking|category|google|reviews","data":{...}}`
   - ai: `{"question":"...","chatgpt":{"named":true,"correct":true,"note":""},"gemini":{...}}`
   - booking: `{"score":7,"fixes":["...","...","..."]}`

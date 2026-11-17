@@ -6,29 +6,45 @@
 // Routes:
 //   POST /api/free-report                 the form (JSON) -> {saved:true, id}
 //   GET  /api/free-report/ping            health check
-//   GET  /api/free-report/status?k=KEY    open requests with due times, plus the watch list (watchdog)
-//   POST /api/free-report/mark-sent       {id, k} -> status "sent", clock stops
+//   GET  /api/free-report/status?k=KEY    open requests with due times, check marks, plus the watch list (watchdog)
+//   GET  /api/free-report/review?k=KEY    reports waiting for the 2-agent check, with the lookup data to trace every fact
+//   POST /api/free-report/check           {id, k, checker: 1|2, agent, result: "pass"|"fail", hash, notes}
+//                                         one check mark. Checker 1 and checker 2 must be different agents, and a pass
+//                                         only counts for the exact report version it read (hash). Any change to the
+//                                         report clears both marks. A fail holds the report and goes on the watch list.
+//   POST /api/free-report/mark-sent       {id, k} -> status "sent", clock stops (only for a report sent some other way)
 //   POST /api/free-report/fill            {id, k, section, data} -> a later job fills a pending section
 //                                         section: "google" | "reviews" | "ai" | "booking" | "category"
 //   GET  /r/<token>/                      the report page (noindex, no-store, no-referrer)
-// Cron (every 15 minutes): build new reports; put clock trouble (75% of the clock, overdue) on the watch list.
-// Rickey is out of the workflow (Nov 16): nothing here emails him. The watchdog reads the watch list and the agents fix it.
+// Cron (every 15 minutes): build new reports; send reports that have two pass marks (only when LIVE is on);
+// put clock trouble (75% of the clock, overdue), failed checks and failed sends on the watch list.
+// Rickey is out of the workflow (Nov 16 4:46 pm): no per-report emails to him, no "check and send", no 75% or overdue
+// emails. Claude checks, a second separate Claude agent checks, then the report goes to the owner automatically.
+// The watchdog reads the watch list and the agents fix it.
+//
+// Statuses: new -> built -> (check 1 pass + check 2 pass) checked -> sent.  A failed check -> held (fixed, re-checked).
 //
 // Storage (KV binding KV):
-//   req:<id>      the request and its clock {status: new | built | sent, ...}
+//   req:<id>      the request and its clock {status: new | built | held | checked | sent, checks, ...}
 //   open:<id>     marker while the request is not sent (the cron reads these)
 //   tok:<token>   report token -> id
 //   rep:<id>      the report page HTML
 //   rl:<email>    one request per email per 10 minutes
 //   lead:<id>     every lead, kept for good (no expiry): name, business, contact, trade, town, when, page
-//   watch:<time>:<id>  a problem for the watchdog (warn = 75% of the clock, problem = overdue), kept 30 days
+//   watch:<time>:<id>  a problem for the watchdog (warn = 75% of the clock, problem = overdue, failed check or failed send), 30 days
 //   alert:last    the last watch entry written
 //
 // Settings (names only, values are added in the Cloudflare dashboard, never here):
 //   LOOKUP_URL, LOOKUP_KEY   optional; the lookup worker. Without them the Google parts say "pending check".
-//   STATUS_KEY               needed for status, mark-sent and fill.
+//   STATUS_KEY               needed for status, review, check, mark-sent and fill.
 //   LIVE                     "off" by default. While off, nothing is ever sent to a business owner.
-// No outbound alerts at all (no host forms, no email). No secrets in this file.
+//   SEND_ROUTE               "gmail" (picked, Nov 16 night), "cloudflare" or "resend" (the backups). See sendMail().
+//   SEND_FROM                default "Rickey Hallor <rickey@getbookedoutsolutions.com>"
+//   GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN   for "gmail" (Gmail API on our own Workspace mailbox)
+//   EMAIL (send_email binding)                                  for "cloudflare" (Cloudflare Email Sending, Workers Paid)
+//   RESEND_KEY                                                  for "resend"
+// No alerts to anyone (no host forms, no email to Rickey). The only email is the report to the owner who asked for it.
+// No secrets in this file.
 
 const SITE = 'https://getbookedoutsolutions.com';
 const TZ = 'America/Chicago';
@@ -152,18 +168,106 @@ function chicagoText(date) {
   return new Date(date).toLocaleString('en-US', { timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-// ---------- the LIVE guard ----------
+// ---------- the LIVE guard and the send to the owner ----------
 // Before GO LIVE (LIVE is not "on") the worker never emails or texts a business owner.
 function isLive(env) { return String((env && env.LIVE) || 'off').trim().toLowerCase() === 'on'; }
-async function deliverToOwner(env, rec) {
-  if (!isLive(env)) return { sent: false, blocked: true, reason: 'LIVE is off: nothing goes to a business before GO LIVE' };
-  // No automatic owner email is wired in here yet; the 2-agent check and auto-send job adds it (no Rickey check).
-  return { sent: false, blocked: false, reason: 'no automatic owner email wired in yet' };
+
+const GMAIL_TOKEN = 'https://oauth2.googleapis.com/token';
+const GMAIL_SEND = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
+const RESEND_SEND = 'https://api.resend.com/emails';
+const FROM = 'Rickey Hallor <rickey@getbookedoutsolutions.com>';
+
+// The one email that goes to the owner: a short plain note with the link to his report.
+// Visitor text rules apply (no long dashes, no emojis); it never promises jobs, calls or rank.
+function ownerEmail(env, rec) {
+  const link = `${SITE}/r/${rec.token}/`;
+  const subject = plain(`Your free report for ${rec.business_name}`).replace(/[\r\n]+/g, ' ');
+  const text = [
+    `Hi ${plain(rec.first_name)},`,
+    '',
+    `Here's the free report you asked for on ${plain(rec.business_name)}:`,
+    link,
+    '',
+    'It is built from your real Google listing and a few quick checks, and it ends with three fixes you can make yourself.',
+    '',
+    'Questions? Just reply to this email.',
+    '',
+    'Rickey Hallor',
+    'Booked Out Solutions',
+    'P.O. Box 1166, Smyrna, TN 37167',
+    '',
+    'You got this because you asked for a free report on our website. Reply "stop" and we will not email you again.',
+  ].join('\n');
+  return { from: env.SEND_FROM || FROM, to: rec.email, subject, text };
 }
-// Every outside call goes through here. Only the lookup worker is allowed.
+const b64u = (str) => { const by = new TextEncoder().encode(str); let bin = ''; for (const x of by) bin += String.fromCharCode(x); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+const b64 = (str) => { const by = new TextEncoder().encode(str); let bin = ''; for (const x of by) bin += String.fromCharCode(x); return btoa(bin); };
+function mime(m) {
+  const hdr = (v) => (v = String(v).replace(/[\r\n]+/g, ' ')) && /^[\x20-\x7e]*$/.test(v) ? v : `=?UTF-8?B?${b64(v)}?=`;
+  return [`From: ${m.from}`, `To: ${m.to}`, `Subject: ${hdr(m.subject)}`, 'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', b64(m.text)].join('\r\n');
+}
+
+// Sends one email by the picked route. Returns {ok, route, id?, error?}. Never throws.
+async function sendMail(env, m, f) {
+  const route = String(env.SEND_ROUTE || 'gmail').trim().toLowerCase();
+  try {
+    if (route === 'gmail') {
+      if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) return { ok: false, route, error: 'gmail route not set up' };
+      const t = await out(env, GMAIL_TOKEN, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ client_id: env.GMAIL_CLIENT_ID, client_secret: env.GMAIL_CLIENT_SECRET, refresh_token: env.GMAIL_REFRESH_TOKEN, grant_type: 'refresh_token' }).toString() }, f);
+      if (!t.ok) return { ok: false, route, error: 'gmail token ' + t.status };
+      const tok = (await t.json()).access_token;
+      const r = await out(env, GMAIL_SEND, { method: 'POST', headers: { authorization: 'Bearer ' + tok, 'content-type': 'application/json' },
+        body: JSON.stringify({ raw: b64u(mime(m)) }) }, f);
+      if (!r.ok) return { ok: false, route, error: 'gmail send ' + r.status };
+      return { ok: true, route, id: (await r.json()).id || '' };
+    }
+    if (route === 'cloudflare') {
+      // Cloudflare Email Sending (public beta since Apr 16 2026, Workers Paid). The binding's exact call shape is
+      // checked on Cloudflare's docs before this route is ever switched on.
+      if (!env.EMAIL || typeof env.EMAIL.send !== 'function') return { ok: false, route, error: 'cloudflare route not set up' };
+      const r = await env.EMAIL.send({ from: m.from, to: m.to, subject: m.subject, text: m.text });
+      return { ok: true, route, id: (r && (r.messageId || r.id)) || '' };
+    }
+    if (route === 'resend') {
+      if (!env.RESEND_KEY) return { ok: false, route, error: 'resend route not set up' };
+      const r = await out(env, RESEND_SEND, { method: 'POST', headers: { authorization: 'Bearer ' + env.RESEND_KEY, 'content-type': 'application/json' },
+        body: JSON.stringify({ from: m.from, to: [m.to], subject: m.subject, text: m.text }) }, f);
+      if (!r.ok) return { ok: false, route, error: 'resend send ' + r.status };
+      return { ok: true, route, id: (await r.json()).id || '' };
+    }
+    return { ok: false, route, error: 'unknown SEND_ROUTE' };
+  } catch (e) { return { ok: false, route, error: String((e && e.message) || e).slice(0, 200) }; }
+}
+
+// Every check that must be true before a report goes to an owner. Returns '' when it may go, else the reason.
+function sendBlock(env, rec) {
+  if (!isLive(env)) return 'LIVE is off: nothing goes to a business before GO LIVE';
+  if (rec.test) return 'TEST request (fake shop): never sent';
+  if (rec.status === 'sent') return 'already sent';
+  if (rec.status !== 'checked') return 'not checked by both agents';
+  if (!rec.complete || (rec.pending || []).length) return 'report still has pending sections';
+  const c = rec.checks || {}, c1 = c['1'], c2 = c['2'];
+  if (!c1 || !c2 || c1.result !== 'pass' || c2.result !== 'pass') return 'needs two pass marks';
+  if (!c1.agent || !c2.agent || c1.agent === c2.agent) return 'the two checks must come from two different agents';
+  if (c1.hash !== rec.hash || c2.hash !== rec.hash) return 'report changed after it was checked';
+  if (!validate({ ...rec, consent: rec.consent }).ok) return 'contact details no longer valid';
+  return '';
+}
+async function deliverToOwner(env, rec, f) {
+  const why = sendBlock(env, rec);
+  if (why) return { sent: false, blocked: true, reason: why };
+  const r = await sendMail(env, ownerEmail(env, rec), f);
+  return r.ok ? { sent: true, blocked: false, route: r.route, id: r.id } : { sent: false, blocked: false, route: r.route, reason: r.error };
+}
+// Every outside call goes through here. Only the lookup worker and the picked send route are allowed.
 function allowed(env, url) {
-  const ok = [env.LOOKUP_URL].filter(Boolean);
-  return ok.includes(url);
+  const route = String(env.SEND_ROUTE || 'gmail').trim().toLowerCase();
+  const ok = [env.LOOKUP_URL];
+  if (isLive(env) && route === 'gmail') ok.push(GMAIL_TOKEN, GMAIL_SEND);
+  if (isLive(env) && route === 'resend') ok.push(RESEND_SEND);
+  return ok.filter(Boolean).includes(url);
 }
 async function out(env, url, init, f) {
   if (!allowed(env, url)) throw new Error('blocked outbound call');
@@ -408,9 +512,22 @@ async function submit(req, env, now = new Date()) {
   return json({ saved: true, id });
 }
 
+async function sha(str) {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(d), (x) => x.toString(16).padStart(2, '0')).join('').slice(0, 32);
+}
+
 async function saveReport(env, rec) {
   const r = renderReport(rec);
   rec.pending = r.pending; rec.complete = r.complete;
+  const h = await sha(r.html);
+  if (h !== rec.hash) {
+    // A new version of the report: any earlier check marks were for the old version, so they no longer count.
+    if (rec.checks && Object.keys(rec.checks).length) rec.checks_cleared = (rec.checks_cleared || 0) + 1;
+    rec.checks = {};
+    if (rec.status === 'checked' || rec.status === 'held') rec.status = 'built';
+    rec.hash = h;
+  }
   await env.KV.put('rep:' + rec.id, r.html, { expirationTtl: KEEP });
   await env.KV.put('tok:' + rec.token, rec.id, { expirationTtl: KEEP });
   return r;
@@ -467,6 +584,11 @@ async function tick(env, now = new Date(), f) {
       try { Object.assign(rec.sections.reviews, await reviewsCall(env, rec.sections.reviews.task, f)); } catch (e) { /* next run */ }
       await saveReport(env, rec); changed = true; log.push('reviews ' + id);
     }
+    if (rec.status === 'checked' && !rec.test) {
+      const r = await trySend(env, rec, now, f);
+      if (r.changed) { changed = true; log.push(r.log + ' ' + id); }
+      if (rec.status === 'sent') { await putJ(env, 'req:' + id, rec, KEEP); continue; }
+    }
     if (rec.status !== 'new') {
       const due = Date.parse(rec.due), warn = Date.parse(rec.warn), at = now.getTime();
       if (at >= due && !rec.alerts.overdue) {
@@ -482,13 +604,88 @@ async function tick(env, now = new Date(), f) {
   return log;
 }
 
+// Sends a report that has two pass marks. Blocked sends (LIVE off) are only noted, once; real failures go on the
+// watch list so the agents fix them. Returns {changed, log}.
+async function trySend(env, rec, now, f) {
+  const r = await deliverToOwner(env, rec, f);
+  if (r.sent) {
+    rec.status = 'sent'; rec.sent = now.toISOString(); rec.sent_by = 'auto'; rec.send_route = r.route; rec.send_id = r.id || '';
+    await env.KV.delete('open:' + rec.id);
+    return { changed: true, log: 'sent' };
+  }
+  if (r.blocked) {
+    if (rec.send_blocked === r.reason) return { changed: false, log: '' };
+    rec.send_blocked = r.reason;
+    return { changed: true, log: 'blocked' };
+  }
+  rec.send_fails = (rec.send_fails || 0) + 1;
+  rec.send_error = r.reason;
+  if (rec.send_fails === 1 || rec.send_fails % 4 === 0) {
+    await sendAlert(env, `Free report send failed: ${rec.business_name}`, alertText(rec, `The report passed both checks but the send failed (${r.route}): ${r.reason}. It is tried again every 15 minutes. If the route is down, switch SEND_ROUTE to a backup.`), f, 'problem', rec.id);
+  }
+  return { changed: true, log: 'sendfail' };
+}
+
+// What the two checkers read: everything needed to trace every fact in the report to the lookup data.
+function reviewItem(r) {
+  const c = r.checks || {};
+  return { id: r.id, status: r.status, test: !!r.test, first_name: r.first_name, business_name: r.business_name, email: r.email,
+    town: r.town, trade: r.trade, revenue: r.revenue || '', note: r.note || '', big_shop: !!r.big_shop,
+    received: r.received, due: r.due, due_text: chicagoText(r.due), complete: !!r.complete, pending: r.pending || [],
+    report: `${SITE}/r/${r.token}/`, hash: r.hash || '', sections: r.sections || {}, lookup_error: r.lookup_error || '',
+    checks: { 1: c['1'] || null, 2: c['2'] || null },
+    needs: !r.complete ? 'fill pending sections first' : !(c['1'] && c['1'].result === 'pass' && c['1'].hash === r.hash) ? 'checker 1'
+      : !(c['2'] && c['2'].result === 'pass' && c['2'].hash === r.hash) ? 'checker 2' : 'send' };
+}
+async function review(u, env) {
+  if (!keyOk(env, u.searchParams.get('k'))) return json({ error: 'no' }, 403);
+  const list = [];
+  for (const k of (await env.KV.list({ prefix: 'open:' })).keys) {
+    const r = await getJ(env, 'req:' + k.name.slice(5));
+    if (!r || !['built', 'held', 'checked'].includes(r.status)) continue;
+    list.push(reviewItem(r));
+  }
+  list.sort((a, b) => a.due.localeCompare(b.due));
+  return json({ waiting: list, count: list.length, live: isLive(env) });
+}
+async function check(req, env, now = new Date(), f) {
+  let b; try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
+  if (!keyOk(env, b && b.k)) return json({ ok: false, error: 'no' }, 403);
+  const slot = String(b.checker);
+  const agent = String(b.agent || '').trim().slice(0, 80);
+  if (!ID.test(String(b.id || '')) || !['1', '2'].includes(slot) || !agent || !['pass', 'fail'].includes(b.result)) return json({ ok: false, error: 'bad check' }, 400);
+  const rec = await getJ(env, 'req:' + b.id);
+  if (!rec) return json({ ok: false, error: 'not found' }, 404);
+  if (rec.status === 'sent') return json({ ok: false, error: 'already sent' }, 409);
+  if (!['built', 'held', 'checked'].includes(rec.status)) return json({ ok: false, error: 'not built yet' }, 409);
+  if (String(b.hash || '') !== rec.hash) return json({ ok: false, error: 'report changed; read it again', hash: rec.hash }, 409);
+  rec.checks = rec.checks || {};
+  const other = rec.checks[slot === '1' ? '2' : '1'];
+  if (other && other.agent === agent) return json({ ok: false, error: 'checker 1 and checker 2 must be different agents' }, 409);
+  if (slot === '2' && b.result === 'pass' && !(rec.checks['1'] && rec.checks['1'].result === 'pass' && rec.checks['1'].hash === rec.hash))
+    return json({ ok: false, error: 'checker 1 must pass first' }, 409);
+  if (b.result === 'pass' && !rec.complete) return json({ ok: false, error: 'report has pending sections; it cannot pass' }, 409);
+  const notes = String(b.notes || '').slice(0, 2000);
+  rec.checks[slot] = { agent, result: b.result, hash: rec.hash, at: now.toISOString(), notes };
+  let sent = false;
+  if (b.result === 'fail') {
+    rec.status = 'held';
+    await sendAlert(env, `Free report failed check ${slot}: ${rec.business_name}`, alertText(rec, `Checker ${slot} (${agent}) failed this report: ${notes || 'no notes'}. Fix it (fill the section again), then both checkers read it again.`), f, rec.test ? 'test' : 'problem', rec.id);
+  } else if (rec.checks['1'] && rec.checks['2'] && rec.checks['1'].result === 'pass' && rec.checks['2'].result === 'pass') {
+    rec.status = 'checked';
+    if (!rec.test) { const r = await trySend(env, rec, now, f); sent = rec.status === 'sent'; }
+  }
+  await putJ(env, 'req:' + rec.id, rec, KEEP);
+  return json({ ok: true, id: rec.id, status: rec.status, sent, blocked: rec.send_blocked || '' });
+}
+
 async function markSent(req, env) {
   let b; try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
   if (!keyOk(env, b && b.k)) return json({ ok: false, error: 'no' }, 403);
   if (!ID.test(String(b.id || ''))) return json({ ok: false, error: 'bad id' }, 400);
   const rec = await getJ(env, 'req:' + b.id);
   if (!rec) return json({ ok: false, error: 'not found' }, 404);
-  rec.status = 'sent'; rec.sent = new Date().toISOString();
+  rec.status = 'sent'; rec.sent = new Date().toISOString(); rec.sent_by = 'manual';
   await putJ(env, 'req:' + rec.id, rec, KEEP);
   await env.KV.delete('open:' + rec.id);
   return json({ ok: true, id: rec.id, status: 'sent' });
@@ -516,7 +713,8 @@ async function status(u, env) {
     if (!r || r.status === 'sent') continue;
     list.push({ id: r.id, business_name: r.business_name, town: r.town, trade: r.trade, status: r.status, test: !!r.test,
       big_shop: !!r.big_shop, consent: !!r.consent, received: r.received, due: r.due, due_text: chicagoText(r.due),
-      overdue: now >= Date.parse(r.due), complete: !!r.complete, pending: r.pending || [], report: `${SITE}/r/${r.token}/` });
+      overdue: now >= Date.parse(r.due), complete: !!r.complete, pending: r.pending || [], report: `${SITE}/r/${r.token}/`,
+      checks: reviewItem(r).checks, needs: reviewItem(r).needs, send_blocked: r.send_blocked || '', send_error: r.send_error || '' });
   }
   list.sort((a, b) => a.due.localeCompare(b.due));
   const watch = [];
@@ -543,6 +741,8 @@ export default {
       if (p === '/api/free-report' && req.method === 'POST') return await submit(req, env);
       if (p === '/api/free-report/ping') return json({ ok: true, at: new Date().toISOString(), live: isLive(env) });
       if (p === '/api/free-report/status' && req.method === 'GET') return await status(u, env);
+      if (p === '/api/free-report/review' && req.method === 'GET') return await review(u, env);
+      if (p === '/api/free-report/check' && req.method === 'POST') return await check(req, env);
       if (p === '/api/free-report/mark-sent' && req.method === 'POST') return await markSent(req, env);
       if (p === '/api/free-report/fill' && req.method === 'POST') return await fill(req, env);
       const m = p.match(/^\/r\/([a-f0-9]{48})$/);
@@ -557,7 +757,7 @@ export default {
   },
   // for workers/test-freereport.mjs (plain node, no network)
   _t: { validate, businessClock, federalHolidays, isBusinessDay, local, fromLocal, chicagoText, isLive, deliverToOwner,
-    sendAlert, isTestRequest, plain, budgetLine, renderReport, submit, build, tick, TRADES, REVENUE },
+    sendAlert, isTestRequest, plain, ownerEmail, mime, sendMail, sendBlock, check, review, trySend, sha, budgetLine, renderReport, submit, build, tick, TRADES, REVENUE },
 };
 
 const GONE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Report not found | Booked Out Solutions</title><style>body{margin:0;font:18px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#F6F1E7;color:#0A0F26}main{max-width:34rem;margin:0 auto;padding:3rem 1.2rem}</style></head><body><main><h1>This report is not here</h1><p>The link may be old or mistyped. Reply to the email it came in and we will send it again, or write to hello@getbookedoutsolutions.com.</p><p>Booked Out Solutions</p></main></body></html>';
