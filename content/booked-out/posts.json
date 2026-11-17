@@ -29,7 +29,7 @@
     "instagram": "sent 2026-11-13",
     "x": "buffer 2026-11-16",
     "facebook": "buffer 2026-11-16",
-    "pinterest": "metricool 2026-11-16",
+    "pinterest": "metricool 2026-11-16 ERROR: Pinterest blocked link /newsletter as possible spam (429)",
     "linkedin": ""
    },
    "pin_image": "https://getbookedoutsolutions.com/img/social/pin-02.jpg",
@@ -45,7 +45,7 @@
     "instagram": "buffer ERROR 2026-11-14 (lost authorization); not posted",
     "x": "buffer 2026-11-17",
     "facebook": "buffer 2026-11-17",
-    "pinterest": "metricool 2026-11-17",
+    "pinterest": "metricool 2026-11-17 (link removed Nov 17, domain blocked)",
     "linkedin": ""
    },
    "pin_image": "https://getbookedoutsolutions.com/img/social/pin-03.jpg",
@@ -61,7 +61,7 @@
     "instagram": "sent 2026-11-15",
     "x": "buffer 2026-11-18",
     "facebook": "buffer 2026-11-18",
-    "pinterest": "metricool 2026-11-18",
+    "pinterest": "metricool 2026-11-18 (link removed Nov 17, domain blocked)",
     "linkedin": ""
    },
    "pin_image": "https://getbookedoutsolutions.com/img/social/pin-04.jpg",
@@ -77,7 +77,7 @@
     "instagram": "buffer 2026-11-16",
     "x": "buffer 2026-11-19",
     "facebook": "buffer 2026-11-19",
-    "pinterest": "metricool 2026-11-19",
+    "pinterest": "metricool 2026-11-19 (link removed Nov 17, domain blocked)",
     "linkedin": ""
    },
    "pin_image": "https://getbookedoutsolutions.com/img/social/pin-05.jpg",
@@ -93,7 +93,7 @@
     "instagram": "buffer 2026-11-17",
     "x": "buffer 2026-11-20",
     "facebook": "buffer 2026-11-20",
-    "pinterest": "metricool 2026-11-20",
+    "pinterest": "metricool 2026-11-20 (link removed Nov 17, domain blocked)",
     "linkedin": ""
    },
    "pin_image": "https://getbookedoutsolutions.com/img/social/pin-06.jpg",
@@ -109,7 +109,7 @@
     "instagram": "buffer 2026-11-18",
     "x": "buffer 2026-11-21",
     "facebook": "buffer 2026-11-21",
-    "pinterest": "metricool 2026-11-23",
+    "pinterest": "metricool 2026-11-23 (link removed Nov 17, domain blocked)",
     "linkedin": ""
    },
    "pin_image": "https://getbookedoutsolutions.com/img/social/pin-07.jpg",
@@ -125,7 +125,7 @@
     "instagram": "buffer 2026-11-19",
     "x": "buffer 2026-11-22",
     "facebook": "buffer 2026-11-22",
-    "pinterest": "",
+    "pinterest": "metricool 2026-11-24 (no link, domain blocked)",
     "linkedin": ""
    },
    "pin_image": "https://getbookedoutsolutions.com/img/social/pin-08.jpg",
@@ -186,7 +186,7 @@
    "long": "Homeowners can spot a stock photo from across the room.\n\nOn your Google profile and your website, swap them for real ones:\n- Your trucks, clean, with the logo showing\n- Your shop or warehouse\n- Your techs in uniform (with their OK)\n- A finished install or a clean panel\n\nPhone photos are fine. Good light and a clean background matter more than the camera.\n\nWhen someone is picking between three companies they've never heard of, real faces and real trucks are what make you feel like a real business.",
    "image": "https://getbookedoutsolutions.com/img/social/card-12.jpg",
    "posted": {
-    "facebook": "",
+    "facebook": "buffer 2026-11-26",
     "instagram": "buffer 2026-11-23",
     "linkedin": "",
     "pinterest": "",
@@ -235,7 +235,7 @@
    "image": "https://getbookedoutsolutions.com/img/social/card-15.jpg",
    "posted": {
     "facebook": "",
-    "instagram": "",
+    "instagram": "buffer 2026-11-26",
     "linkedin": "",
     "pinterest": "",
     "x": ""
