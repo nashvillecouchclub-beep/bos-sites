@@ -35,10 +35,10 @@ def timeline(s):
     add('hook', max(3.4, read_time(s['hook'], 1.8)), text=s['hook'], kicker=s.get('kicker', ''))
     if s.get('problem'): add('problem', read_time(s['problem']), text=s['problem'])
     for i, st in enumerate(s['steps'][:3]):
-        add('step', read_time(st['big'] + ' ' + st.get('small', ''), 1.6), n=i + 1, big=st['big'], small=st.get('small', ''))
+        add('step', read_time(st['big'] + ' ' + st.get('small', ''), 1.6), n=i + 1, big=st['big'], small=st.get('small', ''), send=bool(st.get('send')))
     if s.get('example'): add('example', read_time(s['example'], 1.8, 3.2), text=s['example'])
     if s.get('mistake'): add('problem', read_time(s['mistake']), text=s['mistake'], label='The common mistake')
-    add('cta', 4.6, **s['cta'])
+    add('cta', 5.6, **s['cta'])
     return beats, t
 
 
@@ -81,11 +81,14 @@ BASE_CSS = """
 .label{font-size:34px;letter-spacing:5px;font-weight:700;margin-bottom:26px;text-transform:uppercase}
 .stepnum{width:150px;height:150px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:84px;font-weight:800;margin-bottom:44px}
 .stepbig{font-size:104px;line-height:1.04}.stepsmall{font-size:50px;line-height:1.25;margin-top:34px}
-.example{border-radius:36px;padding:60px 56px;font-size:60px;line-height:1.3}
+.example{border-radius:36px;padding:60px 56px;font-size:62px;line-height:1.3;font-weight:600;color:#fff}
 .example .say{font-size:32px;letter-spacing:5px;font-weight:700;margin-bottom:24px;display:block}
-.cta{align-items:center;text-align:center}.cta svg{width:180px;height:180px;margin-bottom:50px}
-.cta .l1{font-size:64px;line-height:1.15}.cta .l2{font-size:104px;line-height:1.05;margin:26px 0 40px}
-.cta .url{font-size:46px;font-weight:600;padding:22px 40px;border-radius:999px}
+.sendline{font-size:58px;line-height:1.24;margin-top:34px;padding:34px 38px;border-radius:28px;font-weight:600;color:#fff}
+.sendline .say{display:block;font-size:30px;letter-spacing:5px;font-weight:700;margin-bottom:14px}
+.cta{align-items:flex-start;text-align:left;right:210px;bottom:520px}.cta svg{width:130px;height:130px;margin-bottom:34px}
+.cta .l1{font-size:56px;line-height:1.15}.cta .l2{font-size:92px;line-height:1.05;margin:22px 0 34px}
+.cta .url{font-size:42px;line-height:1.2;font-weight:700;padding:24px 36px;border-radius:30px}.cta .url span{display:block}
+.wipe{position:absolute;left:0;right:0;top:0;height:100%;transform:translateY(100%);z-index:5}
 .progress{position:absolute;left:90px;right:90px;top:250px;height:6px;border-radius:3px;background:rgba(127,127,127,.25);overflow:hidden}
 .progress i{display:block;height:100%;width:0}
 .sweep{position:absolute;top:-20%;width:300px;height:140%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.10),transparent);transform:rotate(18deg)}
@@ -102,6 +105,10 @@ function render(t){
   const r = document.querySelector('.river'); if (r) r.style.transform = `translateX(${-60 + 40*Math.sin(t*0.4)}px)`;
   document.querySelector('.progress i').style.width = (100*t/T) + '%';
   const sw = document.querySelector('.sweep'); sw.style.left = (((t % 7) / 7) * 1800 - 500) + 'px';
+  // a quick brand-color wipe marks every change of screen
+  const wp = document.querySelector('.wipe'); let wy = 100;
+  B.forEach((b, i) => { if (i) { const d = (t - b.t0 + 0.2) / 0.4; if (d >= 0 && d <= 1) wy = 100 - 200 * d; } });
+  wp.style.transform = `translateY(${wy}%)`;
   B.forEach((b, i) => {
     const el = document.getElementById('b' + i);
     const inP = ease((t - b.t0) / 0.55), outP = ease((t - (b.t1 - 0.4)) / 0.4);
@@ -135,19 +142,22 @@ def build_html(bid, s, beats, total):
             lab = f'<div class="label accent">{q(bt["label"])}</div>' if bt.get('label') else ''
             inner = f'{lab}<div class="display problem">{q(bt["text"])}</div>'
         elif k == 'step':
-            inner = (f'<div class="stepnum accentbg display">{bt["n"]}</div><div class="display stepbig">{q(bt["big"])}</div>'
-                     f'<div class="stepsmall muted">{q(bt["small"])}</div>')
+            small = (f'<div class="stepsmall sendline panel"><span class="say accent">SEND THIS</span>“{q(bt["small"])}”</div>' if bt.get('send')
+                     else f'<div class="stepsmall muted">{q(bt["small"])}</div>')
+            inner = f'<div class="stepnum accentbg display">{bt["n"]}</div><div class="display stepbig">{q(bt["big"])}</div>{small}'
         elif k == 'example':
             inner = f'<div class="example panel"><span class="say accent">TRY SAYING</span>“{q(bt["text"])}”</div>'
         else:
+            host, _, path = bt['url'].partition('/')
+            url = f'<span>{q(host)}</span>' + (f'<span>/{q(path)}</span>' if path else '')
             inner = (f'{logo}<div class="l1 muted">{q(bt["line1"])}</div><div class="display l2">{q(bt["line2"])}</div>'
-                     f'<div class="url accentbg">{q(bt["url"])}</div>')
+                     f'<div class="url accentbg">{url}</div>')
         els.append(f'<div class="beat {"cta" if k == "cta" else ""}" id="b{i}">{inner}</div>')
     tip = f'<span class="tip accent">TIP {int(s["tipno"]):02d}</span>' if s.get('tipno') else ''
     river = cards.RIVER_SVG.replace('class="river"', 'class="river"') if bid == 'stones-river' else ''
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>{cards._font_faces(b)}{BASE_CSS}{th['css']}</style></head>
 <body><div class="layer bg"></div><div class="glow glowA"></div><div class="glow glowB"></div><div class="layer grid"></div>{river}
-<div class="sweep"></div>
+<div class="sweep"></div><div class="wipe accentbg"></div>
 <div class="brand">{logo}<span>{html.escape(b['name'])}</span>{tip}</div><div class="progress"><i class="bar"></i></div>
 {''.join(els)}
 <script>window.BEATS={json.dumps(beats)};window.TOTAL={total};{JS}</script></body></html>"""
