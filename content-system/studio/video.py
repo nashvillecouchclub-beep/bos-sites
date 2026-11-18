@@ -32,13 +32,13 @@ def timeline(s):
     def add(kind, dur, **kw):
         nonlocal t
         beats.append(dict(kind=kind, t0=round(t, 2), t1=round(t + dur, 2), **kw)); t += dur
-    add('hook', max(3.4, read_time(s['hook'], 1.8)), text=s['hook'], kicker=s.get('kicker', ''))
+    add('hook', max(3.4, read_time(s['hook'], 1.8)), text=s['hook'], kicker=s.get('kicker', ''), gold=s.get('hook_gold', ''))
     if s.get('problem'): add('problem', read_time(s['problem']), text=s['problem'])
     for i, st in enumerate(s['steps'][:3]):
         add('step', read_time(st['big'] + ' ' + st.get('small', ''), 1.6), n=i + 1, big=st['big'], small=st.get('small', ''), send=bool(st.get('send')))
     if s.get('example'): add('example', read_time(s['example'], 1.8, 3.2), text=s['example'])
     if s.get('mistake'): add('problem', read_time(s['mistake']), text=s['mistake'], label='The common mistake')
-    add('cta', 5.6, **s['cta'])
+    add('cta', 5.3, **s['cta'])
     return beats, t
 
 
@@ -72,8 +72,8 @@ BASE_CSS = """
 *{margin:0;padding:0;box-sizing:border-box}html,body{width:1080px;height:1920px;overflow:hidden}
 .layer{position:absolute;inset:0}.glow{position:absolute;border-radius:50%;filter:blur(40px)}
 .glowA{width:1100px;height:1100px}.glowB{width:1300px;height:1300px}
-.beat{position:absolute;left:90px;right:90px;top:300px;bottom:430px;display:flex;flex-direction:column;justify-content:center;opacity:0}
-.brand{position:absolute;top:150px;left:90px;right:90px;display:flex;align-items:center;gap:18px;font-size:34px;font-weight:600}
+.beat{position:absolute;left:90px;right:90px;top:390px;bottom:430px;display:flex;flex-direction:column;justify-content:center;opacity:0}
+.brand{position:absolute;top:276px;left:90px;right:90px;display:flex;align-items:center;gap:18px;font-size:34px;font-weight:600}
 .brand svg{width:64px;height:64px}.brand .tip{margin-left:auto;font-size:30px;letter-spacing:3px;border:2px solid currentColor;padding:8px 20px;border-radius:999px;opacity:.9}
 .kicker{font-size:36px;letter-spacing:6px;font-weight:700;margin-bottom:30px}
 .hook{font-size:132px;line-height:1.02}.hook .w{display:inline-block;margin-right:.22em}
@@ -89,7 +89,7 @@ BASE_CSS = """
 .cta .l1{font-size:56px;line-height:1.15}.cta .l2{font-size:92px;line-height:1.05;margin:22px 0 34px}
 .cta .url{font-size:42px;line-height:1.2;font-weight:700;padding:24px 36px;border-radius:30px}.cta .url span{display:block}
 .wipe{position:absolute;left:0;right:0;top:0;height:100%;transform:translateY(100%);z-index:5}
-.progress{position:absolute;left:90px;right:90px;top:250px;height:6px;border-radius:3px;background:rgba(127,127,127,.25);overflow:hidden}
+.progress{position:absolute;left:90px;right:90px;top:356px;height:6px;border-radius:3px;background:rgba(127,127,127,.25);overflow:hidden}
 .progress i{display:block;height:100%;width:0}
 .sweep{position:absolute;top:-20%;width:300px;height:140%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.10),transparent);transform:rotate(18deg)}
 .river{position:absolute;left:-100px;width:1280px;bottom:0;height:520px}
@@ -136,7 +136,9 @@ def build_html(bid, s, beats, total):
     for i, bt in enumerate(beats):
         k = bt['kind']
         if k == 'hook':
-            words = ''.join(f'<span class="w">{q(w)}</span>' for w in bt['text'].split())
+            all_w, gold_w = bt['text'].split(), bt.get('gold', '').split()
+            first_gold = len(all_w) - len(gold_w) if gold_w and all_w[-len(gold_w):] == gold_w else len(all_w)
+            words = ''.join(f'<span class="w{" accent" if k >= first_gold else ""}">{q(w)}</span>' for k, w in enumerate(all_w))
             inner = f'<div class="kicker accent">{q(bt["kicker"])}</div><div class="display hook">{words}</div>'
         elif k == 'problem':
             lab = f'<div class="label accent">{q(bt["label"])}</div>' if bt.get('label') else ''
@@ -149,7 +151,7 @@ def build_html(bid, s, beats, total):
             inner = f'<div class="example panel"><span class="say accent">TRY SAYING</span>“{q(bt["text"])}”</div>'
         else:
             host, _, path = bt['url'].partition('/')
-            url = f'<span>{q(host)}</span>' + (f'<span>/{q(path)}</span>' if path else '')
+            url = f'<span>{q(bt["show"])}</span>' if bt.get('show') else f'<span>{q(host)}</span>' + (f'<span>/{q(path)}</span>' if path else '')
             inner = (f'{logo}<div class="l1 muted">{q(bt["line1"])}</div><div class="display l2">{q(bt["line2"])}</div>'
                      f'<div class="url accentbg">{url}</div>')
         els.append(f'<div class="beat {"cta" if k == "cta" else ""}" id="b{i}">{inner}</div>')

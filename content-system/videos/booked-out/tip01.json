@@ -1,28 +1,30 @@
 {
  "tipno": 1,
  "kicker": "OLD QUOTES",
- "hook": "Your cheapest lead is a quote you already gave",
+ "hook": "Your cheapest lead is often a quote you already gave",
  "problem": "A quote gone quiet isn't always a no. People got busy.",
  "steps": [
   {
    "big": "Day 2: did it land?",
-   "small": "Just checking the water heater quote came through. Any questions?",
+   "small": "Did your AC quote come through okay?",
    "send": true
   },
   {
-   "big": "Day 7: answer the worry",
-   "small": "If price or timing is holding you up, tell me and we'll work it out.",
+   "big": "Day 7: find the worry",
+   "small": "Is it the price, the timing, or something else?",
    "send": true
   },
   {
    "big": "Day 14: open or closed?",
-   "small": "Text, email or call. One-word answer."
+   "small": "Text, email or call. One word from them settles it."
   }
  ],
- "example": "Should I keep your water heater quote open, or close it out for now?",
+ "example": "Should I keep your AC quote open, or close it out for now?",
  "cta": {
   "line1": "Get one free tip like this every week",
   "line2": "The Booked Out Brief",
-  "url": "getbookedoutsolutions.com/newsletter"
- }
+  "url": "getbookedoutsolutions.com/newsletter",
+  "show": "Newsletter link in our bio"
+ },
+ "hook_gold": "a quote you already gave"
 }
