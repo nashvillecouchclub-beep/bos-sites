@@ -341,3 +341,10 @@ footer a{color:inherit}
 
 .copy-toast{position:fixed;left:50%;bottom:90px;transform:translate(-50%,20px);background:var(--ink);color:var(--bg);font:400 .9rem/1.4 var(--body);padding:.8rem 1.2rem;border-radius:3px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:200;max-width:90vw;text-align:center}
 .copy-toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* Jamie's headshot: shown whole, never cropped (her preference, Nov 17) */
+.meet .wrap{grid-template-columns:minmax(0,560px) 1fr}
+.jamie-photo{margin:0;border:1px solid var(--line);background:var(--surface);overflow:hidden}
+.jamie-photo img{display:block;width:100%;height:auto}
+.about-photo{max-width:720px;margin:0 auto 2.5rem}
+@media (max-width:860px){.meet .jamie-photo{max-width:560px}}
