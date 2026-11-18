@@ -6,6 +6,7 @@ Disallow: /welcome.html
 Disallow: /c/
 Disallow: /api/
 Disallow: /r/
+Disallow: /report/
 Disallow: /forms.html
 
 Sitemap: https://getbookedoutsolutions.com/sitemap.xml
