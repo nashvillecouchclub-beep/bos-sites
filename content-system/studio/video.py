@@ -33,12 +33,12 @@ def timeline(s):
         nonlocal t
         beats.append(dict(kind=kind, t0=round(t, 2), t1=round(t + dur, 2), **kw)); t += dur
     add('hook', max(3.4, read_time(s['hook'], 1.8)), text=s['hook'], kicker=s.get('kicker', ''), gold=s.get('hook_gold', ''))
-    if s.get('problem'): add('problem', read_time(s['problem']), text=s['problem'])
+    if s.get('problem'): add('problem', s.get('problem_seconds') or read_time(s['problem']), text=s['problem'])
     for i, st in enumerate(s['steps'][:3]):
         add('step', read_time(st['big'] + ' ' + st.get('small', ''), 1.6), n=i + 1, big=st['big'], small=st.get('small', ''), send=bool(st.get('send')))
-    if s.get('example'): add('example', read_time(s['example'], 1.8, 3.2), text=s['example'])
+    if s.get('example'): add('example', read_time(s['example'], 1.8, 3.2), text=s['example'], label=s.get('example_label', 'TRY SAYING'))
     if s.get('mistake'): add('problem', read_time(s['mistake']), text=s['mistake'], label='The common mistake')
-    add('cta', 5.3, **s['cta'])
+    add('cta', s.get('cta_seconds') or 5.3, **s['cta'])
     return beats, t
 
 
@@ -145,10 +145,10 @@ def build_html(bid, s, beats, total):
             inner = f'{lab}<div class="display problem">{q(bt["text"])}</div>'
         elif k == 'step':
             small = (f'<div class="stepsmall sendline panel"><span class="say accent">SEND THIS</span>“{q(bt["small"])}”</div>' if bt.get('send')
-                     else f'<div class="stepsmall muted">{q(bt["small"])}</div>')
+                     else f'<div class="stepsmall muted">{q(bt["small"]).replace(chr(10), "<br>")}</div>')
             inner = f'<div class="stepnum accentbg display">{bt["n"]}</div><div class="display stepbig">{q(bt["big"])}</div>{small}'
         elif k == 'example':
-            inner = f'<div class="example panel"><span class="say accent">TRY SAYING</span>“{q(bt["text"])}”</div>'
+            inner = f'<div class="example panel"><span class="say accent">{q(bt.get("label", "TRY SAYING"))}</span>“{q(bt["text"])}”</div>'
         else:
             host, _, path = bt['url'].partition('/')
             url = f'<span>{q(bt["show"])}</span>' if bt.get('show') else f'<span>{q(host)}</span>' + (f'<span>/{q(path)}</span>' if path else '')

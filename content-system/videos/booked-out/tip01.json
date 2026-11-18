@@ -1,30 +1,33 @@
 {
  "tipno": 1,
- "kicker": "OLD QUOTES",
- "hook": "Your cheapest lead is often a quote you already gave",
- "problem": "A quote gone quiet isn't always a no. People got busy.",
+ "kicker": "3 MESSAGES TO SEND",
+ "hook": "Your cheapest next job is often a quote you already gave",
+ "problem": "A quiet quote isn't always a no. People got busy.",
  "steps": [
   {
    "big": "Day 2: did it land?",
-   "small": "Did your AC quote come through okay?",
+   "small": "Did your quote come through okay?",
    "send": true
   },
   {
    "big": "Day 7: find the worry",
-   "small": "Is it the price, the timing, or something else?",
+   "small": "What's holding up your quote: price, timing, or something else?",
    "send": true
   },
   {
    "big": "Day 14: open or closed?",
-   "small": "Text, email or call. One word from them settles it."
+   "small": "Text, email or call.\nOne word from them settles it."
   }
  ],
- "example": "Should I keep your AC quote open, or close it out for now?",
+ "example": "Should I keep your quote open, or close it out for now?",
  "cta": {
-  "line1": "Get one free tip like this every week",
+  "line1": "Get one free tip every week",
   "line2": "The Booked Out Brief",
   "url": "getbookedoutsolutions.com/newsletter",
   "show": "Newsletter link in our bio"
  },
- "hook_gold": "a quote you already gave"
+ "hook_gold": "a quote you already gave",
+ "problem_seconds": 4.0,
+ "example_label": "SEND THIS",
+ "cta_seconds": 6.3
 }
