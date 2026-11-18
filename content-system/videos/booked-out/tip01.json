@@ -1,7 +1,33 @@
-{"tipno": 1, "kicker": "OLD QUOTES", "hook": "Your cheapest lead is a quote you already gave",
- "problem": "Most quotes that go quiet aren't a no. People got busy.",
- "steps": [{"big": "Day 2: did it land?", "small": "Just checking the quote came through okay. Any questions?"},
-           {"big": "Day 7: answer the worry", "small": "Price, timing, or do I need the whole thing?"},
-           {"big": "Day 14: open or closed?", "small": "Give them an easy one-word answer"}],
- "example": "Should I keep this open for you, or close it out for now?",
- "cta": {"line1": "Get one free tip like this every week", "line2": "The Booked Out Brief", "url": "getbookedoutsolutions.com/newsletter"}}
+{
+ "tipno": 1,
+ "kicker": "3 MESSAGES TO SEND",
+ "hook": "Your cheapest next job is often a quote you already gave",
+ "problem": "A quiet quote isn't always a no. People got busy.",
+ "steps": [
+  {
+   "big": "Day 2: did it land?",
+   "small": "Did your quote come through okay?",
+   "send": true
+  },
+  {
+   "big": "Day 7: find the worry",
+   "small": "What's holding up your quote: price, timing, or something else?",
+   "send": true
+  },
+  {
+   "big": "Day 14: open or closed?",
+   "small": "Text, email or call.\nOne word from them settles it."
+  }
+ ],
+ "example": "Should I keep your quote open, or close it out for now?",
+ "cta": {
+  "line1": "Get one free tip every week",
+  "line2": "The Booked Out Brief",
+  "url": "getbookedoutsolutions.com/newsletter",
+  "show": "Newsletter link in our bio"
+ },
+ "hook_gold": "a quote you already gave",
+ "problem_seconds": 4.0,
+ "example_label": "SEND THIS",
+ "cta_seconds": 6.3
+}
