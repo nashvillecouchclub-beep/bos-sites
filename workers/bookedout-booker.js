@@ -21,7 +21,7 @@ const DEF = { MAX_CALL_SECONDS: 480, DAILY_MINUTE_CAP: 30, MAX_TURNS: 24 };
 
 export const SYSTEM = `You are Hank Booker, Booked Out Solutions' AI assistant, on a PHONE CALL. People call you Booker.
 Booked Out Solutions helps home service shops (HVAC, plumbing, electrical) get more jobs from the people already theirs: follows up old quotes, answers every lead fast, asks every real customer for a review, keeps their Google profile and facts right, and sends a short Friday report. Owned by Rickey Hallor in Smyrna, Tennessee. Work happens by email and one short phone page a week (tap Approve or Change).
-HOW YOU TALK: warm neighbor, plain words, a little funny about the problem, never about the person. Most replies are ONE short sentence plus ONE question, under 25 words total. When the caller uses a feeling word (headache, killing me, sick of), echo it as a question ("Headache how?"). When the caller asks a direct question, answer it straight first with the matching line below, then ask one question. Let them talk. Never use lists, symbols, emojis or dashes. Spell numbers the way people say them.
+HOW YOU TALK: warm neighbor, plain words, a little funny about the problem, never about the person. EVERY reply does two things in this order: first it directly answers or responds to exactly what the caller just said or asked, in one or two short sentences; then it ends with ONE short, natural question that keeps the call moving, like "Did that answer it?", "Want me to show you what we'd do for your shop?" or "What kind of shop do you run?". Never leave a reply hanging with no question, never answer vaguely, never answer a question with only a question. Keep the whole reply under 35 words. If the caller only says hello, greet them back warmly and ask how you can help. When the caller uses a feeling word (headache, killing me, sick of), say a short line that shows you heard it, then ask about it. Let them talk. Never use lists, symbols, emojis or dashes. Spell numbers the way people say them.
 FACTS YOU MAY SAY (never invent others):
 - Core: first 30 days free, then 497 dollars for the next 30 days, then 997 dollars every 30 days. No long-term contract. Cancel any time with one reply.
 - Pay ahead for 12 months is about 9 months' price. Ads package is 1,997 dollars every 30 days after the free 30. Complete includes the AI receptionist. The AI receptionist add-on is 497 dollars every 30 days.
@@ -65,7 +65,9 @@ export default {
     try {
       if (parts[0] === 't' && parts[1] && env.HOOK_TOKEN && parts[1] === env.HOOK_TOKEN) {
         const route = parts[2] || '';
+        if (parts[2] === 'relay') return onRelay(req, env, ctx);
         const form = req.method === 'POST' ? await readForm(req) : Object.fromEntries(u.searchParams);
+        if (route === 'after') return xml(await onAfter(form, env));
         if (route === 'voice') return xml(await onVoice(form, env));
         if (route === 'turn') return xml(await onTurn(form, env, u));
         if (route === 'status') return await onStatus(form, env);
@@ -83,9 +85,9 @@ export default {
 };
 
 export const FALLBACK = "Sorry, Booker can't talk right now. Please email rickey at get booked out solutions dot com and Rickey will answer you by email. Thanks for calling.";
-export const GREETING = "I'm Hank Booker, Booked Out's AI assistant. Everybody around here just calls me Booker. This call is recorded. Before I show you anything, what's eating your evenings right now?";
+export const GREETING = "Hi, thanks for calling Booked Out Solutions, this is Booker, the AI assistant, and this call is recorded. What can I do for you today, or did you have any questions I can help with?";
 export const NOT_OPEN = "Thanks for calling Booked Out Solutions. This line isn't open yet. Please email rickey at get booked out solutions dot com and Rickey will answer you by email. Goodbye.";
-export const CAP_LINE = "I've hit my phone time for today. Leave your email with Rickey at rickey at get booked out solutions dot com and he'll answer you by email. Thanks for calling.";
+export const CAP_LINE = "I've hit my phone time for today. Please email rickey at get booked out solutions dot com and Rickey will answer you by email. Thanks for calling.";
 export const TIME_LINE = "I've got to let you go, we're at my time limit for one call. Email rickey at get booked out solutions dot com and he'll pick it up. Thanks for calling.";
 
 function n(env, k) { const v = Number(env[k]); return Number.isFinite(v) && v > 0 ? v : DEF[k]; }
@@ -110,7 +112,7 @@ async function readForm(req) {
 }
 function gather(env, text, sid) {
   const base = `${env.SELF_URL || ''}/t/${env.HOOK_TOKEN}`;
-  return `<Gather input="speech" action="${base}/turn" speechTimeout="2" timeout="8" language="en-US">${say(env, text)}</Gather>` +
+  return `<Gather input="speech" action="${base}/turn" speechTimeout="1" timeout="6" language="en-US">${say(env, text)}</Gather>` +
     `<Redirect>${base}/turn?silent=1</Redirect>`;
 }
 async function daySeconds(env) { return Number((await env.KV.get('day:' + centralDay())) || 0); }
@@ -122,7 +124,8 @@ export async function onVoice(f, env) {
   if ((await daySeconds(env)) >= n(env, 'DAILY_MINUTE_CAP') * 60) { await logCall(env, sid, { event: 'cap', from }); return say(env, CAP_LINE) + '<Hangup/>'; }
   const st = { sid, from, start: Date.now(), turns: 0, history: [{ role: 'assistant', content: GREETING }], silent: 0 };
   await env.KV.put('call:' + sid, JSON.stringify(st), { expirationTtl: 172800 });
-  await logCall(env, sid, { event: 'start', from });
+  await logCall(env, sid, { event: 'start', from, mode: relayMode(env) ? 'relay' : 'gather' });
+  if (relayMode(env)) return relayTeXML(env, sid, from);
   return gather(env, GREETING, sid);
 }
 
@@ -155,7 +158,7 @@ export async function onTurn(f, env, u) {
 }
 
 export function clean(s) {
-  return String(s || '').replace(/\[END\]/g, '').replace(/[*_#`>~|]/g, '').replace(/\s*[–—]\s*/g, ', ').replace(/\p{Extended_Pictographic}/gu, '').replace(/\s+/g, ' ').trim().slice(0, 400) ||
+  return String(s || '').replace(/\[END\]/g, '').replace(/[*_#`>~|]/g, '').replace(/[–—]/g, ', ').replace(/\s+/g, ' ').trim().slice(0, 400) ||
     "Sorry, say that one more time?";
 }
 
@@ -164,7 +167,7 @@ async function brain(env, history) {
   const models = [env.BRAIN_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/meta/llama-3.1-8b-instruct-fast'];
   for (const m of models) {
     try {
-      const r = await Promise.race([env.AI.run(m, { messages, max_tokens: 120, temperature: 0.6 }), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000))]);
+      const r = await env.AI.run(m, { messages, max_tokens: 120, temperature: 0.6 });
       const t = r && (r.response || (r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content));
       if (t && String(t).trim()) return String(t);
     } catch (e) { /* try next */ }
@@ -196,10 +199,7 @@ async function logCall(env, sid, row) {
 }
 
 async function calls(env) {
-  const since = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
-  let keys = [];
-  for (let d = 0; d < 4; d++) { const day = new Date(Date.now() - d * 86400000).toISOString().slice(0, 10); keys = keys.concat((await env.KV.list({ prefix: 'log:' + day })).keys); }
-  keys = keys.filter((k) => k.name.slice(4, 14) >= since).sort((a, b) => (a.name < b.name ? -1 : 1)).slice(-200);
+  const keys = (await env.KV.list({ prefix: 'log:' })).keys.slice(-200);
   const rows = [];
   for (const k of keys) rows.push(JSON.parse((await env.KV.get(k.name)) || '{}'));
   return new Response(JSON.stringify({
@@ -207,4 +207,144 @@ async function calls(env) {
     caps: { daily_minutes: n(env, 'DAILY_MINUTE_CAP'), per_call_seconds: n(env, 'MAX_CALL_SECONDS'), max_turns: n(env, 'MAX_TURNS') },
     go_live: String(env.GO_LIVE || '') === 'true', rows,
   }, null, 1), { headers: { 'content-type': 'application/json' } });
+}
+
+// ---- Fast path (Nov 19 3:40 pm, Rickey's test call: ~10 s gaps on the Gather path) ----
+// Telnyx <Connect><ConversationRelay>: Telnyx runs speech-to-text (Deepgram Flux end-of-turn), text-to-speech and barge-in;
+// this worker gets the caller's words over a WebSocket and streams Booker's reply back sentence by sentence,
+// so the voice starts on the first sentence. Price: Telnyx $0.05 a minute (pay as you go) on top of the call minute.
+// BOOKER_MODE=gather switches back to the old Gather path with one setting.
+const DEF_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast';
+export const NUDGE = 'What else can I help you with?';
+export function relayMode(env) { return String(env.BOOKER_MODE || 'relay') !== 'gather'; }
+export function relayTeXML(env, sid, from = '') {
+  const base = `${env.SELF_URL || ''}/t/${env.HOOK_TOKEN}`;
+  const wss = base.replace(/^http/, 'ws') + '/relay';
+  return `<Connect action="${esc(base + '/after')}"><ConversationRelay url="${esc(wss)}" voice="${esc(env.BOOKER_VOICE || 'Telnyx.KokoroTTS.am_michael')}" language="en-US" transcriptionProvider="deepgram" speechModel="flux" interruptible="speech" welcomeGreetingInterruptible="speech" welcomeGreeting="${esc(GREETING)}"><Parameter name="sid" value="${esc(sid)}"/><Parameter name="from" value="${esc(from)}"/></ConversationRelay></Connect>`;
+}
+// Split streamed text into speakable pieces: send each finished sentence at once.
+export function takeSentences(buf) {
+  const out = []; let rest = buf; let m;
+  while ((m = rest.match(/^([\s\S]*?[.!?])\s+/))) { if (m[1].trim()) out.push(m[1].trim()); rest = rest.slice(m[0].length); }
+  return { out, rest };
+}
+async function* brainStream(env, history) {
+  const messages = [{ role: 'system', content: SYSTEM }, ...history.slice(-16)];
+  const models = [...new Set([env.BRAIN_MODEL || DEF_MODEL, DEF_MODEL, '@cf/meta/llama-3.3-70b-instruct-fp8-fast'])];
+  for (const m of models) {
+    let got = false;
+    try {
+      const r = await env.AI.run(m, { messages, max_tokens: 90, temperature: 0.5, stream: true });
+      if (r && typeof r.getReader === 'function') {
+        const rd = r.pipeThrough(new TextDecoderStream()).getReader(); let carry = '';
+        for (;;) {
+          const { value, done } = await rd.read(); if (done) break;
+          carry += value; const lines = carry.split('\n'); carry = lines.pop();
+          for (const ln of lines) {
+            const t = ln.replace(/^data:\s*/, '').trim(); if (!t || t === '[DONE]') continue;
+            try { const j = JSON.parse(t); const piece = j.response ?? (j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content) ?? ''; if (piece) { got = true; yield piece; } } catch (e) { /* skip */ }
+          }
+        }
+      } else {
+        const t = r && (r.response || (r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content));
+        if (t && String(t).trim()) { got = true; yield String(t); }
+      }
+    } catch (e) { if (got) return; }
+    if (got) return;
+  }
+  yield "Good question, and I don't want to guess. Leave me your email and Rickey will answer you by email. Is there anything else I can help with?";
+}
+export function onRelay(req, env, ctx) {
+  if ((req.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') return new Response('expected websocket', { status: 426 });
+  const pair = new WebSocketPair(); const [client, server] = Object.values(pair);
+  server.accept();
+  const S = { ready: Promise.resolve(), silent: 0, last: Date.now(), closed: false, sid: 'relay', from: '', start: Date.now(), turns: 0, history: [{ role: 'assistant', content: GREETING }], gen: 0, ended: false, ok: false };
+  const send = (o) => { try { server.send(JSON.stringify(o)); } catch (e) { /* closed */ } };
+  const bye = (text) => { if (S.ended) return; S.ended = true; send({ type: 'text', token: text, last: true }); later(() => send({ type: 'end', handoffData: '{"reason":"booker_end"}' }), Math.min(15000, 1200 + text.split(/\s+/).length * 420)); };
+  const later = (fn, ms) => ctx.waitUntil(new Promise((r) => setTimeout(() => { fn(); r(); }, ms)));
+  const save = () => env.KV.put('call:' + S.sid, JSON.stringify({ sid: S.sid, from: S.from, start: S.start, turns: S.turns, history: S.history }), { expirationTtl: 172800 });
+  server.addEventListener('message', (ev) => {
+    let msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
+    S.last = Date.now();
+    if (msg.type === 'setup') {
+      const cp = msg.customParameters || {};
+      S.sid = cp.sid || msg.callSid || 'relay'; S.from = cp.from || msg.from || '';
+      if (!cp.sid) ctx.waitUntil(logCall(env, S.sid, { event: 'relay_no_sid_param', callSid: msg.callSid || '' }));
+      S.ready = (async () => {
+        const st = JSON.parse((await env.KV.get('call:' + S.sid)) || 'null');
+        // onVoice only writes call:<sid> for callers it let through, so either check is enough
+        S.ok = allowed(env, S.from) || !!st;
+        if (st && st.start) S.start = st.start;
+        if (!S.ok) { bye(NOT_OPEN); return; }
+        await env.KV.put('relayok:' + S.sid, '1', { expirationTtl: 172800 });
+      })();
+      ctx.waitUntil(S.ready);
+      // warm the brain while the greeting plays, so the first answer is not a cold start
+      ctx.waitUntil(env.AI.run(env.BRAIN_MODEL || DEF_MODEL, { messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: 'hi' }], max_tokens: 1 }).catch(() => null));
+      // hard per-call time cap and silence guard, even if the caller never speaks
+      const left = Math.max(5000, n(env, 'MAX_CALL_SECONDS') * 1000 - (Date.now() - S.start));
+      later(() => { if (!S.ended) { ctx.waitUntil(logCall(env, S.sid, { event: 'time_limit_timer' })); bye(TIME_LINE); } }, left);
+      S.last = Date.now() + 9000; // greeting is playing
+      ctx.waitUntil(new Promise((resolve) => {
+        const iv = setInterval(() => {
+          if (S.ended || S.closed) { clearInterval(iv); resolve(); return; }
+          if (Date.now() - S.last < 20000) return;
+          S.silent = (S.silent || 0) + 1; S.last = Date.now();
+          if (S.silent === 1) { send({ type: 'text', token: 'You still there?', last: true }); S.history.push({ role: 'assistant', content: 'You still there?' }); }
+          else { bye("I'll let you go. Email rickey at get booked out solutions dot com any time. Take care."); clearInterval(iv); resolve(); }
+        }, 4000);
+      }));
+      return;
+    }
+    if (msg.type === 'interrupt') {
+      S.gen++; // stop the reply being spoken
+      const last = S.history[S.history.length - 1];
+      if (last && last.role === 'assistant' && msg.utteranceUntilInterrupt) last.content = String(msg.utteranceUntilInterrupt);
+      return;
+    }
+    if (msg.type !== 'prompt' || msg.last === false || S.ended) return;
+    const heard = String(msg.voicePrompt || '').trim(); if (!heard) return;
+    ctx.waitUntil((async () => { await S.ready; if (!S.ok || S.ended) return; S.silent = 0; onPrompt(heard); })());
+  });
+  const onPrompt = (heard) => {
+    const elapsed = (Date.now() - S.start) / 1000;
+    if (elapsed >= n(env, 'MAX_CALL_SECONDS') || S.turns >= n(env, 'MAX_TURNS')) { ctx.waitUntil(logCall(env, S.sid, { event: 'time_limit', elapsed })); bye(TIME_LINE); return; }
+    S.turns += 1; S.history.push({ role: 'user', content: heard.slice(0, 800) });
+    const my = ++S.gen; const t0 = Date.now();
+    ctx.waitUntil((async () => {
+      let buf = ''; let said = ''; let first = 0; let end = false;
+      for await (const piece of brainStream(env, S.history)) {
+        if (my !== S.gen) break;
+        buf += piece;
+        if (/\[END\]/.test(buf)) end = true;
+        const { out, rest } = takeSentences(buf.replace(/\[END\]/g, ''));
+        buf = rest;
+        for (const sent of out) { const c = clean(sent); if (!c) continue; if (!first) first = Date.now() - t0; send({ type: 'text', token: (said ? ' ' : '') + c, last: false }); said += (said ? ' ' : '') + c; }
+      }
+      if (my !== S.gen) { S.history.push({ role: 'assistant', content: said }); return; }
+      const tailRaw = buf.replace(/\[END\]/g, '').replace(/\[[A-Z]*$/, '').trim();
+      let tail = tailRaw ? clean(tailRaw) : '';
+      if (!said && !tail) tail = 'Sorry, say that one more time?';
+      if (!end && !/\?\s*$/.test(tail || said)) tail = (tail ? tail + ' ' : '') + NUDGE; // never leave it hanging
+      if (tail && !first) first = Date.now() - t0;
+      send({ type: 'text', token: tail ? (said ? ' ' : '') + tail : ' ', last: true });
+      said = [said, tail].filter(Boolean).join(' ');
+      S.history.push({ role: 'assistant', content: said });
+      if (end) { S.ended = true; later(() => send({ type: 'end', handoffData: '{"reason":"goodbye"}' }), Math.min(15000, 1200 + said.split(/\s+/).length * 420)); }
+      await save();
+      S.last = Date.now() + said.split(/\s+/).length * 420;
+      await logCall(env, S.sid, { event: 'turn', mode: 'relay', n: S.turns, heard, reply: said, first_sentence_ms: first, brain_ms: Date.now() - t0 });
+    })());
+  };
+  server.addEventListener('close', () => { S.gen++; S.closed = true; });
+  return new Response(null, { status: 101, webSocket: client });
+}
+
+// After the relay ends. If the relay never connected (no setup frame), the caller is not left in dead air:
+// fall back to the old Gather path for the rest of the call.
+export async function onAfter(f, env) {
+  const sid = f.CallSid || f.call_sid || 'unknown';
+  if (await env.KV.get('relayok:' + sid)) return '<Hangup/>';
+  await logCall(env, sid, { event: 'relay_failed_fallback' });
+  return gather(env, "Sorry about that, I'm here now. What can I do for you today?", sid);
 }
