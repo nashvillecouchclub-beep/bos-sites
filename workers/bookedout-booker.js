@@ -260,7 +260,7 @@ export function onRelay(req, env, ctx) {
   server.accept();
   const S = { ready: Promise.resolve(), silent: 0, last: Date.now(), closed: false, sid: 'relay', from: '', start: Date.now(), turns: 0, history: [{ role: 'assistant', content: GREETING }], gen: 0, ended: false, ok: false };
   const send = (o) => { try { server.send(JSON.stringify(o)); } catch (e) { /* closed */ } };
-  const bye = (text) => { if (S.ended) return; S.ended = true; send({ type: 'text', token: text, last: true }); later(() => send({ type: 'end', handoffData: '{"reason":"booker_end"}' }), Math.min(15000, 1200 + text.split(/\s+/).length * 420)); };
+  const bye = (text) => { if (S.ended) return; S.ended = true; S.gen++; send({ type: 'text', token: text, last: true }); later(() => send({ type: 'end', handoffData: '{"reason":"booker_end"}' }), Math.min(15000, 1200 + text.split(/\s+/).length * 420)); };
   const later = (fn, ms) => ctx.waitUntil(new Promise((r) => setTimeout(() => { fn(); r(); }, ms)));
   const save = () => env.KV.put('call:' + S.sid, JSON.stringify({ sid: S.sid, from: S.from, start: S.start, turns: S.turns, history: S.history }), { expirationTtl: 172800 });
   server.addEventListener('message', (ev) => {
@@ -345,6 +345,7 @@ export function onRelay(req, env, ctx) {
 export async function onAfter(f, env) {
   const sid = f.CallSid || f.call_sid || 'unknown';
   if (await env.KV.get('relayok:' + sid)) return '<Hangup/>';
+  const st = JSON.parse((await env.KV.get('call:' + sid)) || 'null'); if (st && st.turns > 0) return '<Hangup/>';
   await logCall(env, sid, { event: 'relay_failed_fallback' });
   return gather(env, "Sorry about that, I'm here now. What can I do for you today?", sid);
 }
