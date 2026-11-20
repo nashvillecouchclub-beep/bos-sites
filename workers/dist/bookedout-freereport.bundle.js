@@ -516,7 +516,7 @@ const SEQ = {
 //   1. FOLLOWUPS must be "on" AND LIVE must be "on". Both are "off" by default. Fake TEST shops never get one.
 //   2. Stopped forever on: any reply in the thread (incl. bounces), POST /followup action "stop", a stop:<email> key.
 //   3. We must KNOW there is no reply: either the Gmail thread read works (needs gmail.readonly on the token) and shows
-//      only our own messages, or the inbox job stamped "clear" for this owner in the last 2 hours. Otherwise it holds.
+//      only our own messages, or the inbox job stamped "clear" for this owner in the last 30 minutes. Otherwise it holds.
 //   4. One email per owner per day, never before the hour the report went out (kept between 8 am and 4 pm), business days only,
 //      Thanksgiving Day and Christmas Day slide to the next business day.
 //   5. The filled email is checked again: under 120 words, exactly one "?" on the last line, no "$", no long dashes,
@@ -1472,8 +1472,10 @@ async function fuOne(env, k, now, f, h, log) {
       rec.fu.hold = ''; rec.fu.clear_at = '';
       log.push('fu-sent ' + n.step + ' ' + id);
     } else {
-      delete rec.fu.done[n.step]; rec.fu.last_sent_day = prevDay;
-      await env.KV.delete(`fusend:${id}:${day}`);
+      // Free the day only when the email surely did not go (no token, or Gmail said no with a 4xx). On a timeout or a
+      // 5xx it may have gone, so today stays claimed; the step is tried again on the next sending day.
+      delete rec.fu.done[n.step];
+      if (/^(gmail route not set up|gmail token|gmail send 4)/.test(String(r.error || ''))) { rec.fu.last_sent_day = prevDay; await env.KV.delete(`fusend:${id}:${day}`); }
       rec.fu.fails = (rec.fu.fails || 0) + 1;
       if (rec.fu.fails === 1 || rec.fu.fails % 4 === 0) await sendAlert(env, `Free report follow-up send failed: ${rec.business_name}`, `Step ${n.step}: ${r.error}`, f, 'problem', id);
       log.push('fu-fail ' + id);

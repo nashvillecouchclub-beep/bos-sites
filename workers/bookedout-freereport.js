@@ -786,8 +786,10 @@ async function fuOne(env, k, now, f, h, log) {
       rec.fu.hold = ''; rec.fu.clear_at = '';
       log.push('fu-sent ' + n.step + ' ' + id);
     } else {
-      delete rec.fu.done[n.step]; rec.fu.last_sent_day = prevDay;
-      await env.KV.delete(`fusend:${id}:${day}`);
+      // Free the day only when the email surely did not go (no token, or Gmail said no with a 4xx). On a timeout or a
+      // 5xx it may have gone, so today stays claimed; the step is tried again on the next sending day.
+      delete rec.fu.done[n.step];
+      if (/^(gmail route not set up|gmail token|gmail send 4)/.test(String(r.error || ''))) { rec.fu.last_sent_day = prevDay; await env.KV.delete(`fusend:${id}:${day}`); }
       rec.fu.fails = (rec.fu.fails || 0) + 1;
       if (rec.fu.fails === 1 || rec.fu.fails % 4 === 0) await sendAlert(env, `Free report follow-up send failed: ${rec.business_name}`, `Step ${n.step}: ${r.error}`, f, 'problem', id);
       log.push('fu-fail ' + id);

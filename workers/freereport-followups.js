@@ -6,7 +6,7 @@
 //   1. FOLLOWUPS must be "on" AND LIVE must be "on". Both are "off" by default. Fake TEST shops never get one.
 //   2. Stopped forever on: any reply in the thread (incl. bounces), POST /followup action "stop", a stop:<email> key.
 //   3. We must KNOW there is no reply: either the Gmail thread read works (needs gmail.readonly on the token) and shows
-//      only our own messages, or the inbox job stamped "clear" for this owner in the last 2 hours. Otherwise it holds.
+//      only our own messages, or the inbox job stamped "clear" for this owner in the last 30 minutes. Otherwise it holds.
 //   4. One email per owner per day, never before the hour the report went out (kept between 8 am and 4 pm), business days only,
 //      Thanksgiving Day and Christmas Day slide to the next business day.
 //   5. The filled email is checked again: under 120 words, exactly one "?" on the last line, no "$", no long dashes,
