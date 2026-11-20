@@ -1,0 +1,24 @@
+{
+ "client": "sarah-barre-harrison",
+ "client_name": "Sarah Barre Harrison Photography",
+ "week": "setup",
+ "created": "2026-11-19",
+ "items": {
+  "google": {
+   "title": "Google: add us as a manager"
+  },
+  "squarespace": {
+   "title": "Squarespace website: add us as an editor"
+  },
+  "facebook": {
+   "title": "Facebook: approve our request"
+  },
+  "photos": {
+   "title": "Use website photos for Google and Facebook posts?",
+   "choices": [
+    "Use the photos on my website",
+    "Ask me first"
+   ]
+  }
+ }
+}

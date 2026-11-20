@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Your 3 easy setup steps | Booked Out Solutions</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+@font-face{font-family:"Bricolage Grotesque";src:url(/fonts/bricolage-grotesque.woff2) format("woff2");font-weight:200 800;font-display:swap}
+@font-face{font-family:"Instrument Sans";src:url(/fonts/instrument-sans.woff2) format("woff2");font-weight:400 700;font-display:swap}
+:root{--navy:#0b1d3a;--night:#06122a;--gold:#e3b341;--goldd:#b8891f;--cream:#F6F1E7;--paper:#FFFDF7;--ink:#0a0f26;--muted:#5b6078;--line:#e6dccb;--green:#2f9e6a;--red:#E5484D}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--cream);color:var(--ink);font:18px/1.55 "Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+h1,h2{font-family:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;line-height:1.15;margin:0}
+.wrap{max-width:760px;margin:0 auto;padding:0 18px}
+.top{background:var(--night)}
+.top .wrap{display:flex;align-items:center;gap:12px;padding-top:14px;padding-bottom:14px}
+.word b{display:block;font-family:"Bricolage Grotesque",sans-serif;font-weight:800;letter-spacing:.04em;font-size:17px;color:var(--gold)}
+.word span{display:block;font-size:11px;letter-spacing:.32em;color:#cfc6b2;font-weight:600}
+.hero{background:radial-gradient(120% 90% at 50% 0%,#17306a 0%,var(--navy) 60%,var(--night) 100%);color:var(--cream);padding:34px 0 40px}
+.hero h1{font-size:clamp(28px,6vw,44px);font-weight:800}
+.hero h1 em{font-style:normal;color:var(--gold)}
+.hero p{margin:14px 0 0;color:#e1dacb}
+.prog{position:sticky;top:0;z-index:5;background:rgba(255,253,247,.97);border-bottom:1px solid var(--line);padding:10px 0}
+.prog .wrap{display:flex;align-items:center;gap:12px;font-size:16px}
+.track{flex:1;height:10px;background:var(--line);border-radius:99px;overflow:hidden}
+.track i{display:block;height:100%;width:0;background:var(--green);transition:width .3s}
+main{padding:22px 0 10px}
+.card{background:var(--paper);border:1px solid var(--line);border-left:7px solid var(--gold);border-radius:18px;padding:22px 20px;margin:0 0 22px}
+.card.ok{border-left-color:var(--green)}
+.num{font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--goldd)}
+.card h2{font-size:clamp(24px,5vw,30px);font-weight:800;margin:6px 0 6px}
+.time{margin:0 0 6px;color:var(--muted);font-size:16px}
+.why{margin:0 0 16px}
+a.gold{display:block;text-align:center;background:var(--gold);color:var(--navy);font-weight:800;font-size:20px;text-decoration:none;border-radius:14px;padding:18px 16px;margin:0 0 18px;box-shadow:0 2px 0 var(--goldd)}
+a.gold:active{transform:translateY(1px)}
+.steps{margin:0 0 14px;padding-left:0;list-style:none;counter-reset:st}
+.steps li{margin:0 0 12px;position:relative;padding-left:40px}
+.steps li:not(.nonum):before{counter-increment:st;content:counter(st);position:absolute;left:0;top:0;width:28px;height:28px;border-radius:50%;background:var(--navy);color:#fff;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.steps li.nonum{padding-left:0}
+.shot{margin:4px 0 6px}
+.shot svg{display:block;width:100%;height:auto;max-width:640px}
+.shot figcaption{font-size:14px;color:var(--muted);margin-top:4px}
+.shot figcaption:before{content:"Sample screen. ";font-weight:700}
+.copy{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff;border:2px dashed var(--gold);border-radius:12px;padding:12px 14px}
+.copy code{font:700 17px/1.3 ui-monospace,Menlo,Consolas,monospace;word-break:break-all;flex:1;min-width:200px}
+.cbtn{background:var(--navy);color:#fff;border:0;border-radius:10px;font-family:inherit;font-size:17px;font-weight:700;line-height:1;padding:12px 20px;cursor:pointer}
+.worked{background:#eaf6ef;border-radius:12px;padding:12px 14px;margin:0 0 10px}
+.note{font-size:16px;color:var(--muted);margin:0 0 8px}
+.stuck{margin:0 0 16px}
+button.done,.choice button{display:block;width:100%;background:var(--navy);color:#fff;border:0;border-radius:14px;font-family:inherit;font-size:20px;font-weight:800;line-height:1.2;padding:18px;cursor:pointer}
+button.done[disabled],.choice button[disabled]{opacity:.6}
+.state{margin-top:10px;font-weight:700;color:var(--green);min-height:1em}
+.state.err{color:var(--red)}
+.choice{display:grid;gap:12px;margin:14px 0 10px}
+.choice button.alt{background:#fff;color:var(--navy);border:2px solid var(--navy)}
+.choice button.sel{outline:4px solid var(--gold)}
+.close{text-align:center;padding:10px 0 40px}
+.close h2{font-size:28px;font-weight:800}
+.close p{margin:10px 0 0}
+footer{background:var(--night);color:#cfc6b2;font-size:14px;text-align:center;padding:18px}
+@media (min-width:700px){.choice{grid-template-columns:1fr 1fr}.card{padding:28px 30px}}
+</style>
+</head>
+<body>
+<div class="top"><div class="wrap"><svg aria-hidden="true" width="42" height="42" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="hlg" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#fff3c8"/><stop offset=".45" stop-color="#EDB547"/><stop offset="1" stop-color="#9c6c18"/></linearGradient><linearGradient id="hlt" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FFD56B"/><stop offset="1" stop-color="#c08a23"/></linearGradient><radialGradient cx=".5" cy=".35" id="hln" r=".7"><stop offset="0" stop-color="#2a3a86"/><stop offset=".7" stop-color="#0e1636"/><stop offset="1" stop-color="#070b20"/></radialGradient></defs><g><circle cx="50" cy="50" fill="url(#hlg)" r="50"/><circle cx="50" cy="50" fill="url(#hln)" r="42"/><g transform="rotate(-6 50 52)"><rect fill="#F6F1E7" height="48" rx="7" width="56" x="22" y="27"/><path d="M22 34a7 7 0 0 1 7-7h42a7 7 0 0 1 7 7v4h-56z" fill="#16204A"/><rect fill="url(#hlg)" height="11" rx="2.5" width="5" x="34" y="21"/><rect fill="url(#hlg)" height="11" rx="2.5" width="5" x="61" y="21"/><rect fill="#e2d8c4" height="14" rx="3" width="22" x="26" y="42"/><path d="M32 45.5l10 7m0 -7l-10 7" stroke="#E5484D" stroke-linecap="round" stroke-width="3"/><rect fill="url(#hlt)" height="14" rx="3" width="22" x="52" y="42"/><rect fill="url(#hlt)" height="14" rx="3" width="22" x="26" y="58"/><rect fill="url(#hlt)" height="14" rx="3" width="22" x="52" y="58"/></g></g></svg><div class="word"><b>BOOKED OUT</b><span>SOLUTIONS</span></div></div></div>
+<div class="hero"><div class="wrap">
+<h1>Sarah Barre Harrison Photography: <em>your 3 easy setup steps</em> (about 5 minutes)</h1>
+<p>Hi Sarah, these 3 steps let us do the work for you. You never share a password with us, and you stay the owner of everything. Tap <b>Done</b> after each one.</p>
+</div></div>
+<div class="prog"><div class="wrap"><span id="pc">0 of 3 steps done</span><div class="track"><i id="pb"></i></div></div></div>
+<main><div class="wrap">
+<article class="card" id="card-google" data-item="google">
+<div class="num">Step 1 of 3</div><h2>Google: add us as a manager</h2>
+<p class="time">about 2 minutes. A computer is easiest.</p>
+<p class="why"><b>Why:</b> So we can fix and fill in your Google profile for you, without ever needing your password.</p>
+<a class="gold" href="https://business.google.com/locations" target="_blank" rel="noopener">Open Google Business Profile &rarr;</a>
+<ol class="steps">
+<li>Click the gold button above. It opens Google in a new tab.</li>
+<li>If Google asks you to sign in, sign in with the Google account you use for your business profile.</li>
+<li>If you see a list, click <b>Sarah Barre Harrison Photo</b>. If your business opens right away, go to the next step.</li>
+<li class="nonum"><figure class="shot"><svg viewBox="0 0 640 260" role="img" aria-label="Google Business Profile Manager with your business listed" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif"><rect x="1" y="1" width="638" height="258" rx="14" fill="#fff" stroke="#d6d9e0" stroke-width="2"/><rect x="1" y="1" width="638" height="40" rx="14" fill="#f1f3f4"/><rect x="1" y="28" width="638" height="13" fill="#f1f3f4"/><circle cx="24" cy="21" r="6" fill="#ff6159"/><circle cx="44" cy="21" r="6" fill="#ffbd2e"/><circle cx="64" cy="21" r="6" fill="#28c941"/><rect x="90" y="10" width="520" height="22" rx="11" fill="#fff"/><text x="104" y="26" font-size="12" fill="#5f6368">business.google.com/locations</text><text x="30" y="72" font-size="18" fill="#5f6368" text-anchor="start">Google Business Profile Manager</text><text x="30" y="112" font-size="15" fill="#1a73e8" text-anchor="start" font-weight="bold">Businesses</text><rect x="30" y="130" width="580" height="1" fill="#e0e0e0"/><text x="46" y="160" font-size="12" fill="#5f6368" text-anchor="start">Business</text><text x="400" y="160" font-size="12" fill="#5f6368" text-anchor="start">Status</text><rect x="30" y="172" width="580" height="1" fill="#e0e0e0"/><text x="46" y="204" font-size="16" fill="#1a73e8" text-anchor="start" font-weight="bold">Sarah Barre Harrison Photo</text><text x="46" y="224" font-size="12" fill="#5f6368" text-anchor="start">Murfreesboro, TN</text><text x="400" y="210" font-size="13" fill="#188038" text-anchor="start">Verified</text><ellipse cx="150" cy="204" rx="128" ry="22" fill="none" stroke="#E5484D" stroke-width="4"/></svg><figcaption>Click your business name.</figcaption></figure></li>
+<li>Your business profile opens at the top of a Google page. Click the <b>three dots</b> next to it. (If you don't see three dots, look for a <b>Menu</b> button, or just reply to our email.)</li>
+<li>Click <b>Business Profile settings</b>.</li>
+<li class="nonum"><figure class="shot"><svg viewBox="0 0 640 260" role="img" aria-label="Your Business Profile with the three dots menu" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif"><rect x="1" y="1" width="638" height="258" rx="14" fill="#fff" stroke="#d6d9e0" stroke-width="2"/><rect x="1" y="1" width="638" height="40" rx="14" fill="#f1f3f4"/><rect x="1" y="28" width="638" height="13" fill="#f1f3f4"/><circle cx="24" cy="21" r="6" fill="#ff6159"/><circle cx="44" cy="21" r="6" fill="#ffbd2e"/><circle cx="64" cy="21" r="6" fill="#28c941"/><rect x="90" y="10" width="520" height="22" rx="11" fill="#fff"/><text x="104" y="26" font-size="12" fill="#5f6368">google.com/search?q=my+business</text><text x="30" y="76" font-size="13" fill="#5f6368" text-anchor="start">Your business on Google</text><text x="30" y="104" font-size="20" fill="#202124" text-anchor="start" font-weight="bold">Sarah Barre Harrison Photo</text><rect x="30" y="124" width="110" height="34" rx="17" fill="#e8f0fe"/><text x="85.0" y="146.0" font-size="14" fill="#1a73e8" text-anchor="middle" font-weight="bold">Edit profile</text><rect x="150" y="124" width="90" height="34" rx="17" fill="#e8f0fe"/><text x="195.0" y="146.0" font-size="14" fill="#1a73e8" text-anchor="middle" font-weight="bold">Read reviews</text><rect x="250" y="124" width="70" height="34" rx="17" fill="#e8f0fe"/><text x="285.0" y="146.0" font-size="14" fill="#1a73e8" text-anchor="middle" font-weight="bold">Photos</text><circle cx="560" cy="88" r="3.5" fill="#5f6368"/><circle cx="572" cy="88" r="3.5" fill="#5f6368"/><circle cx="584" cy="88" r="3.5" fill="#5f6368"/><ellipse cx="572" cy="88" rx="30" ry="20" fill="none" stroke="#E5484D" stroke-width="4"/><rect x="380" y="112" width="230" height="120" rx="8" fill="#fff" stroke="#dadce0"/><text x="398" y="142" font-size="14" fill="#202124" text-anchor="start">Business Profile settings</text><text x="398" y="176" font-size="14" fill="#5f6368" text-anchor="start">Advertise</text><text x="398" y="210" font-size="14" fill="#5f6368" text-anchor="start">Remove from Search</text><ellipse cx="488" cy="137" rx="104" ry="18" fill="none" stroke="#E5484D" stroke-width="4"/></svg><figcaption>Click the three dots, then Business Profile settings.</figcaption></figure></li>
+<li>Click <b>People and access</b>.</li>
+<li class="nonum"><figure class="shot"><svg viewBox="0 0 640 250" role="img" aria-label="Business Profile settings, People and access" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif"><rect x="1" y="1" width="638" height="248" rx="14" fill="#fff" stroke="#d6d9e0" stroke-width="2"/><rect x="1" y="1" width="638" height="40" rx="14" fill="#f1f3f4"/><rect x="1" y="28" width="638" height="13" fill="#f1f3f4"/><circle cx="24" cy="21" r="6" fill="#ff6159"/><circle cx="44" cy="21" r="6" fill="#ffbd2e"/><circle cx="64" cy="21" r="6" fill="#28c941"/><rect x="90" y="10" width="520" height="22" rx="11" fill="#fff"/><text x="104" y="26" font-size="12" fill="#5f6368">google.com/search?q=my+business</text><text x="30" y="76" font-size="18" fill="#202124" text-anchor="start" font-weight="bold">Business Profile settings</text><text x="46" y="116" font-size="15" fill="#202124" text-anchor="start">People and access</text><text x="46" y="150" font-size="15" fill="#5f6368" text-anchor="start">Profile status</text><text x="46" y="184" font-size="15" fill="#5f6368" text-anchor="start">Advanced settings</text><text x="46" y="218" font-size="15" fill="#5f6368" text-anchor="start">Linked accounts</text><ellipse cx="112" cy="111" rx="90" ry="20" fill="none" stroke="#E5484D" stroke-width="4"/></svg><figcaption>Click People and access.</figcaption></figure></li>
+<li>Click <b>Add</b> (the little person with a plus sign).</li>
+<li class="nonum"><figure class="shot"><svg viewBox="0 0 640 200" role="img" aria-label="People and access window with the Add button" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif"><rect x="1" y="1" width="638" height="198" rx="14" fill="#fff" stroke="#d6d9e0" stroke-width="2"/><rect x="1" y="1" width="638" height="40" rx="14" fill="#f1f3f4"/><rect x="1" y="28" width="638" height="13" fill="#f1f3f4"/><circle cx="24" cy="21" r="6" fill="#ff6159"/><circle cx="44" cy="21" r="6" fill="#ffbd2e"/><circle cx="64" cy="21" r="6" fill="#28c941"/><rect x="90" y="10" width="520" height="22" rx="11" fill="#fff"/><text x="104" y="26" font-size="12" fill="#5f6368">google.com/search?q=my+business</text><text x="30" y="76" font-size="18" fill="#202124" text-anchor="start" font-weight="bold">People and access</text><g transform="translate(560,58)"><circle cx="10" cy="8" r="6" fill="none" stroke="#1a73e8" stroke-width="2.5"/><path d="M0 26c1-7 6-10 10-10s9 3 10 10" fill="none" stroke="#1a73e8" stroke-width="2.5"/><path d="M24 6v12M18 12h12" stroke="#1a73e8" stroke-width="2.5"/></g><text x="583" y="104" font-size="12" fill="#1a73e8" text-anchor="middle">Add</text><ellipse cx="576" cy="80" rx="34" ry="34" fill="none" stroke="#E5484D" stroke-width="4"/><text x="46" y="140" font-size="15" fill="#202124" text-anchor="start">Sarah Harrison</text><text x="46" y="160" font-size="12" fill="#5f6368" text-anchor="start">Primary owner</text></svg><figcaption>Click Add.</figcaption></figure></li>
+<li>Click in the email box and paste our email address. Use the Copy button below, then paste it in.</li>
+<li class="nonum"><div class="copy"><code>rickey@getbookedoutsolutions.com</code><button type="button" class="cbtn" data-copy="rickey@getbookedoutsolutions.com">Copy</button></div></li>
+<li>Under <b>Access</b>, choose <b>Manager</b>. (Not Owner, so you stay in charge.)</li>
+<li>Click <b>Invite</b>.</li>
+<li class="nonum"><figure class="shot"><svg viewBox="0 0 640 310" role="img" aria-label="Add new users window: paste our email, choose Manager, click Invite" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif"><rect x="1" y="1" width="638" height="308" rx="14" fill="#fff" stroke="#d6d9e0" stroke-width="2"/><rect x="1" y="1" width="638" height="40" rx="14" fill="#f1f3f4"/><rect x="1" y="28" width="638" height="13" fill="#f1f3f4"/><circle cx="24" cy="21" r="6" fill="#ff6159"/><circle cx="44" cy="21" r="6" fill="#ffbd2e"/><circle cx="64" cy="21" r="6" fill="#28c941"/><rect x="90" y="10" width="520" height="22" rx="11" fill="#fff"/><text x="104" y="26" font-size="12" fill="#5f6368">google.com/search?q=my+business</text><text x="30" y="76" font-size="18" fill="#202124" text-anchor="start" font-weight="bold">Add new users</text><rect x="30" y="96" width="580" height="46" rx="6" fill="#fff" stroke="#1a73e8" stroke-width="2"/><text x="44" y="125" font-size="15" fill="#202124" text-anchor="start">rickey@getbookedoutsolutions.com</text><text x="30" y="178" font-size="13" fill="#5f6368" text-anchor="start">Access</text><rect x="30" y="188" width="200" height="40" rx="6" fill="#fff" stroke="#80868b"/><text x="44" y="213" font-size="15" fill="#202124" text-anchor="start" font-weight="bold">Manager</text><path d="M206 204l7 7 7-7" fill="none" stroke="#5f6368" stroke-width="2"/><ellipse cx="130" cy="208" rx="112" ry="30" fill="none" stroke="#E5484D" stroke-width="4"/><rect x="500" y="250" width="100" height="34" rx="17" fill="#1a73e8"/><text x="550.0" y="272.0" font-size="14" fill="#fff" text-anchor="middle" font-weight="bold">Invite</text><ellipse cx="550" cy="267" rx="66" ry="28" fill="none" stroke="#E5484D" stroke-width="4"/></svg><figcaption>Paste our email, choose Manager, then click Invite.</figcaption></figure></li>
+</ol>
+<div class="worked"><b>How you know it worked:</b> You'll see rickey@getbookedoutsolutions.com in the People and access list with the word <b>Pending</b> or <b>Invited</b> next to it. That is all you need to do.</div>
+<p class="note">You stay the owner. As a manager, we can update your profile, but we can't remove you or delete your profile.</p>
+<p class="stuck"><b>Stuck?</b> Just reply to our email and we'll help.</p>
+<button type="button" class="done" data-item="google">Done</button>
+<div class="state" id="st-google" aria-live="polite"></div>
+</article>
+<article class="card" id="card-squarespace" data-item="squarespace">
+<div class="num">Step 2 of 3</div><h2>Squarespace website: add us as an editor</h2>
+<p class="time">about 2 minutes. A computer is easiest.</p>
+<p class="why"><b>Why:</b> So we can make the website fixes in your plan for you. A contributor is someone you let help edit your site. You can remove us any time.</p>
+<a class="gold" href="https://account.squarespace.com/" target="_blank" rel="noopener">Open Squarespace &rarr;</a>
+<ol class="steps">
+<li>Click the gold button above. It opens Squarespace in a new tab.</li>
+<li>Log in the way you normally do.</li>
+<li>Click your website.</li>
+<li class="nonum"><figure class="shot"><svg viewBox="0 0 640 270" role="img" aria-label="Squarespace: your websites list" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif"><rect x="1" y="1" width="638" height="268" rx="14" fill="#fff" stroke="#d6d9e0" stroke-width="2"/><rect x="1" y="1" width="638" height="40" rx="14" fill="#f1f3f4"/><rect x="1" y="28" width="638" height="13" fill="#f1f3f4"/><circle cx="24" cy="21" r="6" fill="#ff6159"/><circle cx="44" cy="21" r="6" fill="#ffbd2e"/><circle cx="64" cy="21" r="6" fill="#28c941"/><rect x="90" y="10" width="520" height="22" rx="11" fill="#fff"/><text x="104" y="26" font-size="12" fill="#5f6368">account.squarespace.com</text><text x="30" y="76" font-size="18" fill="#000" text-anchor="start" font-weight="bold">Websites</text><rect x="30" y="96" width="250" height="150" rx="8" fill="#f2f2f2" stroke="#ddd"/><rect x="44" y="110" width="222" height="90" rx="4" fill="#d9d9d9"/><text x="44" y="226" font-size="13" fill="#000" text-anchor="start" font-weight="bold">Sarah Barre Harrison Photography</text><ellipse cx="155" cy="170" rx="140" ry="92" fill="none" stroke="#E5484D" stroke-width="4"/></svg><figcaption>Click your website.</figcaption></figure></li>
+<li>In the menu on the left, click <b>Settings</b> (you may need to scroll down).</li>
+<li class="nonum"><figure class="shot"><svg viewBox="0 0 640 260" role="img" aria-label="Squarespace site menu: Settings" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif"><rect x="1" y="1" width="638" height="258" rx="14" fill="#fff" stroke="#d6d9e0" stroke-width="2"/><rect x="1" y="1" width="638" height="40" rx="14" fill="#f1f3f4"/><rect x="1" y="28" width="638" height="13" fill="#f1f3f4"/><circle cx="24" cy="21" r="6" fill="#ff6159"/><circle cx="44" cy="21" r="6" fill="#ffbd2e"/><circle cx="64" cy="21" r="6" fill="#28c941"/><rect x="90" y="10" width="520" height="22" rx="11" fill="#fff"/><text x="104" y="26" font-size="12" fill="#5f6368">your-site.squarespace.com/config</text><text x="30" y="76" font-size="15" fill="#777" text-anchor="start">Website</text><text x="30" y="110" font-size="16" fill="#202124" text-anchor="start">Pages</text><text x="30" y="144" font-size="16" fill="#202124" text-anchor="start">Design</text><text x="30" y="178" font-size="16" fill="#202124" text-anchor="start">Commerce</text><text x="30" y="212" font-size="16" fill="#000" text-anchor="start" font-weight="bold">Settings</text><ellipse cx="62" cy="207" rx="52" ry="20" fill="none" stroke="#E5484D" stroke-width="4"/><rect x="230" y="60" width="380" height="190" rx="6" fill="#f7f7f7"/><text x="420" y="160" font-size="13" fill="#999" text-anchor="middle">(your website preview)</text></svg><figcaption>Click Settings.</figcaption></figure></li>
+<li>Click <b>Permissions &amp; Ownership</b>.</li>
+<li class="nonum"><figure class="shot"><svg viewBox="0 0 640 250" role="img" aria-label="Squarespace Settings: Permissions &amp; Ownership" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif"><rect x="1" y="1" width="638" height="248" rx="14" fill="#fff" stroke="#d6d9e0" stroke-width="2"/><rect x="1" y="1" width="638" height="40" rx="14" fill="#f1f3f4"/><rect x="1" y="28" width="638" height="13" fill="#f1f3f4"/><circle cx="24" cy="21" r="6" fill="#ff6159"/><circle cx="44" cy="21" r="6" fill="#ffbd2e"/><circle cx="64" cy="21" r="6" fill="#28c941"/><rect x="90" y="10" width="520" height="22" rx="11" fill="#fff"/><text x="104" y="26" font-size="12" fill="#5f6368">your-site.squarespace.com/config/settings</text><text x="30" y="76" font-size="18" fill="#000" text-anchor="start" font-weight="bold">Settings</text><text x="30" y="112" font-size="13" fill="#777" text-anchor="start">Website</text><text x="30" y="142" font-size="15" fill="#202124" text-anchor="start">Site availability</text><text x="30" y="172" font-size="15" fill="#202124" text-anchor="start">Domains</text><text x="30" y="202" font-size="15" fill="#000" text-anchor="start" font-weight="bold">Permissions &amp; Ownership</text><ellipse cx="118" cy="197" rx="104" ry="20" fill="none" stroke="#E5484D" stroke-width="4"/><text x="30" y="232" font-size="15" fill="#202124" text-anchor="start">Billing</text></svg><figcaption>Click Permissions &amp; Ownership.</figcaption></figure></li>
+<li>Click <b>Invite contributor</b>.</li>
+<li class="nonum"><figure class="shot"><svg viewBox="0 0 640 240" role="img" aria-label="Permissions &amp; Ownership with Invite contributor" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif"><rect x="1" y="1" width="638" height="238" rx="14" fill="#fff" stroke="#d6d9e0" stroke-width="2"/><rect x="1" y="1" width="638" height="40" rx="14" fill="#f1f3f4"/><rect x="1" y="28" width="638" height="13" fill="#f1f3f4"/><circle cx="24" cy="21" r="6" fill="#ff6159"/><circle cx="44" cy="21" r="6" fill="#ffbd2e"/><circle cx="64" cy="21" r="6" fill="#28c941"/><rect x="90" y="10" width="520" height="22" rx="11" fill="#fff"/><text x="104" y="26" font-size="12" fill="#5f6368">your-site.squarespace.com/config/settings/permissions</text><text x="30" y="76" font-size="18" fill="#000" text-anchor="start" font-weight="bold">Permissions &amp; Ownership</text><text x="30" y="116" font-size="13" fill="#777" text-anchor="start">Owner</text><text x="30" y="140" font-size="15" fill="#202124" text-anchor="start">Sarah Harrison</text><rect x="30" y="170" width="190" height="40" rx="4" fill="#000"/><text x="125.0" y="195.0" font-size="14" fill="#fff" text-anchor="middle" font-weight="bold">Invite contributor</text><ellipse cx="125" cy="190" rx="112" ry="32" fill="none" stroke="#E5484D" stroke-width="4"/></svg><figcaption>Click Invite contributor.</figcaption></figure></li>
+<li>For the name, type <b>Rickey Hallor</b>.</li>
+<li>For the email, paste our email address (use the Copy button below).</li>
+<li class="nonum"><div class="copy"><code>rickey@getbookedoutsolutions.com</code><button type="button" class="cbtn" data-copy="rickey@getbookedoutsolutions.com">Copy</button></div></li>
+<li>Under Permissions, choose <b>Website Editor</b>.</li>
+<li>Click <b>Invite</b> (it may say <b>Send invite</b>).</li>
+<li class="nonum"><figure class="shot"><svg viewBox="0 0 640 330" role="img" aria-label="Invite contributor form: name, email, Website Editor, Invite" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif"><rect x="1" y="1" width="638" height="328" rx="14" fill="#fff" stroke="#d6d9e0" stroke-width="2"/><rect x="1" y="1" width="638" height="40" rx="14" fill="#f1f3f4"/><rect x="1" y="28" width="638" height="13" fill="#f1f3f4"/><circle cx="24" cy="21" r="6" fill="#ff6159"/><circle cx="44" cy="21" r="6" fill="#ffbd2e"/><circle cx="64" cy="21" r="6" fill="#28c941"/><rect x="90" y="10" width="520" height="22" rx="11" fill="#fff"/><text x="104" y="26" font-size="12" fill="#5f6368">your-site.squarespace.com/config/settings/permissions</text><text x="30" y="72" font-size="18" fill="#000" text-anchor="start" font-weight="bold">Invite contributor</text><text x="30" y="100" font-size="12" fill="#777" text-anchor="start">Contributor name</text><rect x="30" y="106" width="580" height="34" rx="4" fill="#fff" stroke="#bbb"/><text x="42" y="129" font-size="14" fill="#202124" text-anchor="start">Rickey Hallor</text><text x="30" y="162" font-size="12" fill="#777" text-anchor="start">Email</text><rect x="30" y="168" width="580" height="34" rx="4" fill="#fff" stroke="#bbb"/><text x="42" y="191" font-size="14" fill="#202124" text-anchor="start">rickey@getbookedoutsolutions.com</text><text x="30" y="226" font-size="12" fill="#777" text-anchor="start">Permissions</text><rect x="30" y="236" width="16" height="16" rx="3" fill="#000"/><path d="M33 244l4 4 7-8" stroke="#fff" stroke-width="2" fill="none"/><text x="56" y="249" font-size="14" fill="#000" text-anchor="start" font-weight="bold">Website Editor</text><ellipse cx="105" cy="244" rx="92" ry="20" fill="none" stroke="#E5484D" stroke-width="4"/><rect x="500" y="272" width="110" height="36" rx="4" fill="#000"/><text x="555.0" y="295.0" font-size="14" fill="#fff" text-anchor="middle" font-weight="bold">Invite</text><ellipse cx="555" cy="290" rx="70" ry="28" fill="none" stroke="#E5484D" stroke-width="4"/></svg><figcaption>Type the name, paste our email, choose Website Editor, click Invite.</figcaption></figure></li>
+</ol>
+<div class="worked"><b>How you know it worked:</b> Our email shows on the Permissions page as <b>pending</b>.</div>
+<p class="note">If the Invite button is greyed out, or Squarespace asks you to upgrade your plan, please don't upgrade. Just reply to our email and we'll find another way.</p>
+<p class="stuck"><b>Stuck?</b> Just reply to our email and we'll help.</p>
+<button type="button" class="done" data-item="squarespace">Done</button>
+<div class="state" id="st-squarespace" aria-live="polite"></div>
+</article>
+<article class="card" id="card-facebook" data-item="facebook">
+<div class="num">Step 3 of 3</div><h2>Facebook: approve our request</h2>
+<p class="time">about 30 seconds. Your phone or a computer is fine.</p>
+<p class="why"><b>Why:</b> We&#x27;ve sent you a request from Booked Out Solutions to help manage your Page, so we can post for you.</p>
+<a class="gold" href="https://business.facebook.com/latest/settings/requests" target="_blank" rel="noopener">Open your Facebook requests &rarr;</a>
+<ol class="steps">
+<li>Look for a Facebook notification or an email from Meta that says <b>Booked Out Solutions</b> wants access to your Page.</li>
+<li>Tap it. (The gold button above is a backup. If Facebook asks you to set up a business portfolio, which is a business account, stop and use the notification instead.)</li>
+<li>Don't see a request? Reply to our email and we'll send it again. Don't create anything new on Facebook.</li>
+<li>Check that it says <b>Booked Out Solutions</b>.</li>
+<li>Tap <b>Approve</b>.</li>
+<li class="nonum"><figure class="shot"><svg viewBox="0 0 640 230" role="img" aria-label="Facebook request from Booked Out Solutions with the Approve button" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif"><rect x="1" y="1" width="638" height="228" rx="14" fill="#fff" stroke="#d6d9e0" stroke-width="2"/><rect x="1" y="1" width="638" height="40" rx="14" fill="#f1f3f4"/><rect x="1" y="28" width="638" height="13" fill="#f1f3f4"/><circle cx="24" cy="21" r="6" fill="#ff6159"/><circle cx="44" cy="21" r="6" fill="#ffbd2e"/><circle cx="64" cy="21" r="6" fill="#28c941"/><rect x="90" y="10" width="520" height="22" rx="11" fill="#fff"/><text x="104" y="26" font-size="12" fill="#5f6368">business.facebook.com/latest/settings/requests</text><text x="30" y="76" font-size="18" fill="#1c2b33" text-anchor="start" font-weight="bold">Requests</text><rect x="30" y="96" width="580" height="110" rx="10" fill="#f5f6f7" stroke="#dddfe2"/><text x="50" y="128" font-size="16" fill="#1c2b33" text-anchor="start" font-weight="bold">Booked Out Solutions</text><text x="50" y="152" font-size="13" fill="#65676b" text-anchor="start">wants to help manage your Page:</text><text x="50" y="174" font-size="13" fill="#1c2b33" text-anchor="start">Sarah Barre Harrison Photography LLC</text><rect x="470" y="130" width="120" height="38" rx="8" fill="#0866ff"/><text x="530.0" y="154.0" font-size="14" fill="#fff" text-anchor="middle" font-weight="bold">Approve</text><ellipse cx="530" cy="149" rx="76" ry="30" fill="none" stroke="#E5484D" stroke-width="4"/><rect x="350" y="130" width="110" height="38" rx="8" fill="#e4e6eb"/><text x="405.0" y="154.0" font-size="14" fill="#1c2b33" text-anchor="middle" font-weight="bold">Decline</text></svg><figcaption>Check it says Booked Out Solutions, then tap Approve.</figcaption></figure></li>
+<li>If Facebook asks for your password or a code, that is normal. Enter it, and it finishes.</li>
+</ol>
+<div class="worked"><b>How you know it worked:</b> Facebook says the request is <b>approved</b>.</div>
+<p class="note">We can post, reply to comments on your Page and see how your posts are doing. We won't have access to your messages or ads, and you stay the owner.</p>
+<p class="stuck"><b>Stuck?</b> Just reply to our email and we'll help.</p>
+<button type="button" class="done" data-item="facebook">Done</button>
+<div class="state" id="st-facebook" aria-live="polite"></div>
+</article>
+<article class="card" id="card-photos" data-item="photos">
+<div class="num">Last question</div>
+<h2>Can we use the photos on your website?</h2>
+<p class="why">For your Google and Facebook posts. Tap one:</p>
+<div class="choice">
+<button type="button" data-choice="Use the photos on my website">Use the photos on my website for my Google and Facebook posts</button>
+<button type="button" class="alt" data-choice="Ask me first">Ask me first</button>
+</div>
+<p class="note">Either way, we leave out photos of kids, and we never edit, filter or crop your images without asking.</p>
+<div class="state" id="st-photos" aria-live="polite"></div>
+</article>
+<div class="close"><h2>That's it. Everything else is on us.</h2>
+<p>Rickey Hallor<br>Booked Out Solutions</p></div>
+</div></main>
+<footer>Booked Out Solutions &middot; Questions? Just reply to our email.</footer>
+<script>
+(function(){
+var TOKEN=(location.pathname.match(/\/c\/([a-f0-9]{32,64})/)||[])[1]||"";
+var API="/api/client-answer";
+var ITEMS=["google","squarespace","facebook","photos"];
+var answers={};
+function el(id){return document.getElementById(id)}
+function progress(){var n=["google","squarespace","facebook"].filter(function(i){return answers[i]}).length;el("pc").textContent=n+" of 3 steps done";el("pb").style.width=(n*100/3)+"%"}
+function show(id){var a=answers[id],st=el("st-"+id),c=el("card-"+id);if(!a||!st)return;st.className="state";c.classList.add("ok");
+ if(id==="photos"){st.textContent="✓ Saved: "+a.answer+". Thank you!";[].forEach.call(c.querySelectorAll("[data-choice]"),function(b){b.classList.toggle("sel",b.getAttribute("data-choice")===a.answer)})}
+ else{st.textContent="✓ Done. Thank you!";var b=c.querySelector("button.done");if(b){b.textContent="Done ✓";}}
+ progress()}
+function save(id,answer,btn){
+ if(!TOKEN){el("st-"+id).textContent="Saved on this screen.";return}
+ if(btn)btn.disabled=true;var st=el("st-"+id);st.className="state";st.textContent="Saving...";
+ var timer=setTimeout(function(){st.className="state err";st.textContent="Not saved yet. Please try again, or just reply to our email.";if(btn)btn.disabled=false},10000);
+ fetch(API,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:TOKEN,answers:[{item:id,answer:answer,note:""}]})})
+ .then(function(r){return r.json()}).then(function(j){clearTimeout(timer);if(btn)btn.disabled=false;
+  if(j&&j.saved){answers[id]={answer:answer,time:j.time};show(id)}else{st.className="state err";st.textContent="Not saved yet. Please try again, or just reply to our email."}})
+ .catch(function(){clearTimeout(timer);if(btn)btn.disabled=false;st.className="state err";st.textContent="Not saved yet. Please try again, or just reply to our email."})}
+[].forEach.call(document.querySelectorAll("button.done"),function(b){b.addEventListener("click",function(){save(b.getAttribute("data-item"),"done",b)})});
+[].forEach.call(document.querySelectorAll("[data-choice]"),function(b){b.addEventListener("click",function(){save("photos",b.getAttribute("data-choice"),b)})});
+[].forEach.call(document.querySelectorAll("[data-copy]"),function(b){b.addEventListener("click",function(){
+ var v=b.getAttribute("data-copy");function ok(){b.textContent="Copied!";setTimeout(function(){b.textContent="Copy"},2000)}
+ if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(v).then(ok,fallback)}else fallback();
+ function fallback(){var t=document.createElement("textarea");t.value=v;t.setAttribute("readonly","");t.style.position="absolute";t.style.left="-9999px";document.body.appendChild(t);t.select();try{document.execCommand("copy");ok()}catch(e){b.textContent="Press and hold the address to copy"}document.body.removeChild(t)}
+})});
+if(TOKEN)fetch(API+"/state?t="+TOKEN,{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){Object.keys(j.answers||{}).forEach(function(id){if(ITEMS.indexOf(id)>=0){answers[id]=j.answers[id];show(id)}});progress()}).catch(function(){});
+progress();
+})();
+</script>
+</body>
+</html>
