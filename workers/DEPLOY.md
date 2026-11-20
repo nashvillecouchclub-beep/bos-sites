@@ -84,7 +84,8 @@ Endpoints for later jobs (all need `k` = STATUS_KEY):
 - Switches: `FOLLOWUPS` = `off` (default). Nothing goes unless `FOLLOWUPS` = `on` AND `LIVE` = `on`.
 - Stop rules: any message in the thread that is not ours (a reply or a bounce) stops it forever; `stop:<email>` stops it.
 - Knowing there is no reply: the token today has `gmail.send` only, so the thread read fails and every step HOLDS (watch entry)
-  unless the inbox job posts `{action:"clear"}` for that owner within the last 2 hours. To make it fully automatic, the same
+  unless the inbox job posts `{action:"clear"}` for that owner within the last 30 minutes. The report email now carries our
+  own Message-ID, so follow-ups set In-Reply-To even without the thread read (check on the first live send that Gmail kept it). To make it fully automatic, the same
   OAuth client needs `gmail.readonly` added and consent given once by rickey@getbookedoutsolutions.com (a Rickey sign-in step).
 - Endpoint: `POST /api/free-report/followup {id, k, action}` with action `stop` (any reply, "no", bounce, anger, paid/started),
   `later` (he said later / check back: main steps end, ladder starts today), `clear` (inbox checked, no reply), `status` (plan).

@@ -130,9 +130,10 @@ await test('No thread read (token has send scope only): holds with a watch entry
   assert.ok([...env.KV.m.keys()].some((k) => k.startsWith('watch:') && k.includes(id)));
   await T.followup(new Request('https://x/', { method: 'POST', body: JSON.stringify({ id, k: KEY, action: 'clear' }) }), env, at('2026-11-18T08:00:00-06:00'));
   await T.fuTick(env, at('2026-11-18T11:15:00-06:00'), f); assert.equal(sends(f).length, 0, 'clear stamp over 2 hours old');
-  await T.followup(new Request('https://x/', { method: 'POST', body: JSON.stringify({ id, k: KEY, action: 'clear' }) }), env, at('2026-11-18T11:00:00-06:00'));
+  await T.followup(new Request('https://x/', { method: 'POST', body: JSON.stringify({ id, k: KEY, action: 'clear' }) }), env, at('2026-11-18T11:10:00-06:00'));
   await T.fuTick(env, at('2026-11-18T11:30:00-06:00'), f); assert.equal(sends(f).length, 1);
   assert.equal(decode(sends(f)[0]).threadId, 'abc123def');
+  assert.match(decode(sends(f)[0]).hd, /In-Reply-To: <fr-\d{8}-[a-z0-9]{6}\.[a-f0-9]{12}@getbookedoutsolutions\.com>/, 'our own Message-ID from the report');
 });
 
 await test('The reply desk can stop or move him to "later" (ladder starts from that day)', async () => {
@@ -182,6 +183,51 @@ await test('Warm (introducer on file): 3 steps on business days 2, 7, 12, introd
   const f = gfetch(); await T.fuTick(env, at('2026-11-19T11:15:00-06:00'), f);
   const m = decode(sends(f)[0]);
   assert.match(m.text, /Since Jamie put us in touch/); assert.match(m.text, /You got this because you asked for a free report\.\nReply "stop"/);
+});
+
+await test('The report email carries our own Message-ID, and the follow-ups point at it', async () => {
+  const { f, rec } = await sent();
+  const m = decode(sends(f)[0]);
+  assert.match(m.hd, /Message-ID: <fr-/); assert.equal(rec().fu.msgid, m.hd.match(/Message-ID: (<[^>]+>)/)[1]);
+});
+
+await test('Held for 3 weeks then switched on: no burst, each step keeps its gap after the last real send', async () => {
+  const { env, rec } = await sent();
+  const f = gfetch();
+  for (let d = new Date('2026-11-18T17:15:00Z'), i = 0; i < 21; i++, d = new Date(d.getTime() + 86400000)) await T.fuTick(env, d, f);
+  assert.equal(sends(f).length, 0);
+  env.FOLLOWUPS = 'on';
+  for (let d = new Date('2026-12-09T17:15:00Z'), i = 0; i < 40; i++, d = new Date(d.getTime() + 86400000)) await T.fuTick(env, d, f);
+  const done = rec().fu.done, days = ['c1', 'c2', 'c3', 'c4', 'c5'].map((k) => done[k].at.slice(0, 10));
+  assert.deepEqual(days, ['2026-12-09', '2026-12-11', '2026-12-17', '2026-12-24', '2027-01-05']);
+});
+
+await test('Two overlapping cron runs on the same day send once (the day is claimed before the send)', async () => {
+  const { env } = await sent({ FOLLOWUPS: 'on' });
+  const f = gfetch();
+  await Promise.all([T.fuTick(env, at('2026-11-18T11:15:00-06:00'), f), T.fuTick(env, at('2026-11-18T11:15:00-06:00'), f)]);
+  assert.equal(sends(f).length, 1);
+});
+
+await test('Facts never repeat: map "not found" in c2 means n2 does not send it again', async () => {
+  const fills = { ...FILLS, google: { ...FILLS.google, rank_for_keyword: null }, ai: { chatgpt: { named: true }, gemini: { named: false } } };
+  const { env, rec } = await sent({ FOLLOWUPS: 'on' }, SHOP, fills);
+  const f = gfetch();
+  for (let d = new Date('2026-11-18T17:15:00Z'), i = 0; i < 150; i++, d = new Date(d.getTime() + 86400000)) await T.fuTick(env, d, f);
+  const texts = sends(f).map((c) => decode(c).text);
+  assert.equal(texts.filter((t) => /didn't show up/.test(t)).length, 1, texts.map((t) => t.slice(10, 60)).join(' | '));
+});
+
+await test('A bare domain in a filled email is refused (it would turn into a link)', () => {
+  assert.deepEqual(FU.bodyProblems('Hi,\nAirPros.com has 4 reviews.\nWant it?', 'https://getbookedoutsolutions.com/r/x/'), ['bare domain']);
+  assert.deepEqual(FU.bodyProblems('Hi,\nhttps://getbookedoutsolutions.com/r/x/\nWant it?', 'https://getbookedoutsolutions.com/r/x/'), []);
+});
+
+await test('A finished sequence removes its key so the list stays short', async () => {
+  const { env, id } = await sent({ FOLLOWUPS: 'on' });
+  const f = gfetch();
+  for (let d = new Date('2026-11-18T17:15:00Z'), i = 0; i < 420; i++, d = new Date(d.getTime() + 86400000)) await T.fuTick(env, d, f);
+  assert.ok(!env.KV.m.has('fu:' + id));
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

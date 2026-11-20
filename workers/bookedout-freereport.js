@@ -202,13 +202,14 @@ function ownerEmail(env, rec) {
     '',
     'You got this because you asked for a free report on our website. Reply "stop" and we will not email you again.',
   ].join('\n');
-  return { from: env.SEND_FROM || FROM, to: rec.email, subject, text };
+  return { from: env.SEND_FROM || FROM, to: rec.email, subject, text, messageId: rec.send_msgid || '' };
 }
 const b64u = (str) => { const by = new TextEncoder().encode(str); let bin = ''; for (const x of by) bin += String.fromCharCode(x); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
 const b64 = (str) => { const by = new TextEncoder().encode(str); let bin = ''; for (const x of by) bin += String.fromCharCode(x); return btoa(bin); };
 function mime(m) {
   const hdr = (v) => (v = String(v).replace(/[\r\n]+/g, ' ')) && /^[\x20-\x7e]*$/.test(v) ? v : `=?UTF-8?B?${b64(v)}?=`;
   return [`From: ${m.from}`, `To: ${m.to}`, `Subject: ${hdr(m.subject)}`, 'MIME-Version: 1.0',
+    ...(m.messageId && /^<[\w.-]+@getbookedoutsolutions\.com>$/.test(m.messageId) ? [`Message-ID: ${m.messageId}`] : []),
     ...(m.inReplyTo ? [`In-Reply-To: ${hdr(m.inReplyTo)}`, `References: ${hdr(m.inReplyTo)}`] : []),
     'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', b64(m.text)].join('\r\n');
 }
@@ -282,6 +283,8 @@ function sendBlock(env, rec) {
 async function deliverToOwner(env, rec, f) {
   const why = sendBlock(env, rec);
   if (why) return { sent: false, blocked: true, reason: why };
+  // Our own Message-ID, so follow-ups can say In-Reply-To even when we cannot read the thread back.
+  if (!rec.send_msgid) rec.send_msgid = `<${rec.id}.${rand(6)}@getbookedoutsolutions.com>`;
   const r = await sendMail(env, ownerEmail(env, rec), f);
   return r.ok ? { sent: true, blocked: false, route: r.route, id: r.id, threadId: r.threadId || '' } : { sent: false, blocked: false, route: r.route, reason: r.error };
 }
@@ -637,7 +640,7 @@ async function trySend(env, rec, now, f) {
   if (r.sent) {
     rec.status = 'sent'; rec.sent = now.toISOString(); rec.sent_by = 'auto'; rec.send_route = r.route; rec.send_id = r.id || '';
     await env.KV.delete('open:' + rec.id);
-    await startFollowups(env, rec, now, r.threadId || '');
+    try { await startFollowups(env, rec, now, r.threadId || ''); } catch (e) { /* never blocks saving the sent report */ }
     return { changed: true, log: 'sent' };
   }
   if (r.blocked) {
@@ -713,8 +716,9 @@ function fuHelpers() {
 }
 async function startFollowups(env, rec, now, threadId) {
   if (rec.test || rec.fu) return;
-  rec.fu = { day0: now.toISOString(), hour: local(now).h, thread: threadId, subject: ownerEmail(env, rec).subject, done: {}, facts: [], started: now.toISOString() };
-  await env.KV.put('fu:' + rec.id, '1', { expirationTtl: 3 * KEEP });
+  rec.fu = { day0: now.toISOString(), hour: Math.min(16, Math.max(8, local(now).h)), thread: threadId, msgid: rec.send_msgid || '',
+    subject: ownerEmail(env, rec).subject, done: {}, facts: [], started: now.toISOString() };
+  try { await env.KV.put('fu:' + rec.id, '1', { expirationTtl: 3 * KEEP }); } catch (e) { rec.fu.marker_error = String((e && e.message) || e).slice(0, 200); }
 }
 async function fuStop(env, rec, why, now) {
   rec.fu.stopped = { why, at: now.toISOString() };
@@ -724,47 +728,72 @@ async function fuStop(env, rec, why, now) {
 // One pass over every running sequence. At most one email per owner per day; any doubt = hold.
 async function fuTick(env, now, f) {
   const log = [], h = fuHelpers();
-  const keys = (await env.KV.list({ prefix: 'fu:' })).keys.slice(0, 200);
-  for (const k of keys) {
+  // Every running sequence, paged (finished ones delete their key, so the list stays short); newest first.
+  let keys = [], cursor;
+  for (let i = 0; i < 10; i++) {
+    const r = await env.KV.list({ prefix: 'fu:', cursor });
+    keys = keys.concat(r.keys || []);
+    if (r.list_complete !== false || !r.cursor) break;
+    cursor = r.cursor;
+  }
+  keys.reverse();
+  for (const k of keys.slice(0, 300)) {
+    try { await fuOne(env, k, now, f, h, log); } catch (e) { log.push('fu-error ' + k.name + ' ' + String((e && e.message) || e).slice(0, 80)); }
+  }
+  return log;
+}
+async function fuOne(env, k, now, f, h, log) {
+  {
     const id = k.name.slice(3), rec = await getJ(env, 'req:' + id);
-    if (!rec || !rec.fu || rec.fu.stopped) { await env.KV.delete(k.name); continue; }
+    if (!rec || !rec.fu || rec.fu.stopped) { await env.KV.delete(k.name); return; }
     const stopKey = rec.email ? await env.KV.get('stop:' + rec.email) : null;
     const n = FU.next(rec, env, now, h, stopKey);
-    if (n.action === 'stop') { await fuStop(env, rec, n.why, now); await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-stop ' + id); continue; }
-    if (n.action === 'skip') { rec.fu.done[n.step] = { at: now.toISOString(), status: 'skipped', why: n.why }; await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-skip ' + n.step + ' ' + id); continue; }
-    if (n.action === 'hold' && rec.fu.hold !== n.why) { rec.fu.hold = n.why; await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-hold ' + id); continue; }
-    if (n.action !== 'send') continue;
+    if (n.action === 'none' && /finished/.test(n.why || '')) { await env.KV.delete(k.name); log.push('fu-finished ' + id); return; }
+    if (n.action === 'stop') { await fuStop(env, rec, n.why, now); await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-stop ' + id); return; }
+    if (n.action === 'skip') { rec.fu.done[n.step] = { at: now.toISOString(), status: 'skipped', why: n.why }; await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-skip ' + n.step + ' ' + id); return; }
+    if (n.action === 'hold' && rec.fu.hold !== n.why) { rec.fu.hold = n.why; await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-hold ' + id); return; }
+    if (n.action !== 'send') return;
     // Know there is no reply: the thread read, or a fresh "clear" stamp from the inbox job.
-    let inReplyTo = '';
+    let inReplyTo = rec.fu.msgid || '';
     const t = await gmailThread(env, rec.fu.thread, f);
     if (t.ok) {
       const th = FU.readThread(t.thread, 'rickey@getbookedoutsolutions.com');
-      if (th.replied) { await fuStop(env, rec, 'reply or bounce in the thread', now); await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-stop-reply ' + id); continue; }
-      inReplyTo = th.messageId;
+      if (th.replied) { await fuStop(env, rec, 'reply or bounce in the thread', now); await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-stop-reply ' + id); return; }
+      inReplyTo = th.messageId || inReplyTo;
     } else if (!(rec.fu.clear_at && now.getTime() - Date.parse(rec.fu.clear_at) < FU.CLEAR_WINDOW_MS)) {
       const why = 'cannot confirm no reply (' + t.error + '); needs the thread read or an inbox clear stamp';
       if (rec.fu.hold !== why) {
         rec.fu.hold = why; await putJ(env, 'req:' + id, rec, KEEP);
         await sendAlert(env, `Free report follow-up held: ${rec.business_name}`, `Step ${n.step} is due but we cannot confirm there is no reply. ${why}.`, f, 'warn', id);
       }
-      log.push('fu-hold-noread ' + id); continue;
+      log.push('fu-hold-noread ' + id); return;
     }
     const m = { from: env.SEND_FROM || FROM, to: rec.email, subject: 'Re: ' + rec.fu.subject, text: n.text, threadId: rec.fu.thread || '', inReplyTo };
+    // Claim the step and the day BEFORE sending: a missed email is safe, a double email is not.
+    const day = new Date(now).toLocaleDateString('en-CA', { timeZone: TZ });
+    const ck = `fusend:${id}:${day}`, mine = n.step + ':' + rand(6);
+    if (await env.KV.get(ck)) { log.push('fu-claimed ' + id); return; }
+    await env.KV.put(ck, mine, { expirationTtl: 3 * DAY });
+    if ((await env.KV.get(ck)) !== mine) { log.push('fu-claimed ' + id); return; } // another run claimed it first
+    const prevDay = rec.fu.last_sent_day;
+    rec.fu.done[n.step] = { at: now.toISOString(), status: 'sending' };
+    rec.fu.last_sent_day = day;
+    await putJ(env, 'req:' + id, rec, KEEP);
     const r = await sendMail(env, m, f);
     if (r.ok) {
       rec.fu.done[n.step] = { at: now.toISOString(), status: 'sent', id: r.id || '' };
       rec.fu.facts = [...new Set([...(rec.fu.facts || []), ...n.facts])];
-      rec.fu.last_sent_day = new Date(now).toLocaleDateString('en-CA', { timeZone: TZ });
       rec.fu.hold = ''; rec.fu.clear_at = '';
       log.push('fu-sent ' + n.step + ' ' + id);
     } else {
+      delete rec.fu.done[n.step]; rec.fu.last_sent_day = prevDay;
+      await env.KV.delete(`fusend:${id}:${day}`);
       rec.fu.fails = (rec.fu.fails || 0) + 1;
       if (rec.fu.fails === 1 || rec.fu.fails % 4 === 0) await sendAlert(env, `Free report follow-up send failed: ${rec.business_name}`, `Step ${n.step}: ${r.error}`, f, 'problem', id);
       log.push('fu-fail ' + id);
     }
     await putJ(env, 'req:' + id, rec, KEEP);
   }
-  return log;
 }
 // POST /api/free-report/followup {id, k, action: "stop" | "later" | "clear" | "status", why}
 // stop  = any reply, "no", "stop", bounce, anger, or he paid/started (the reply desk calls this). Forever.

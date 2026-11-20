@@ -7,14 +7,15 @@
 //   2. Stopped forever on: any reply in the thread (incl. bounces), POST /followup action "stop", a stop:<email> key.
 //   3. We must KNOW there is no reply: either the Gmail thread read works (needs gmail.readonly on the token) and shows
 //      only our own messages, or the inbox job stamped "clear" for this owner in the last 2 hours. Otherwise it holds.
-//   4. One email per owner per day, never before the hour the report went out, business days only,
+//   4. One email per owner per day, never before the hour the report went out (kept between 8 am and 4 pm), business days only,
 //      Thanksgiving Day and Christmas Day slide to the next business day.
 //   5. The filled email is checked again: under 120 words, exactly one "?" on the last line, no "$", no long dashes,
 //      no emojis, no link but the report link, no {token} left. A fail goes to the step's fallback, or the step is skipped.
 import SEQ from './freereport-followups-seq.js';
 
 export const FU_SEQ = SEQ;
-const CLEAR_MS = 2 * 3600 * 1000;
+const CLEAR_MS = 30 * 60 * 1000; // the inbox job's "clear" is good for 30 minutes only
+const FACT_ALIAS = { ai_result: 'ai_named' }; // one fact, two ways to say it
 // Placeholders that name the owner or the report; they are not "facts" for the facts-used rule.
 const IDENT = new Set(['first_name', 'business', 'town', 'trade_word', 'search_phrase', 'report_link', 'report_date', 'months_since', 'checks_list', 'introducer']);
 const TRADE_WORD = { hvac: 'HVAC company', plumber: 'plumber', electrician: 'electrician' };
@@ -103,6 +104,8 @@ export function bodyProblems(body, reportLink) {
   if (/\{[a-z_0-9]+\}/.test(body)) p.push('placeholder left');
   const links = body.match(/https?:\/\/\S+|www\.\S+/g) || [];
   if (links.some((l) => l.replace(/[.,]$/, '') !== reportLink)) p.push('link other than the report');
+  // a bare domain (AirPros.com) turns into a link in most mail apps
+  if (/\b[\w-]+\.(com|net|org|biz|co|us|io|info)\b/i.test(body.split(reportLink).join(' '))) p.push('bare domain');
   const low = body.toLowerCase();
   if (BANNED.some((b) => low.includes(b))) p.push('banned phrase');
   return p;
@@ -117,7 +120,8 @@ export function resolveStep(step, v, factsUsed = []) {
   let node = step;
   while (node && !node.skip) {
     const needs = node.needs || [];
-    const facts = needs.filter((k) => !IDENT.has(k));
+    const whenKeys = node.when ? [String(node.when).split(' ')[0]] : [];
+    const facts = [...new Set([...needs, ...whenKeys].filter((k) => !IDENT.has(k)).map((k) => FACT_ALIAS[k] || k))];
     const quotesSearch = /"\{trade_word\} \{town\}"/.test(node.body || '');
     const ok = whenOk(node.when, v) && needs.every((k) => v[k] !== undefined) && (!quotesSearch || v.search_phrase !== undefined) && !facts.some((k) => factsUsed.includes(k));
     if (ok) {
@@ -150,7 +154,19 @@ export function slide(p, h) { let x = p; while (!okDay(x, h)) x = addDays(x, 1);
 // main step's actual send day (or the day he said "later").
 export function plan(rec, h) {
   const fu = rec.fu, d0 = h.local(new Date(fu.day0));
-  const main = (rec.warm ? SEQ.warm : SEQ.cold).map((s) => ({ id: s.step, node: s, due: addBusinessDays(d0, s.day, h) }));
+  // Each main step keeps its planned gap after the step before it actually went (or was skipped), so a sequence that
+  // was held for a while never sends a burst of back-to-back emails when it starts again.
+  const main = [];
+  for (const s of rec.warm ? SEQ.warm : SEQ.cold) {
+    let due = addBusinessDays(d0, s.day, h);
+    const prev = main[main.length - 1];
+    if (prev) {
+      const pd = fu.done[prev.id], base = pd ? h.local(new Date(pd.at)) : prev.due;
+      const after = addBusinessDays(base, s.day - prev.node.day, h);
+      if (ymd(after) > ymd(due)) due = after;
+    }
+    main.push({ id: s.step, node: s, due });
+  }
   const out = fu.later_at ? [] : main;
   const lastMain = fu.later_at ? h.local(new Date(fu.later_at))
     : (() => { const ids = main.map((m) => m.id); const done = ids.map((i) => fu.done[i]).filter(Boolean);
