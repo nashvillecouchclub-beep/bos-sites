@@ -1,0 +1,1014 @@
+[
+{
+"id": "call01",
+"name": "Jamie",
+"type": "nail salon",
+"lines": [
+"Hi, this is Jamie.",
+"I have a nail salon business.",
+"Kind of slow lately.",
+"How much does it cost?",
+"Do you guarantee jobs?",
+"What's in Complete?",
+"Okay.",
+"What's the difference between Core and Complete?",
+"What kind of business did I tell you I have?",
+"What would you actually do for us?",
+"I got burned by a marketing company before.",
+"Can I talk to Rickey?",
+"I need more work honestly.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call02",
+"name": "Mike",
+"type": "hair salon",
+"lines": [
+"Hey.",
+"Mike.",
+"I run a hair salon, we've been open about six years.",
+"What's in Complete?",
+"Give me the list of what's in it.",
+"What's the difference between Core and Complete?",
+"What would you actually do for us?",
+"I already told you.",
+"What kind of business did I tell you I have?",
+"I need more work honestly.",
+"Okay.",
+"How do I cancel?",
+"I got burned by a marketing company before.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call03",
+"name": "Dana",
+"type": "barbershop",
+"lines": [
+"Hi, I'm Dana and I own a barbershop called Dana's Place.",
+"Yeah, things are okay.",
+"Hmm, that's a lot of money.",
+"Could be.",
+"Do you guarantee jobs?",
+"Okay.",
+"Give me the list of what's in it.",
+"What kind of business did I tell you I have?",
+"What's in Complete?",
+"Is this call recorded?",
+"I got burned by a marketing company before.",
+"I don't know.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call04",
+"name": "Luis",
+"type": "gym",
+"lines": [
+"Hi, this is Luis.",
+"I have a gym business.",
+"Kind of slow lately.",
+"Are you a robot?",
+"Give me the list of what's in it.",
+"Can I talk to Rickey?",
+"What kind of business did I tell you I have?",
+"What's in Complete?",
+"I got burned by a marketing company before.",
+"Is this call recorded?",
+"What would you actually do for us?",
+"Could be.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call05",
+"name": "Tasha",
+"type": "auto repair",
+"lines": [
+"Hey.",
+"Tasha.",
+"I run a auto repair, we've been open about six years.",
+"What would you actually do for us?",
+"Can I talk to Rickey?",
+"What's the AI receptionist?",
+"Do you guarantee jobs?",
+"I don't know.",
+"What kind of business did I tell you I have?",
+"What's the difference between Core and Complete?",
+"Could be.",
+"How do I cancel?",
+"Are you a robot?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call06",
+"name": "Greg",
+"type": "house cleaning",
+"lines": [
+"Hi, I'm Greg and I own a house cleaning called Greg's Place.",
+"Yeah, things are okay.",
+"Could be.",
+"What's the difference between Core and Complete?",
+"Are you a robot?",
+"What's in Complete?",
+"How much does it cost?",
+"What kind of business did I tell you I have?",
+"Okay.",
+"Hmm, that's a lot of money.",
+"I got burned by a marketing company before.",
+"Is this call recorded?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call07",
+"name": "Priya",
+"type": "photography",
+"lines": [
+"Hi, this is Priya.",
+"I have a photography business.",
+"Kind of slow lately.",
+"I don't know.",
+"How do I cancel?",
+"Could be.",
+"How much does it cost?",
+"Give me the list of what's in it.",
+"What kind of business did I tell you I have?",
+"I got burned by a marketing company before.",
+"Can I talk to Rickey?",
+"Is this call recorded?",
+"Are you a robot?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call08",
+"name": "Tony",
+"type": "dog grooming",
+"lines": [
+"Hey.",
+"Tony.",
+"I run a dog grooming, we've been open about six years.",
+"Hmm, that's a lot of money.",
+"What's the AI receptionist?",
+"Do you guarantee jobs?",
+"What would you actually do for us?",
+"How much does it cost?",
+"What kind of business did I tell you I have?",
+"I already told you.",
+"I got burned by a marketing company before.",
+"Could be.",
+"Are you a robot?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call09",
+"name": "Ashley",
+"type": "martial arts studio",
+"lines": [
+"Hi, I'm Ashley and I own a martial arts studio called Ashley's Place.",
+"Yeah, things are okay.",
+"I don't know.",
+"What kind of business did I tell you I have?",
+"What's the AI receptionist?",
+"How do I cancel?",
+"How much does it cost?",
+"Do you guarantee jobs?",
+"What would you actually do for us?",
+"Hmm, that's a lot of money.",
+"What's the difference between Core and Complete?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call10",
+"name": "Ray",
+"type": "dance studio",
+"lines": [
+"Hi, this is Ray.",
+"I have a dance studio business.",
+"Kind of slow lately.",
+"How much does it cost?",
+"What would you actually do for us?",
+"Could be.",
+"How do I cancel?",
+"Is there a bigger package?",
+"What kind of business did I tell you I have?",
+"Can I talk to Rickey?",
+"I don't know.",
+"Are you a robot?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call11",
+"name": "Jamie",
+"type": "junk removal",
+"lines": [
+"Hey.",
+"Jamie.",
+"I run a junk removal, we've been open about six years.",
+"I need more work honestly.",
+"How do I cancel?",
+"What kind of business did I tell you I have?",
+"Are you a robot?",
+"Give me the list of what's in it.",
+"What's the difference between Core and Complete?",
+"Okay.",
+"What's the AI receptionist?",
+"Hmm, that's a lot of money.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call12",
+"name": "Mike",
+"type": "handyman",
+"lines": [
+"Hi, I'm Mike and I own a handyman called Mike's Place.",
+"Yeah, things are okay.",
+"Hmm, that's a lot of money.",
+"What's the difference between Core and Complete?",
+"I already told you.",
+"Is there a bigger package?",
+"What's the AI receptionist?",
+"What kind of business did I tell you I have?",
+"What would you actually do for us?",
+"How much does it cost?",
+"What's in Complete?",
+"Can I talk to Rickey?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call13",
+"name": "Dana",
+"type": "pressure washing",
+"lines": [
+"Hi, this is Dana.",
+"I have a pressure washing business.",
+"Kind of slow lately.",
+"Is there a bigger package?",
+"I got burned by a marketing company before.",
+"Hmm, that's a lot of money.",
+"Do you guarantee jobs?",
+"What's in Complete?",
+"What kind of business did I tell you I have?",
+"Can I talk to Rickey?",
+"Are you a robot?",
+"I don't know.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call14",
+"name": "Luis",
+"type": "tattoo shop",
+"lines": [
+"Hey.",
+"Luis.",
+"I run a tattoo shop, we've been open about six years.",
+"I already told you.",
+"What's the difference between Core and Complete?",
+"Hmm, that's a lot of money.",
+"How much does it cost?",
+"Are you a robot?",
+"What kind of business did I tell you I have?",
+"Is this call recorded?",
+"Give me the list of what's in it.",
+"I don't know.",
+"Do you guarantee jobs?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call15",
+"name": "Tasha",
+"type": "dry cleaner",
+"lines": [
+"Hi, I'm Tasha and I own a dry cleaner called Tasha's Place.",
+"Yeah, things are okay.",
+"I need more work honestly.",
+"What's the AI receptionist?",
+"Are you a robot?",
+"I got burned by a marketing company before.",
+"Could be.",
+"What kind of business did I tell you I have?",
+"Okay.",
+"How much does it cost?",
+"Can I talk to Rickey?",
+"Is this call recorded?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call16",
+"name": "Greg",
+"type": "florist",
+"lines": [
+"Hi, this is Greg.",
+"I have a florist business.",
+"Kind of slow lately.",
+"What kind of business did I tell you I have?",
+"What's in Complete?",
+"I don't know.",
+"Hmm, that's a lot of money.",
+"What would you actually do for us?",
+"What's the difference between Core and Complete?",
+"Do you guarantee jobs?",
+"I already told you.",
+"Is there a bigger package?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call17",
+"name": "Priya",
+"type": "driving school",
+"lines": [
+"Hey.",
+"Priya.",
+"I run a driving school, we've been open about six years.",
+"Is there a bigger package?",
+"I already told you.",
+"What's in Complete?",
+"Okay.",
+"Is this call recorded?",
+"What kind of business did I tell you I have?",
+"What would you actually do for us?",
+"What's the difference between Core and Complete?",
+"I don't know.",
+"Can I talk to Rickey?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call18",
+"name": "Tony",
+"type": "food truck",
+"lines": [
+"Hi, I'm Tony and I own a food truck called Tony's Place.",
+"Yeah, things are okay.",
+"What would you actually do for us?",
+"Can I talk to Rickey?",
+"How much does it cost?",
+"What's in Complete?",
+"How do I cancel?",
+"What kind of business did I tell you I have?",
+"Is there a bigger package?",
+"Okay.",
+"Are you a robot?",
+"Could be.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call19",
+"name": "Ashley",
+"type": "massage studio",
+"lines": [
+"Hi, this is Ashley.",
+"I have a massage studio business.",
+"Kind of slow lately.",
+"What would you actually do for us?",
+"Give me the list of what's in it.",
+"I need more work honestly.",
+"Hmm, that's a lot of money.",
+"What's in Complete?",
+"What kind of business did I tell you I have?",
+"Are you a robot?",
+"Could be.",
+"Is there a bigger package?",
+"Okay.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call20",
+"name": "Ray",
+"type": "yoga studio",
+"lines": [
+"Hey.",
+"Ray.",
+"I run a yoga studio, we've been open about six years.",
+"Can I talk to Rickey?",
+"I already told you.",
+"Hmm, that's a lot of money.",
+"I got burned by a marketing company before.",
+"What kind of business did I tell you I have?",
+"Could be.",
+"Are you a robot?",
+"What's the difference between Core and Complete?",
+"What would you actually do for us?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call21",
+"name": "Jamie",
+"type": "heating and air",
+"lines": [
+"Hi, I'm Jamie and I own a heating and air called Jamie's Place.",
+"Yeah, things are okay.",
+"Give me the list of what's in it.",
+"What's the AI receptionist?",
+"How do I cancel?",
+"What's in Complete?",
+"Is this call recorded?",
+"What kind of business did I tell you I have?",
+"Hmm, that's a lot of money.",
+"What would you actually do for us?",
+"How much does it cost?",
+"Do you guarantee jobs?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call22",
+"name": "Mike",
+"type": "plumbing",
+"lines": [
+"Hi, this is Mike.",
+"I have a plumbing business.",
+"Kind of slow lately.",
+"I don't know.",
+"I got burned by a marketing company before.",
+"What's the AI receptionist?",
+"Are you a robot?",
+"I need more work honestly.",
+"What kind of business did I tell you I have?",
+"Give me the list of what's in it.",
+"What's in Complete?",
+"Is this call recorded?",
+"How much does it cost?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call23",
+"name": "Dana",
+"type": "electrical",
+"lines": [
+"Hey.",
+"Dana.",
+"I run a electrical, we've been open about six years.",
+"Is there a bigger package?",
+"I need more work honestly.",
+"Is this call recorded?",
+"Could be.",
+"How much does it cost?",
+"What kind of business did I tell you I have?",
+"Do you guarantee jobs?",
+"Hmm, that's a lot of money.",
+"I got burned by a marketing company before.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call24",
+"name": "Luis",
+"type": "roofing",
+"lines": [
+"Hi, I'm Luis and I own a roofing called Luis's Place.",
+"Yeah, things are okay.",
+"What kind of business did I tell you I have?",
+"Are you a robot?",
+"Okay.",
+"What's the difference between Core and Complete?",
+"I don't know.",
+"What's the AI receptionist?",
+"Give me the list of what's in it.",
+"Could be.",
+"Do you guarantee jobs?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call25",
+"name": "Tasha",
+"type": "pool building",
+"lines": [
+"Hi, this is Tasha.",
+"I have a pool building business.",
+"Kind of slow lately.",
+"What's the difference between Core and Complete?",
+"I already told you.",
+"Okay.",
+"Can I talk to Rickey?",
+"What's the AI receptionist?",
+"Are you a robot?",
+"What kind of business did I tell you I have?",
+"I need more work honestly.",
+"What's in Complete?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call26",
+"name": "Greg",
+"type": "solar",
+"lines": [
+"Hey.",
+"Greg.",
+"I run a solar, we've been open about six years.",
+"I got burned by a marketing company before.",
+"What's the AI receptionist?",
+"Okay.",
+"Can I talk to Rickey?",
+"What kind of business did I tell you I have?",
+"What's the difference between Core and Complete?",
+"I already told you.",
+"What's in Complete?",
+"Are you a robot?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call27",
+"name": "Priya",
+"type": "kitchen and bath remodeling",
+"lines": [
+"Hi, I'm Priya and I own a kitchen and bath remodeling called Priya's Place.",
+"Yeah, things are okay.",
+"What kind of business did I tell you I have?",
+"How much does it cost?",
+"What's the difference between Core and Complete?",
+"Give me the list of what's in it.",
+"Is there a bigger package?",
+"What's the AI receptionist?",
+"Is this call recorded?",
+"Are you a robot?",
+"Do you guarantee jobs?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call28",
+"name": "Tony",
+"type": "foundation repair",
+"lines": [
+"Hi, this is Tony.",
+"I have a foundation repair business.",
+"Kind of slow lately.",
+"What's the AI receptionist?",
+"I need more work honestly.",
+"Okay.",
+"What kind of business did I tell you I have?",
+"How much does it cost?",
+"Do you guarantee jobs?",
+"I don't know.",
+"What would you actually do for us?",
+"Can I talk to Rickey?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call29",
+"name": "Ashley",
+"type": "fencing",
+"lines": [
+"Hey.",
+"Ashley.",
+"I run a fencing, we've been open about six years.",
+"Can I talk to Rickey?",
+"What's the AI receptionist?",
+"Are you a robot?",
+"Do you guarantee jobs?",
+"I don't know.",
+"What would you actually do for us?",
+"I already told you.",
+"What kind of business did I tell you I have?",
+"Okay.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call30",
+"name": "Ray",
+"type": "painting",
+"lines": [
+"Hi, I'm Ray and I own a painting called Ray's Place.",
+"Yeah, things are okay.",
+"How do I cancel?",
+"I already told you.",
+"How much does it cost?",
+"Are you a robot?",
+"Is this call recorded?",
+"What kind of business did I tell you I have?",
+"Is there a bigger package?",
+"I need more work honestly.",
+"Okay.",
+"Could be.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call31",
+"name": "Jamie",
+"type": "landscaping",
+"lines": [
+"Hi, this is Jamie.",
+"I have a landscaping business.",
+"Kind of slow lately.",
+"How do I cancel?",
+"Hmm, that's a lot of money.",
+"What's the AI receptionist?",
+"What kind of business did I tell you I have?",
+"What's in Complete?",
+"I got burned by a marketing company before.",
+"Okay.",
+"How much does it cost?",
+"I need more work honestly.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call32",
+"name": "Mike",
+"type": "tree service",
+"lines": [
+"Hey.",
+"Mike.",
+"I run a tree service, we've been open about six years.",
+"I need more work honestly.",
+"Give me the list of what's in it.",
+"Is this call recorded?",
+"Hmm, that's a lot of money.",
+"Do you guarantee jobs?",
+"What kind of business did I tell you I have?",
+"What's the AI receptionist?",
+"What's in Complete?",
+"How do I cancel?",
+"Okay.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call33",
+"name": "Dana",
+"type": "pest control",
+"lines": [
+"Hi, I'm Dana and I own a pest control called Dana's Place.",
+"Yeah, things are okay.",
+"I got burned by a marketing company before.",
+"Can I talk to Rickey?",
+"Could be.",
+"Is this call recorded?",
+"What's the difference between Core and Complete?",
+"What kind of business did I tell you I have?",
+"I already told you.",
+"Is there a bigger package?",
+"Are you a robot?",
+"Hmm, that's a lot of money.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call34",
+"name": "Luis",
+"type": "garage door",
+"lines": [
+"Hi, this is Luis.",
+"I have a garage door business.",
+"Kind of slow lately.",
+"Is there a bigger package?",
+"Do you guarantee jobs?",
+"Hmm, that's a lot of money.",
+"What would you actually do for us?",
+"What kind of business did I tell you I have?",
+"How do I cancel?",
+"What's the difference between Core and Complete?",
+"I don't know.",
+"Could be.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call35",
+"name": "Tasha",
+"type": "law firm",
+"lines": [
+"Hey.",
+"Tasha.",
+"I run a law firm, we've been open about six years.",
+"Is this call recorded?",
+"Do you guarantee jobs?",
+"Okay.",
+"Hmm, that's a lot of money.",
+"Is there a bigger package?",
+"What kind of business did I tell you I have?",
+"I got burned by a marketing company before.",
+"How do I cancel?",
+"I need more work honestly.",
+"What's the difference between Core and Complete?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call36",
+"name": "Greg",
+"type": "dental office",
+"lines": [
+"Hi, I'm Greg and I own a dental office called Greg's Place.",
+"Yeah, things are okay.",
+"Are you a robot?",
+"I need more work honestly.",
+"Hmm, that's a lot of money.",
+"Okay.",
+"Is there a bigger package?",
+"What's the difference between Core and Complete?",
+"Could be.",
+"What kind of business did I tell you I have?",
+"What would you actually do for us?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call37",
+"name": "Priya",
+"type": "real estate",
+"lines": [
+"Hi, this is Priya.",
+"I have a real estate business.",
+"Kind of slow lately.",
+"Is there a bigger package?",
+"What would you actually do for us?",
+"I don't know.",
+"Is this call recorded?",
+"What's the AI receptionist?",
+"What kind of business did I tell you I have?",
+"I already told you.",
+"How do I cancel?",
+"What's in Complete?",
+"I got burned by a marketing company before.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call38",
+"name": "Tony",
+"type": "wedding venue",
+"lines": [
+"Hey.",
+"Tony.",
+"I run a wedding venue, we've been open about six years.",
+"What would you actually do for us?",
+"What's the difference between Core and Complete?",
+"Can I talk to Rickey?",
+"I got burned by a marketing company before.",
+"Okay.",
+"What kind of business did I tell you I have?",
+"I already told you.",
+"What's the AI receptionist?",
+"Is this call recorded?",
+"What's in Complete?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call39",
+"name": "Ashley",
+"type": "med spa",
+"lines": [
+"Hi, I'm Ashley and I own a med spa called Ashley's Place.",
+"Yeah, things are okay.",
+"Is there a bigger package?",
+"I need more work honestly.",
+"How much does it cost?",
+"How do I cancel?",
+"I don't know.",
+"What kind of business did I tell you I have?",
+"Could be.",
+"I got burned by a marketing company before.",
+"Is this call recorded?",
+"Do you guarantee jobs?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call40",
+"name": "Ray",
+"type": "auto body shop",
+"lines": [
+"Hi, this is Ray.",
+"I have a auto body shop business.",
+"Kind of slow lately.",
+"Can I talk to Rickey?",
+"I got burned by a marketing company before.",
+"How do I cancel?",
+"Is this call recorded?",
+"What's the AI receptionist?",
+"What's in Complete?",
+"Give me the list of what's in it.",
+"What kind of business did I tell you I have?",
+"Is there a bigger package?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call41",
+"name": "Jamie",
+"type": "catering",
+"lines": [
+"Hey.",
+"Jamie.",
+"I run a catering, we've been open about six years.",
+"I got burned by a marketing company before.",
+"Is there a bigger package?",
+"Can I talk to Rickey?",
+"How do I cancel?",
+"Hmm, that's a lot of money.",
+"What kind of business did I tell you I have?",
+"What's in Complete?",
+"What would you actually do for us?",
+"Is this call recorded?",
+"What's the difference between Core and Complete?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call42",
+"name": "Mike",
+"type": "nail salon",
+"lines": [
+"Hi, I'm Mike and I own a nail salon called Mike's Place.",
+"Yeah, things are okay.",
+"I don't know.",
+"How much does it cost?",
+"What's the difference between Core and Complete?",
+"Do you guarantee jobs?",
+"What's in Complete?",
+"What kind of business did I tell you I have?",
+"Give me the list of what's in it.",
+"Okay.",
+"Hmm, that's a lot of money.",
+"What would you actually do for us?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call43",
+"name": "Dana",
+"type": "hair salon",
+"lines": [
+"Hi, this is Dana.",
+"I have a hair salon business.",
+"Kind of slow lately.",
+"Hmm, that's a lot of money.",
+"What kind of business did I tell you I have?",
+"Okay.",
+"I got burned by a marketing company before.",
+"Is there a bigger package?",
+"What's the difference between Core and Complete?",
+"Give me the list of what's in it.",
+"What's in Complete?",
+"What would you actually do for us?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call44",
+"name": "Luis",
+"type": "barbershop",
+"lines": [
+"Hey.",
+"Luis.",
+"I run a barbershop, we've been open about six years.",
+"I already told you.",
+"What's the AI receptionist?",
+"Are you a robot?",
+"What's the difference between Core and Complete?",
+"Is there a bigger package?",
+"What kind of business did I tell you I have?",
+"Can I talk to Rickey?",
+"I got burned by a marketing company before.",
+"Do you guarantee jobs?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call45",
+"name": "Tasha",
+"type": "gym",
+"lines": [
+"Hi, I'm Tasha and I own a gym called Tasha's Place.",
+"Yeah, things are okay.",
+"I don't know.",
+"Do you guarantee jobs?",
+"Can I talk to Rickey?",
+"What kind of business did I tell you I have?",
+"Okay.",
+"What would you actually do for us?",
+"Is this call recorded?",
+"Are you a robot?",
+"I need more work honestly.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call46",
+"name": "Greg",
+"type": "auto repair",
+"lines": [
+"Hi, this is Greg.",
+"I have a auto repair business.",
+"Kind of slow lately.",
+"I don't know.",
+"Is there a bigger package?",
+"How do I cancel?",
+"What's in Complete?",
+"I need more work honestly.",
+"What kind of business did I tell you I have?",
+"Can I talk to Rickey?",
+"Are you a robot?",
+"I got burned by a marketing company before.",
+"Could be.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call47",
+"name": "Priya",
+"type": "house cleaning",
+"lines": [
+"Hey.",
+"Priya.",
+"I run a house cleaning, we've been open about six years.",
+"Could be.",
+"Is this call recorded?",
+"How much does it cost?",
+"Give me the list of what's in it.",
+"What's the difference between Core and Complete?",
+"What kind of business did I tell you I have?",
+"How do I cancel?",
+"What would you actually do for us?",
+"Do you guarantee jobs?",
+"Hmm, that's a lot of money.",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call48",
+"name": "Tony",
+"type": "photography",
+"lines": [
+"Hi, I'm Tony and I own a photography called Tony's Place.",
+"Yeah, things are okay.",
+"I got burned by a marketing company before.",
+"What would you actually do for us?",
+"Are you a robot?",
+"Okay.",
+"Hmm, that's a lot of money.",
+"What kind of business did I tell you I have?",
+"Do you guarantee jobs?",
+"Can I talk to Rickey?",
+"I don't know.",
+"What's the AI receptionist?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call49",
+"name": "Ashley",
+"type": "dog grooming",
+"lines": [
+"Hi, this is Ashley.",
+"I have a dog grooming business.",
+"Kind of slow lately.",
+"I already told you.",
+"Hmm, that's a lot of money.",
+"Is there a bigger package?",
+"Is this call recorded?",
+"What's the AI receptionist?",
+"What kind of business did I tell you I have?",
+"Are you a robot?",
+"What would you actually do for us?",
+"What's in Complete?",
+"Okay, thanks, bye."
+]
+},
+{
+"id": "call50",
+"name": "Ray",
+"type": "martial arts studio",
+"lines": [
+"Hey.",
+"Ray.",
+"I run a martial arts studio, we've been open about six years.",
+"What would you actually do for us?",
+"Are you a robot?",
+"Do you guarantee jobs?",
+"How much does it cost?",
+"I got burned by a marketing company before.",
+"What kind of business did I tell you I have?",
+"I need more work honestly.",
+"I don't know.",
+"Okay.",
+"Hmm, that's a lot of money.",
+"Okay, thanks, bye."
+]
+}
+]

@@ -19,44 +19,8 @@
 
 const DEF = { MAX_CALL_SECONDS: 480, DAILY_MINUTE_CAP: 30, MAX_TURNS: 24 };
 
-export const SYSTEM = `You are Hank Booker, Booked Out Solutions' AI assistant, on a PHONE CALL. People call you Booker.
-Booked Out Solutions helps home service shops (HVAC, plumbing, electrical) get more jobs from the people already theirs: follows up old quotes, answers every lead fast, asks every real customer for a review, keeps their Google profile and facts right, and sends a short Friday report. Owned by Rickey Hallor in Smyrna, Tennessee. Work happens by email and one short phone page a week (tap Approve or Change).
-HOW YOU TALK: warm neighbor, plain words, a little funny about the problem, never about the person. EVERY reply does two things in this order: first it directly answers or responds to exactly what the caller just said or asked, in one or two short sentences; then it ends with ONE short, natural question that keeps the call moving, like "Did that answer it?", "Want me to show you what we'd do for your shop?" or "What kind of shop do you run?". Never leave a reply hanging with no question, never answer vaguely, never answer a question with only a question. Keep the whole reply under 35 words. If the caller only says hello, greet them back warmly and ask how you can help. When the caller uses a feeling word (headache, killing me, sick of), say a short line that shows you heard it, then ask about it. Let them talk. Never use lists, symbols, emojis or dashes. Spell numbers the way people say them.
-FACTS YOU MAY SAY (never invent others):
-- Core: first 30 days free, then 497 dollars for the next 30 days, then 997 dollars every 30 days. No long-term contract. Cancel any time with one reply.
-- Pay ahead for 12 months is about 9 months' price. Ads package is 1,997 dollars every 30 days after the free 30. Complete includes the AI receptionist. The AI receptionist add-on is 497 dollars every 30 days.
-- Card goes on file on Square's checkout. Nothing is charged in the first 30 days. An email comes before any charge.
-- The free report: a free look at where a shop is losing customers. Only offer it after the caller names a problem, tied to their words. Never say what it will find.
-- No cold calls, no cold texts. Every email has a one-reply opt-out.
-RULES:
-- You are an AI. If asked, say so plainly. Never claim to be human or invent a personal life.
-- Rickey never takes calls. He answers by email. To reach him, take their email address and the message.
-- You take messages. You never book jobs or call times. Never take a card number or password.
-- Never promise jobs, leads, calls, revenue or rankings. "We guarantee the work, not jobs."
-- No proof yet: "I can't show you a shop near you yet. I can show you your own free report, and you don't pay a cent until you've seen the work."
-- Don't know something: "Good question, and I don't want to guess. Leave me your email and Rickey will answer you by email."
-- Never say: launch, founding, we're new, first clients, learning period, penalty. No fake urgency.
-- Starter (297 dollars) only once and only after a clear no to Core.
-- After two clear no's, leave on a good note.
-- Early on ask: "Are you booked out right now, or do you need more work?"
-ANSWER LINES (use these words when the question comes up):
-- Price: "Core is free for 30 days, then 497 dollars, then 997 dollars every 30 days. No contract. What would it need to fix for you?"
-- Too expensive or that's a lot: "Fair. Is it the price, or are you not sure it'll work for your shop?"
-- Discount: "Same price for every shop in your trade. The only way to pay less is pay ahead, 9 months' price for 12."
-- Guarantee: "We guarantee the work, not jobs. Nobody honest can promise jobs. Miss any piece of your package in a paid period and your next 30 days are free."
-- Number one on Google: "Nobody honest can promise a ranking. We do the work that helps: full profile, more reviews, your facts right everywhere."
-- How many leads: "I can't promise a number, and I won't make one up. How many quotes go quiet on you a week now?"
-- Answering service: "Keep it. What do they do with a call at 9 at night?"
-- Can it book jobs: "No. It takes the message and gets it to you right away, and you book the job."
-- Real person or robot: "No, I'm Hank Booker, Booked Out's AI assistant. I'll always tell you that. Better me at 9 pm than a voicemail, right?"
-- Put Rickey on: "Rickey handles things by email. Leave me your email and what's on your mind, and he'll answer you by email."
-- Contract: "No long-term contract. One page in plain words, and you cancel any time with one reply."
-- Passwords: "No. Never send me a password or card number. You add us as a manager and stay the owner."
-- Think it over: "Of course. What would you want to know to decide? I'd rather answer it now."
-- Burned before: "Sorry, that stings. What did they actually do?"
-- Email address: when they spell it, read it back once to confirm.
-Never ask about their budget.
-If the caller says goodbye or wants to end, say a short friendly goodbye and add the tag [END] at the very end.`;
+import { buildSystem, FACTS_PROMPT, parseFacts, quickFacts, guardPrice, guardSay, isGoodbye, goodbyeLine, pinned } from './booker-brain.js';
+export const SYSTEM = buildSystem({});
 
 export default {
   async fetch(req, env, ctx) {
@@ -75,6 +39,7 @@ export default {
         return new Response('not found', { status: 404 });
       }
       if (parts[0] === 'calls' && env.ADMIN_TOKEN && u.searchParams.get('k') === env.ADMIN_TOKEN) return await calls(env);
+      if (parts[0] === 'lab' && req.method === 'POST' && env.ADMIN_TOKEN && u.searchParams.get('k') === env.ADMIN_TOKEN) return await lab(req, env, parts[1]);
       return new Response('Booked Out Booker', { status: 200 });
     } catch (e) {
       // Never dead air: any error ends politely.
@@ -85,7 +50,7 @@ export default {
 };
 
 export const FALLBACK = "Sorry, Booker can't talk right now. Please email rickey at get booked out solutions dot com and Rickey will answer you by email. Thanks for calling.";
-export const GREETING = "Hi, thanks for calling Booked Out Solutions, this is Booker, the AI assistant, and this call is recorded. What can I do for you today, or did you have any questions I can help with?";
+export const GREETING = "Hi, thanks for calling Booked Out Solutions, this is Booker, the AI assistant. Just a heads up, this call's recorded so we can take good care of you. Who do I have the pleasure of talking to today?";
 export const NOT_OPEN = "Thanks for calling Booked Out Solutions. This line isn't open yet. Please email rickey at get booked out solutions dot com and Rickey will answer you by email. Goodbye.";
 export const CAP_LINE = "I've hit my phone time for today. Please email rickey at get booked out solutions dot com and Rickey will answer you by email. Thanks for calling.";
 export const TIME_LINE = "I've got to let you go, we're at my time limit for one call. Email rickey at get booked out solutions dot com and he'll pick it up. Thanks for calling.";
@@ -146,28 +111,46 @@ export async function onTurn(f, env, u) {
   }
   st.silent = 0; st.turns += 1;
   st.history.push({ role: 'user', content: heard.slice(0, 800) });
+  st.facts = quickFacts(heard, st.facts || {});
   const t0 = Date.now();
-  let reply = await brain(env, st.history);
+  let reply = await brain(env, st.history, st.facts);
   const ms = Date.now() - t0;
   const end = /\[END\]/.test(reply);
-  reply = clean(reply);
+  reply = (reply.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [reply]).filter((x) => x.trim()).map((x) => guardSay(clean(x), { ...(st.facts || {}), _said: saidBy(st.history) })).join(' ');
   st.history.push({ role: 'assistant', content: reply });
+  st.facts = await updateFacts(env, st.history, st.facts);
   await env.KV.put('call:' + sid, JSON.stringify(st), { expirationTtl: 172800 });
-  await logCall(env, sid, { event: 'turn', n: st.turns, heard, reply, brain_ms: ms, keys: Object.keys(f).join(',') });
+  await logCall(env, sid, { event: 'turn', n: st.turns, heard, reply, brain_ms: ms, facts: st.facts });
   return end ? say(env, reply) + '<Hangup/>' : gather(env, reply, sid);
 }
 
 export function clean(s) {
-  return String(s || '').replace(/\[END\]/g, '').replace(/[*_#`>~|]/g, '').replace(/[–—]/g, ', ').replace(/\s+/g, ' ').trim().slice(0, 400) ||
+  return String(s || '').replace(/\$\s?([\d,]+(?:\.\d\d)?)(?:\s*dollars)?/g, '$1 dollars').replace(/\[END\]/g, '').replace(/[*_#`>~|]/g, '').replace(/[–—]/g, ', ').replace(/\s+/g, ' ').trim().slice(0, 1200) ||
     "Sorry, say that one more time?";
 }
 
-async function brain(env, history) {
-  const messages = [{ role: 'system', content: SYSTEM }, ...history.slice(-16)];
+// Every turn sends the WHOLE call so far (no trimming: the Nov 19 nail salon call lost turn 2 to a 16-message cut)
+// plus the caller facts note and the library entries for what was just asked.
+export function buildMessages(history, facts = {}) {
+  const h = [];
+  for (const m of history) { const c = String(m.content || '').trim(); if (!c) continue; const last = h[h.length - 1]; if (last && last.role === m.role) last.content += ' ' + c; else h.push({ role: m.role, content: c }); }
+  const recent = h.filter((m) => m.role === 'user').slice(-2).map((m) => m.content).join(' ');
+  return [{ role: 'system', content: buildSystem({ facts, recent }) }, ...h];
+}
+const FACTS_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast';
+export async function updateFacts(env, history, facts) {
+  try {
+    const convo = history.filter((m) => m.content).map((m) => `${m.role === 'user' ? 'CALLER' : 'BOOKER'}: ${m.content}`).join('\n').slice(-6000);
+    const r = await env.AI.run(FACTS_MODEL, { messages: [{ role: 'system', content: FACTS_PROMPT }, { role: 'user', content: convo + '\nKnown so far: ' + JSON.stringify(facts) }], max_tokens: 120, temperature: 0 });
+    return parseFacts(r && (r.response ?? ''), facts);
+  } catch (e) { return facts; }
+}
+async function brain(env, history, facts = {}) {
+  const messages = buildMessages(history, facts);
   const models = [env.BRAIN_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/meta/llama-3.1-8b-instruct-fast'];
   for (const m of models) {
     try {
-      const r = await env.AI.run(m, { messages, max_tokens: 120, temperature: 0.6 });
+      const r = await env.AI.run(m, { messages, max_tokens: 260, temperature: 0.6 });
       const t = r && (r.response || (r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content));
       if (t && String(t).trim()) return String(t);
     } catch (e) { /* try next */ }
@@ -228,13 +211,13 @@ export function takeSentences(buf) {
   while ((m = rest.match(/^([\s\S]*?[.!?])\s+/))) { if (m[1].trim()) out.push(m[1].trim()); rest = rest.slice(m[0].length); }
   return { out, rest };
 }
-async function* brainStream(env, history) {
-  const messages = [{ role: 'system', content: SYSTEM }, ...history.slice(-16)];
+async function* brainStream(env, history, facts = {}) {
+  const messages = buildMessages(history, facts);
   const models = [...new Set([env.BRAIN_MODEL || DEF_MODEL, DEF_MODEL, '@cf/meta/llama-3.3-70b-instruct-fp8-fast'])];
   for (const m of models) {
     let got = false;
     try {
-      const r = await env.AI.run(m, { messages, max_tokens: 90, temperature: 0.5, stream: true });
+      const r = await env.AI.run(m, { messages, max_tokens: 260, temperature: 0.5, stream: true });
       if (r && typeof r.getReader === 'function') {
         const rd = r.pipeThrough(new TextDecoderStream()).getReader(); let carry = '';
         for (;;) {
@@ -258,11 +241,11 @@ export function onRelay(req, env, ctx) {
   if ((req.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') return new Response('expected websocket', { status: 426 });
   const pair = new WebSocketPair(); const [client, server] = Object.values(pair);
   server.accept();
-  const S = { ready: Promise.resolve(), silent: 0, last: Date.now(), closed: false, sid: 'relay', from: '', start: Date.now(), turns: 0, history: [{ role: 'assistant', content: GREETING }], gen: 0, ended: false, ok: false };
+  const S = { ready: Promise.resolve(), silent: 0, last: Date.now(), closed: false, sid: 'relay', from: '', start: Date.now(), turns: 0, history: [{ role: 'assistant', content: GREETING }], facts: {}, cur: null, gen: 0, ended: false, ok: false };
   const send = (o) => { try { server.send(JSON.stringify(o)); } catch (e) { /* closed */ } };
   const bye = (text) => { if (S.ended) return; S.ended = true; S.gen++; send({ type: 'text', token: text, last: true }); later(() => send({ type: 'end', handoffData: '{"reason":"booker_end"}' }), Math.min(15000, 1200 + text.split(/\s+/).length * 420)); };
   const later = (fn, ms) => ctx.waitUntil(new Promise((r) => setTimeout(() => { fn(); r(); }, ms)));
-  const save = () => env.KV.put('call:' + S.sid, JSON.stringify({ sid: S.sid, from: S.from, start: S.start, turns: S.turns, history: S.history }), { expirationTtl: 172800 });
+  const save = () => env.KV.put('call:' + S.sid, JSON.stringify({ sid: S.sid, from: S.from, start: S.start, turns: S.turns, history: S.history, facts: S.facts }), { expirationTtl: 172800 });
   server.addEventListener('message', (ev) => {
     let msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
     S.last = Date.now();
@@ -298,8 +281,7 @@ export function onRelay(req, env, ctx) {
     }
     if (msg.type === 'interrupt') {
       S.gen++; // stop the reply being spoken
-      const last = S.history[S.history.length - 1];
-      if (last && last.role === 'assistant' && msg.utteranceUntilInterrupt) last.content = String(msg.utteranceUntilInterrupt);
+      if (S.cur && msg.utteranceUntilInterrupt) S.cur.content = String(msg.utteranceUntilInterrupt);
       return;
     }
     if (msg.type !== 'prompt' || msg.last === false || S.ended) return;
@@ -310,30 +292,38 @@ export function onRelay(req, env, ctx) {
     const elapsed = (Date.now() - S.start) / 1000;
     if (elapsed >= n(env, 'MAX_CALL_SECONDS') || S.turns >= n(env, 'MAX_TURNS')) { ctx.waitUntil(logCall(env, S.sid, { event: 'time_limit', elapsed })); bye(TIME_LINE); return; }
     S.turns += 1; S.history.push({ role: 'user', content: heard.slice(0, 800) });
+    S.facts = quickFacts(heard, S.facts);
+    if (isGoodbye(heard)) { const g = goodbyeLine(S.facts); S.history.push({ role: 'assistant', content: g }); ctx.waitUntil(logCall(env, S.sid, { event: 'turn', mode: 'relay', n: S.turns, heard, reply: g, first_sentence_ms: 0, facts: S.facts })); ctx.waitUntil(save()); bye(g); return; }
+    const cur = { role: 'assistant', content: '' }; S.history.push(cur); S.cur = cur;
+    const pin = pinned(heard, S.facts);
+    if (pin) { const my0 = ++S.gen; cur.content = pin; send({ type: 'text', token: pin, last: true }); S.last = Date.now() + pin.split(/\s+/).length * 420; ctx.waitUntil((async () => { S.facts = await updateFacts(env, S.history, S.facts); await save(); await logCall(env, S.sid, { event: 'turn', mode: 'relay', n: S.turns, heard, reply: pin, pinned: true, first_sentence_ms: 0, facts: S.facts }); })()); return; } // keeps turn order right even if the caller talks over Booker
     const my = ++S.gen; const t0 = Date.now();
     ctx.waitUntil((async () => {
-      let buf = ''; let said = ''; let first = 0; let end = false;
-      for await (const piece of brainStream(env, S.history)) {
+      let buf = ''; let said = ''; let first = 0; let end = false; let long = false;
+      for await (const piece of brainStream(env, S.history.filter((m) => m !== cur), S.facts)) {
         if (my !== S.gen) break;
         buf += piece;
         if (/\[END\]/.test(buf)) end = true;
         const { out, rest } = takeSentences(buf.replace(/\[END\]/g, ''));
         buf = rest;
-        for (const sent of out) { const c = clean(sent); if (!c) continue; if (!first) first = Date.now() - t0; send({ type: 'text', token: (said ? ' ' : '') + c, last: false }); said += (said ? ' ' : '') + c; }
+        for (const sent of out) { if (said.split(/\s+/).length > 85) { long = true; continue; } const c = guardSay(clean(sent), { ...S.facts, _said: saidBy(S.history) }); if (!c) continue; if (!first) first = Date.now() - t0; send({ type: 'text', token: (said ? ' ' : '') + c, last: false }); said += (said ? ' ' : '') + c; cur.content = said; }
       }
-      if (my !== S.gen) { S.history.push({ role: 'assistant', content: said }); return; }
+      if (my !== S.gen) { if (!cur.content) cur.content = said; ctx.waitUntil(updateFacts(env, S.history, S.facts).then((f) => { S.facts = f; return save(); })); return; }
       const tailRaw = buf.replace(/\[END\]/g, '').replace(/\[[A-Z]*$/, '').trim();
-      let tail = tailRaw ? clean(tailRaw) : '';
+      let tail = (tailRaw && !long) ? guardSay(clean(tailRaw), { ...S.facts, _said: saidBy(S.history) }) : '';
+      if (long) tail = 'Want the rest of that by email?'; // hard length cap, about 85 words
       if (!said && !tail) tail = 'Sorry, say that one more time?';
       if (!end && !/\?\s*$/.test(tail || said)) tail = (tail ? tail + ' ' : '') + NUDGE; // never leave it hanging
       if (tail && !first) first = Date.now() - t0;
       send({ type: 'text', token: tail ? (said ? ' ' : '') + tail : ' ', last: true });
       said = [said, tail].filter(Boolean).join(' ');
-      S.history.push({ role: 'assistant', content: said });
+      cur.content = said;
       if (end) { S.ended = true; later(() => send({ type: 'end', handoffData: '{"reason":"goodbye"}' }), Math.min(15000, 1200 + said.split(/\s+/).length * 420)); }
-      await save();
       S.last = Date.now() + said.split(/\s+/).length * 420;
-      await logCall(env, S.sid, { event: 'turn', mode: 'relay', n: S.turns, heard, reply: said, first_sentence_ms: first, brain_ms: Date.now() - t0 });
+      const brainMs = Date.now() - t0;
+      S.facts = await updateFacts(env, S.history, S.facts);
+      await save();
+      await logCall(env, S.sid, { event: 'turn', mode: 'relay', n: S.turns, heard, reply: said, first_sentence_ms: first, brain_ms: brainMs, facts: S.facts });
     })());
   };
   server.addEventListener('close', () => { S.gen++; S.closed = true; });
@@ -349,3 +339,34 @@ export async function onAfter(f, env) {
   await logCall(env, sid, { event: 'relay_failed_fallback' });
   return gather(env, "Sorry about that, I'm here now. What can I do for you today?", sid);
 }
+
+// Test bench (needs ADMIN_TOKEN): runs the exact prompt, library look-up and model the phone line uses.
+// POST /lab {model, history, facts} -> reply + time to first sentence; POST /lab/facts {history, facts} -> facts.
+async function lab(req, env, what) {
+  const b = await req.json();
+  if (what === 'facts') return Response.json({ facts: await updateFacts(env, b.history || [], b.facts || {}) });
+  const lastU = (b.history || []).filter((m) => m.role === 'user').slice(-1).map((m) => m.content).join(' ');
+  const pin = pinned(lastU, quickFacts(lastU, b.facts || {})); if (pin) return Response.json({ reply: pin, end: false, first_ms: 0, total_ms: 0, sys_chars: 0, pinned: true, facts: quickFacts(lastU, b.facts || {}) });
+  if (isGoodbye(lastU)) return Response.json({ reply: goodbyeLine(b.facts || {}), end: true, first_ms: 0, total_ms: 0, sys_chars: 0, facts: b.facts || {} });
+  const t0 = Date.now(); let first = 0; let text = '';
+  const e2 = { ...env, BRAIN_MODEL: b.model || env.BRAIN_MODEL };
+  const facts = quickFacts((b.history || []).filter((m) => m.role === 'user').slice(-1).map((m) => m.content).join(' '), b.facts || {});
+  try {
+    for await (const piece of brainStreamOnly(e2, b.history || [], facts)) { text += piece; if (!first && /[.!?]\s/.test(text)) first = Date.now() - t0; }
+  } catch (e) { return Response.json({ error: String(e) }); }
+  const sys = buildMessages(b.history || [], facts)[0].content;
+  let rep = ''; let long = false; for (const x of (text.replace(/\[END\]/g, '').match(/[^.!?]+[.!?]+|[^.!?]+$/g) || []).filter((y) => y.trim())) { if (rep.split(/\s+/).length > 85) { long = true; break; } const g = guardSay(clean(x), { ...facts, _said: saidBy(b.history || []) }); if (g) rep += (rep ? ' ' : '') + g; }
+  if (long) rep += ' Want the rest of that by email?'; if (!/\[END\]/.test(text) && !/\?\s*$/.test(rep)) rep += ' ' + NUDGE; // same rule as the phone path
+  return Response.json({ reply: rep, end: /\[END\]/.test(text), first_ms: first || Date.now() - t0, total_ms: Date.now() - t0, sys_chars: sys.length, facts });
+}
+async function* brainStreamOnly(env, history, facts) {
+  const m = env.BRAIN_MODEL;
+  const r = await env.AI.run(m, { messages: buildMessages(history, facts), max_tokens: 260, temperature: 0.5, stream: true });
+  if (r && typeof r.getReader === 'function') {
+    const rd = r.pipeThrough(new TextDecoderStream()).getReader(); let carry = '';
+    for (;;) { const { value, done } = await rd.read(); if (done) break; carry += value; const lines = carry.split('\n'); carry = lines.pop();
+      for (const ln of lines) { const t = ln.replace(/^data:\s*/, '').trim(); if (!t || t === '[DONE]') continue; try { const j = JSON.parse(t); const p = j.response ?? (j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content) ?? ''; if (p) yield p; } catch (e) { /* skip */ } } }
+  } else { const t = r && (r.response || (r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content)); if (t) yield String(t); }
+}
+
+function saidBy(history) { return (history || []).filter((m) => m.role === 'user').map((m) => m.content).join(' '); }

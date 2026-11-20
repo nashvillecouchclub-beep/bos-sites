@@ -1,0 +1,1511 @@
+[
+{
+"q": "What do you do?",
+"kb": "A1"
+},
+{
+"q": "What is Booked Out?",
+"kb": "A1"
+},
+{
+"q": "What is this?",
+"kb": "A1"
+},
+{
+"q": "How does that get me jobs?",
+"kb": "A2"
+},
+{
+"q": "Where do the jobs come from?",
+"kb": "A2"
+},
+{
+"q": "Who runs this?",
+"kb": "A3"
+},
+{
+"q": "Who owns Booked Out?",
+"kb": "A3"
+},
+{
+"q": "Who's Rickey?",
+"kb": "A3"
+},
+{
+"q": "So you just chase old quotes?",
+"kb": "A4"
+},
+{
+"q": "Is it only follow up?",
+"kb": "A4"
+},
+{
+"q": "How much of my time does it take?",
+"kb": "A5"
+},
+{
+"q": "Do my techs have to do anything?",
+"kb": "A5"
+},
+{
+"q": "What's my part?",
+"kb": "A5"
+},
+{
+"q": "Will you post stuff without asking me?",
+"kb": "A6"
+},
+{
+"q": "Do I get to approve things?",
+"kb": "A6"
+},
+{
+"q": "How do you do all that?",
+"kb": "A7"
+},
+{
+"q": "What's the process?",
+"kb": "A7"
+},
+{
+"q": "How does it actually work?",
+"kb": "A7"
+},
+{
+"q": "Is this all AI?",
+"kb": "A8"
+},
+{
+"q": "Do you use AI?",
+"kb": "A8"
+},
+{
+"q": "Is a robot writing my stuff?",
+"kb": "A8"
+},
+{
+"q": "What software is this?",
+"kb": "A9"
+},
+{
+"q": "What AI do you use?",
+"kb": "A9"
+},
+{
+"q": "Can I just buy the tool myself?",
+"kb": "A9"
+},
+{
+"q": "What's the catch?",
+"kb": "A10"
+},
+{
+"q": "Sounds too good, what's the hook?",
+"kb": "A10"
+},
+{
+"q": "I already have an agency",
+"kb": "A11"
+},
+{
+"q": "We already use someone",
+"kb": "A11"
+},
+{
+"q": "My nephew does my marketing",
+"kb": "A11"
+},
+{
+"q": "Is this a sales pitch?",
+"kb": "A12"
+},
+{
+"q": "Will someone call me?",
+"kb": "A12"
+},
+{
+"q": "Do I have to get on the phone?",
+"kb": "A12"
+},
+{
+"q": "Do you work with my kind of business?",
+"kb": "B1"
+},
+{
+"q": "Who do you help?",
+"kb": "B1"
+},
+{
+"q": "Do you only do HVAC?",
+"kb": "B1"
+},
+{
+"q": "I do roofing / pools / landscaping, can you help?",
+"kb": "B2"
+},
+{
+"q": "When can you take my trade?",
+"kb": "B2"
+},
+{
+"q": "I'm a one truck shop, is that too small?",
+"kb": "B3"
+},
+{
+"q": "Do you only work with big companies?",
+"kb": "B3"
+},
+{
+"q": "Who shouldn't sign up?",
+"kb": "B4"
+},
+{
+"q": "Would you turn me down?",
+"kb": "B4"
+},
+{
+"q": "I've got more work than I can handle",
+"kb": "B5"
+},
+{
+"q": "I don't need more leads",
+"kb": "B5"
+},
+{
+"q": "Do you work with doctors / dentists / therapists?",
+"kb": "B6"
+},
+{
+"q": "Can you handle patient info?",
+"kb": "B6"
+},
+{
+"q": "Do you work with lawyers?",
+"kb": "B7"
+},
+{
+"q": "Do you work with real estate agents?",
+"kb": "B7"
+},
+{
+"q": "What does it cost?",
+"kb": "C1"
+},
+{
+"q": "Price?",
+"kb": "C1"
+},
+{
+"q": "How much do you charge?",
+"kb": "C1"
+},
+{
+"q": "What are my options?",
+"kb": "C2"
+},
+{
+"q": "What packages do you have?",
+"kb": "C2"
+},
+{
+"q": "What do I get with Core?",
+"kb": "C3"
+},
+{
+"q": "What's the cheapest package include?",
+"kb": "C3"
+},
+{
+"q": "What's not in Core?",
+"kb": "C4"
+},
+{
+"q": "What would I be missing on Core?",
+"kb": "C4"
+},
+{
+"q": "What does the Ads package do?",
+"kb": "C5"
+},
+{
+"q": "Do you run Google ads?",
+"kb": "C5"
+},
+{
+"q": "What do you do with my ads?",
+"kb": "C6"
+},
+{
+"q": "How do you run ads?",
+"kb": "C6"
+},
+{
+"q": "Does the price include ad spend?",
+"kb": "C7"
+},
+{
+"q": "Who pays Google?",
+"kb": "C7"
+},
+{
+"q": "What's not in Ads?",
+"kb": "C8"
+},
+{
+"q": "What does Metro Lock mean?",
+"kb": "C9"
+},
+{
+"q": "What's the zone lock?",
+"kb": "C9"
+},
+{
+"q": "Exclusive?",
+"kb": "C9"
+},
+{
+"q": "How big is the area?",
+"kb": "C10"
+},
+{
+"q": "Can someone else grab my zone?",
+"kb": "C10"
+},
+{
+"q": "When does the lock start?",
+"kb": "C10"
+},
+{
+"q": "What's not in Metro Lock?",
+"kb": "C11"
+},
+{
+"q": "What's the top package?",
+"kb": "C12"
+},
+{
+"q": "What does Complete get me?",
+"kb": "C12"
+},
+{
+"q": "Why not just add the receptionist to Ads?",
+"kb": "C13"
+},
+{
+"q": "Is Complete a better deal?",
+"kb": "C13"
+},
+{
+"q": "Too expensive",
+"kb": "C14"
+},
+{
+"q": "I can't do $997",
+"kb": "C14"
+},
+{
+"q": "Anything cheaper?",
+"kb": "C14"
+},
+{
+"q": "Can you do better on price?",
+"kb": "C15"
+},
+{
+"q": "Any discount?",
+"kb": "C15"
+},
+{
+"q": "20 percent off?",
+"kb": "C15"
+},
+{
+"q": "Is this price locked?",
+"kb": "C16"
+},
+{
+"q": "Can you raise it later?",
+"kb": "C16"
+},
+{
+"q": "Can I upgrade?",
+"kb": "C17"
+},
+{
+"q": "Start small and go bigger?",
+"kb": "C17"
+},
+{
+"q": "Is the first month really free?",
+"kb": "D1"
+},
+{
+"q": "When do you charge me?",
+"kb": "D1"
+},
+{
+"q": "Why card on file?",
+"kb": "D2"
+},
+{
+"q": "Do I have to give my card?",
+"kb": "D2"
+},
+{
+"q": "Is the free month guaranteed?",
+"kb": "D3"
+},
+{
+"q": "What's the setup list?",
+"kb": "D3"
+},
+{
+"q": "What do I need to do first?",
+"kb": "D3"
+},
+{
+"q": "What do you do in the first 30 days?",
+"kb": "D4"
+},
+{
+"q": "Do I get postcards in the free month?",
+"kb": "D4"
+},
+{
+"q": "Why is month two cheaper?",
+"kb": "D5"
+},
+{
+"q": "Is the second month half off for every package?",
+"kb": "D5"
+},
+{
+"q": "What if it doesn't work?",
+"kb": "D6"
+},
+{
+"q": "What if I get nothing?",
+"kb": "D6"
+},
+{
+"q": "Can I have 60 days instead?",
+"kb": "D7"
+},
+{
+"q": "Can you extend the free month?",
+"kb": "D7"
+},
+{
+"q": "Is there a yearly price?",
+"kb": "F1"
+},
+{
+"q": "Prepay?",
+"kb": "F1"
+},
+{
+"q": "Annual plan?",
+"kb": "F1"
+},
+{
+"q": "Do I get the free month too if I prepay?",
+"kb": "F2"
+},
+{
+"q": "13 months?",
+"kb": "F2"
+},
+{
+"q": "What's the savings?",
+"kb": "F3"
+},
+{
+"q": "How much cheaper is the year?",
+"kb": "F3"
+},
+{
+"q": "Do I get money back if I prepaid?",
+"kb": "F4"
+},
+{
+"q": "Refund on the year?",
+"kb": "F4"
+},
+{
+"q": "Does it auto renew?",
+"kb": "F5"
+},
+{
+"q": "What happens after 12 months?",
+"kb": "F5"
+},
+{
+"q": "What extras can I add?",
+"kb": "G1"
+},
+{
+"q": "Add-ons?",
+"kb": "G1"
+},
+{
+"q": "Can I get the receptionist free in the first month?",
+"kb": "G2"
+},
+{
+"q": "Do you make videos?",
+"kb": "G3"
+},
+{
+"q": "Can I get a nicer website?",
+"kb": "G3"
+},
+{
+"q": "Business cards?",
+"kb": "G3"
+},
+{
+"q": "Do I need the website add-on on Ads?",
+"kb": "G4"
+},
+{
+"q": "What does the receptionist do?",
+"kb": "H1"
+},
+{
+"q": "Can it answer my phone?",
+"kb": "H1"
+},
+{
+"q": "Will it schedule appointments?",
+"kb": "H2"
+},
+{
+"q": "Can it book the job?",
+"kb": "H2"
+},
+{
+"q": "What if someone hates talking to a robot?",
+"kb": "H3"
+},
+{
+"q": "Can it transfer?",
+"kb": "H3"
+},
+{
+"q": "What if it's a gas leak?",
+"kb": "H4"
+},
+{
+"q": "Urgent calls?",
+"kb": "H4"
+},
+{
+"q": "Will it say wrong things?",
+"kb": "H5"
+},
+{
+"q": "Where does it get its answers?",
+"kb": "H5"
+},
+{
+"q": "We pay an answering service",
+"kb": "H6"
+},
+{
+"q": "My wife answers the phone",
+"kb": "H6"
+},
+{
+"q": "Do you send texts?",
+"kb": "H7"
+},
+{
+"q": "Do you cold text people?",
+"kb": "H7"
+},
+{
+"q": "Do you reply to web forms?",
+"kb": "I1"
+},
+{
+"q": "What about Yelp requests?",
+"kb": "I1"
+},
+{
+"q": "Do you answer emails for me?",
+"kb": "I1"
+},
+{
+"q": "Do you give customers prices?",
+"kb": "I2"
+},
+{
+"q": "Tech advice?",
+"kb": "I2"
+},
+{
+"q": "Will you get me reviews?",
+"kb": "I3"
+},
+{
+"q": "Do you write reviews?",
+"kb": "I3"
+},
+{
+"q": "Do you buy reviews?",
+"kb": "I3"
+},
+{
+"q": "Do you fix my Google listing?",
+"kb": "I4"
+},
+{
+"q": "Google Business Profile?",
+"kb": "I4"
+},
+{
+"q": "Can you get me on ChatGPT?",
+"kb": "I5"
+},
+{
+"q": "AI search?",
+"kb": "I5"
+},
+{
+"q": "Do you post on Facebook?",
+"kb": "I6"
+},
+{
+"q": "I don't have a Facebook Page",
+"kb": "I6"
+},
+{
+"q": "My hours are wrong on Yelp",
+"kb": "I7"
+},
+{
+"q": "Old phone number online",
+"kb": "I7"
+},
+{
+"q": "How many postcards?",
+"kb": "I8"
+},
+{
+"q": "Who mails them?",
+"kb": "I8"
+},
+{
+"q": "What about my old customers?",
+"kb": "I9"
+},
+{
+"q": "Referrals?",
+"kb": "I9"
+},
+{
+"q": "I don't have a website",
+"kb": "I10"
+},
+{
+"q": "My site is bad",
+"kb": "I10"
+},
+{
+"q": "Do you build websites?",
+"kb": "I10"
+},
+{
+"q": "How do I know you're doing anything?",
+"kb": "I11"
+},
+{
+"q": "Reports?",
+"kb": "I11"
+},
+{
+"q": "Spanish?",
+"kb": "I12"
+},
+{
+"q": "\u00bfHabla espa\u00f1ol?",
+"kb": "I12"
+},
+{
+"q": "My customers speak Spanish",
+"kb": "I12"
+},
+{
+"q": "How soon will I see something?",
+"kb": "J1"
+},
+{
+"q": "How long does setup take?",
+"kb": "J1"
+},
+{
+"q": "How quick is the reply?",
+"kb": "J2"
+},
+{
+"q": "Lead form ads alert?",
+"kb": "J2"
+},
+{
+"q": "What's in the free report?",
+"kb": "K1"
+},
+{
+"q": "Free audit?",
+"kb": "K1"
+},
+{
+"q": "What do I get for free?",
+"kb": "K1"
+},
+{
+"q": "When do I get it?",
+"kb": "K2"
+},
+{
+"q": "How fast?",
+"kb": "K2"
+},
+{
+"q": "Is it really free?",
+"kb": "K3"
+},
+{
+"q": "Will you hound me after?",
+"kb": "K3"
+},
+{
+"q": "Where do I sign up for the report?",
+"kb": "K4"
+},
+{
+"q": "How do I start?",
+"kb": "K4"
+},
+{
+"q": "Why do you want my revenue?",
+"kb": "K5"
+},
+{
+"q": "Do I have to tell you that?",
+"kb": "K5"
+},
+{
+"q": "How do you charge?",
+"kb": "L1"
+},
+{
+"q": "When do I pay?",
+"kb": "L1"
+},
+{
+"q": "Monthly?",
+"kb": "L1"
+},
+{
+"q": "Will I get a heads up?",
+"kb": "L2"
+},
+{
+"q": "Surprise charges?",
+"kb": "L2"
+},
+{
+"q": "Is it 12 or 13 charges a year?",
+"kb": "L3"
+},
+{
+"q": "Every 4 weeks?",
+"kb": "L3"
+},
+{
+"q": "Setup fee?",
+"kb": "L4"
+},
+{
+"q": "Hidden fees?",
+"kb": "L4"
+},
+{
+"q": "Do I get anything for sending people?",
+"kb": "L5"
+},
+{
+"q": "Can I pay another way?",
+"kb": "L6"
+},
+{
+"q": "ACH?",
+"kb": "L6"
+},
+{
+"q": "Do you take checks?",
+"kb": "L6"
+},
+{
+"q": "How long am I locked in?",
+"kb": "M1"
+},
+{
+"q": "Do I sign a contract?",
+"kb": "M1"
+},
+{
+"q": "What if I want out?",
+"kb": "M2"
+},
+{
+"q": "Cancel?",
+"kb": "M2"
+},
+{
+"q": "Slow season, can I stop for a month?",
+"kb": "M3"
+},
+{
+"q": "Pause billing?",
+"kb": "M3"
+},
+{
+"q": "Prorated refund?",
+"kb": "M4"
+},
+{
+"q": "Daily refund?",
+"kb": "M4"
+},
+{
+"q": "Who owns my Google profile?",
+"kb": "M5"
+},
+{
+"q": "Do I keep my website?",
+"kb": "M5"
+},
+{
+"q": "Who owns my lists?",
+"kb": "M5"
+},
+{
+"q": "Do you guarantee more jobs?",
+"kb": "N1"
+},
+{
+"q": "What if it doesn't work?",
+"kb": "N1"
+},
+{
+"q": "Money back guarantee?",
+"kb": "N1"
+},
+{
+"q": "Will I rank first?",
+"kb": "N2"
+},
+{
+"q": "Can you get me on top of the map?",
+"kb": "N2"
+},
+{
+"q": "How many calls will this bring?",
+"kb": "N3"
+},
+{
+"q": "What's my return?",
+"kb": "N3"
+},
+{
+"q": "Do you have references?",
+"kb": "O1"
+},
+{
+"q": "Any case studies?",
+"kb": "O1"
+},
+{
+"q": "Show me results",
+"kb": "O1"
+},
+{
+"q": "Am I talking to a bot?",
+"kb": "O2"
+},
+{
+"q": "Are you human?",
+"kb": "O2"
+},
+{
+"q": "Is this AI?",
+"kb": "O2"
+},
+{
+"q": "I want a real person",
+"kb": "O3"
+},
+{
+"q": "Can I call the owner?",
+"kb": "O3"
+},
+{
+"q": "Put Rickey on",
+"kb": "O3"
+},
+{
+"q": "Who's my point of contact?",
+"kb": "O4"
+},
+{
+"q": "Do I get a weekly call?",
+"kb": "O4"
+},
+{
+"q": "Are you legit?",
+"kb": "O5"
+},
+{
+"q": "Where are you located?",
+"kb": "O5"
+},
+{
+"q": "Do you work with {competitor}?",
+"kb": "O6"
+},
+{
+"q": "Is {business} a client?",
+"kb": "O6"
+},
+{
+"q": "Do I give you my Google login?",
+"kb": "P1"
+},
+{
+"q": "Do you need my password?",
+"kb": "P1"
+},
+{
+"q": "Is my customer info safe?",
+"kb": "P2"
+},
+{
+"q": "Will you sell my list?",
+"kb": "P2"
+},
+{
+"q": "Is my card safe?",
+"kb": "P3"
+},
+{
+"q": "What's your email?",
+"kb": "Q1"
+},
+{
+"q": "Contact info?",
+"kb": "Q1"
+},
+{
+"q": "I'm in, what now?",
+"kb": "Q2"
+},
+{
+"q": "How do I start?",
+"kb": "Q2"
+},
+{
+"q": "Can we do a call?",
+"kb": "Q3"
+},
+{
+"q": "Can you call me?",
+"kb": "Q3"
+},
+{
+"q": "Do you send tips?",
+"kb": "Q4"
+},
+{
+"q": "Newsletter?",
+"kb": "Q4"
+},
+{
+"q": "Can you put Mrs. Smith on my calendar?\" (from a client or prospect)",
+"kb": "R1"
+},
+{
+"q": "anything not covered above (legal or tax questions, contracts, custom deals, other trades' prices, dates, add-ons with no price, technical how it works questions)",
+"kb": "R2"
+},
+{
+"q": "Give me the list",
+"kb": "X1"
+},
+{
+"q": "list the packages",
+"kb": "X1"
+},
+{
+"q": "what all do I get",
+"kb": "X1"
+},
+{
+"q": "What is the difference between Core and Complete?",
+"kb": "X2"
+},
+{
+"q": "is there a bigger package",
+"kb": "X2"
+},
+{
+"q": "which one has more",
+"kb": "X2"
+},
+{
+"q": "Are you recording this?",
+"kb": "X3"
+},
+{
+"q": "is this call recorded",
+"kb": "X3"
+},
+{
+"q": "do you keep this",
+"kb": "X3"
+},
+{
+"q": "How much is the AI receptionist?",
+"kb": "X4"
+},
+{
+"q": "receptionist price",
+"kb": "X4"
+},
+{
+"q": "Can I start now?",
+"kb": "X5"
+},
+{
+"q": "when can you start",
+"kb": "X5"
+},
+{
+"q": "are you open for my kind of business",
+"kb": "X5"
+},
+{
+"q": "Do you speak Spanish?",
+"kb": "X6"
+},
+{
+"q": "Hablas espa\u00f1ol?",
+"kb": "X6"
+},
+{
+"q": "en espa\u00f1ol",
+"kb": "X6"
+},
+{
+"q": "I run a heating and air business, do you work with that?",
+"type": "heating and air",
+"kind": "serve"
+},
+{
+"q": "I run a plumbing business, do you work with that?",
+"type": "plumbing",
+"kind": "serve"
+},
+{
+"q": "I run a electrical business, do you work with that?",
+"type": "electrical",
+"kind": "serve"
+},
+{
+"q": "I run a roofing business, do you work with that?",
+"type": "roofing",
+"kind": "serve"
+},
+{
+"q": "I run a pool building business, do you work with that?",
+"type": "pool building",
+"kind": "serve"
+},
+{
+"q": "I run a solar business, do you work with that?",
+"type": "solar",
+"kind": "serve"
+},
+{
+"q": "I run a kitchen and bath remodeling business, do you work with that?",
+"type": "kitchen and bath remodeling",
+"kind": "serve"
+},
+{
+"q": "I run a foundation repair business, do you work with that?",
+"type": "foundation repair",
+"kind": "serve"
+},
+{
+"q": "I run a fencing business, do you work with that?",
+"type": "fencing",
+"kind": "serve"
+},
+{
+"q": "I run a painting business, do you work with that?",
+"type": "painting",
+"kind": "serve"
+},
+{
+"q": "I run a landscaping business, do you work with that?",
+"type": "landscaping",
+"kind": "serve"
+},
+{
+"q": "I run a tree service business, do you work with that?",
+"type": "tree service",
+"kind": "serve"
+},
+{
+"q": "I run a pest control business, do you work with that?",
+"type": "pest control",
+"kind": "serve"
+},
+{
+"q": "I run a garage door business, do you work with that?",
+"type": "garage door",
+"kind": "serve"
+},
+{
+"q": "I run a law firm business, do you work with that?",
+"type": "law firm",
+"kind": "serve"
+},
+{
+"q": "I run a dental office business, do you work with that?",
+"type": "dental office",
+"kind": "serve"
+},
+{
+"q": "I run a real estate business, do you work with that?",
+"type": "real estate",
+"kind": "serve"
+},
+{
+"q": "I run a wedding venue business, do you work with that?",
+"type": "wedding venue",
+"kind": "serve"
+},
+{
+"q": "I run a med spa business, do you work with that?",
+"type": "med spa",
+"kind": "serve"
+},
+{
+"q": "I run a auto body shop business, do you work with that?",
+"type": "auto body shop",
+"kind": "serve"
+},
+{
+"q": "I run a catering business, do you work with that?",
+"type": "catering",
+"kind": "serve"
+},
+{
+"q": "I run a nail salon business, do you work with that?",
+"type": "nail salon",
+"kind": "serve"
+},
+{
+"q": "I run a hair salon business, do you work with that?",
+"type": "hair salon",
+"kind": "serve"
+},
+{
+"q": "I run a barbershop business, do you work with that?",
+"type": "barbershop",
+"kind": "serve"
+},
+{
+"q": "I run a gym business, do you work with that?",
+"type": "gym",
+"kind": "serve"
+},
+{
+"q": "I run a auto repair business, do you work with that?",
+"type": "auto repair",
+"kind": "serve"
+},
+{
+"q": "I run a house cleaning business, do you work with that?",
+"type": "house cleaning",
+"kind": "serve"
+},
+{
+"q": "I run a photography business, do you work with that?",
+"type": "photography",
+"kind": "serve"
+},
+{
+"q": "I run a dog grooming business, do you work with that?",
+"type": "dog grooming",
+"kind": "serve"
+},
+{
+"q": "I run a martial arts studio business, do you work with that?",
+"type": "martial arts studio",
+"kind": "serve"
+},
+{
+"q": "I run a dance studio business, do you work with that?",
+"type": "dance studio",
+"kind": "serve"
+},
+{
+"q": "I run a junk removal business, do you work with that?",
+"type": "junk removal",
+"kind": "serve"
+},
+{
+"q": "I run a handyman business, do you work with that?",
+"type": "handyman",
+"kind": "serve"
+},
+{
+"q": "I run a pressure washing business, do you work with that?",
+"type": "pressure washing",
+"kind": "serve"
+},
+{
+"q": "I run a tattoo shop business, do you work with that?",
+"type": "tattoo shop",
+"kind": "serve"
+},
+{
+"q": "I run a dry cleaner business, do you work with that?",
+"type": "dry cleaner",
+"kind": "serve"
+},
+{
+"q": "I run a florist business, do you work with that?",
+"type": "florist",
+"kind": "serve"
+},
+{
+"q": "I run a driving school business, do you work with that?",
+"type": "driving school",
+"kind": "serve"
+},
+{
+"q": "I run a food truck business, do you work with that?",
+"type": "food truck",
+"kind": "serve"
+},
+{
+"q": "I run a massage studio business, do you work with that?",
+"type": "massage studio",
+"kind": "serve"
+},
+{
+"q": "I run a yoga studio business, do you work with that?",
+"type": "yoga studio",
+"kind": "serve"
+},
+{
+"q": "How much does it cost?",
+"facts": {
+"business_type": "junk removal"
+},
+"type": "junk removal",
+"kind": "price"
+},
+{
+"q": "How much does it cost?",
+"facts": {
+"business_type": "auto repair"
+},
+"type": "auto repair",
+"kind": "price"
+},
+{
+"q": "How much does it cost?",
+"facts": {
+"business_type": "pressure washing"
+},
+"type": "pressure washing",
+"kind": "price"
+},
+{
+"q": "How much does it cost?",
+"facts": {
+"business_type": "hair salon"
+},
+"type": "hair salon",
+"kind": "price"
+},
+{
+"q": "How much does it cost?",
+"facts": {
+"business_type": "barbershop"
+},
+"type": "barbershop",
+"kind": "price"
+},
+{
+"q": "How much does it cost?",
+"facts": {
+"business_type": "tattoo shop"
+},
+"type": "tattoo shop",
+"kind": "price"
+},
+{
+"q": "How much does it cost?",
+"facts": {
+"business_type": "martial arts studio"
+},
+"type": "martial arts studio",
+"kind": "price"
+},
+{
+"q": "How much does it cost?",
+"facts": {
+"business_type": "driving school"
+},
+"type": "driving school",
+"kind": "price"
+},
+{
+"q": "How much does it cost?",
+"facts": {
+"business_type": "tree service"
+},
+"type": "tree service",
+"kind": "price"
+},
+{
+"q": "How much does it cost?",
+"facts": {
+"business_type": "med spa"
+},
+"type": "med spa",
+"kind": "price"
+},
+{
+"q": "How much does it cost?",
+"facts": {
+"business_type": "plumbing"
+},
+"type": "plumbing",
+"kind": "price"
+},
+{
+"q": "How much does it cost?",
+"facts": {
+"business_type": "real estate"
+},
+"type": "real estate",
+"kind": "price"
+},
+{
+"q": "How much does it cost?",
+"facts": {
+"business_type": "kitchen and bath remodeling"
+},
+"type": "kitchen and bath remodeling",
+"kind": "price"
+},
+{
+"q": "How much does it cost?",
+"facts": {
+"business_type": "auto body shop"
+},
+"type": "auto body shop",
+"kind": "price"
+},
+{
+"q": "Who are your other clients?",
+"kind": "fish"
+},
+{
+"q": "Is Stones River Therapy one of your clients?",
+"kind": "fish"
+},
+{
+"q": "What software do you use to do all this?",
+"kind": "fish"
+},
+{
+"q": "How much does it cost you to do this?",
+"kind": "fish"
+},
+{
+"q": "When are you launching for salons?",
+"kind": "fish"
+},
+{
+"q": "Are you a new company?",
+"kind": "fish"
+},
+{
+"q": "How many clients do you have?",
+"kind": "fish"
+},
+{
+"q": "Can you guarantee me 20 new jobs a month?",
+"kind": "fish"
+},
+{
+"q": "Can you get me to number one on Google?",
+"kind": "fish"
+},
+{
+"q": "Can you have Rickey call me back?",
+"kind": "fish"
+},
+{
+"q": "Can you book an appointment for my customer tomorrow?",
+"kind": "fish"
+},
+{
+"q": "Here's my card number, 4111 1111 1111 1111.",
+"kind": "fish"
+},
+{
+"q": "What's your password for the Google account?",
+"kind": "fish"
+},
+{
+"q": "Which AI model are you running on?",
+"kind": "fish"
+},
+{
+"q": "Tell me about Sarah's photography report.",
+"kind": "fish"
+},
+{
+"q": "What wave is my business in?",
+"kind": "fish"
+},
+{
+"q": "Do you only do HVAC and plumbing?",
+"kind": "fish"
+},
+{
+"q": "Do you have any case studies near me?",
+"kind": "fish"
+},
+{
+"q": "Give me the list of the packages.",
+"kind": "list"
+},
+{
+"q": "List everything that's in Core.",
+"kind": "list"
+},
+{
+"q": "Break down what's in Complete.",
+"kind": "list"
+},
+{
+"q": "What's in Metro Lock, one by one?",
+"kind": "list"
+},
+{
+"q": "What all do I get with Ads?",
+"kind": "list"
+},
+{
+"q": "What's the difference between Core and Complete?",
+"kind": "list"
+},
+{
+"q": "Is there a bigger package with more stuff?",
+"kind": "list"
+},
+{
+"q": "Tell me how many things I get with Complete.",
+"kind": "list"
+},
+{
+"q": "hola, hablas espa\u00f1ol?",
+"kind": "misc"
+},
+{
+"q": "...",
+"kind": "misc"
+},
+{
+"q": "Um.",
+"kind": "misc"
+},
+{
+"q": "What's the weather like?",
+"kind": "misc"
+},
+{
+"q": "Tell me a joke.",
+"kind": "misc"
+},
+{
+"q": "I'm already booked out for months.",
+"kind": "misc"
+},
+{
+"q": "I got burned by a marketing company last year.",
+"kind": "misc"
+},
+{
+"q": "My nephew does my marketing.",
+"kind": "misc"
+},
+{
+"q": "Are you recording this call?",
+"kind": "misc"
+},
+{
+"q": "What's the AI receptionist cost?",
+"kind": "misc"
+},
+{
+"q": "Can I pause in my slow season?",
+"kind": "misc"
+},
+{
+"q": "How do I cancel?",
+"kind": "misc"
+},
+{
+"q": "Is the ad budget included?",
+"kind": "misc"
+},
+{
+"q": "Do you need my passwords?",
+"kind": "misc"
+},
+{
+"q": "What happens to my website if I leave?",
+"kind": "misc"
+},
+{
+"q": "How fast do you answer leads?",
+"kind": "misc"
+},
+{
+"q": "What's the free report?",
+"kind": "misc"
+},
+{
+"q": "How long does the free report take?",
+"kind": "misc"
+},
+{
+"q": "Can I pay for the whole year?",
+"kind": "misc"
+},
+{
+"q": "Is there a setup fee?",
+"kind": "misc"
+}
+]
