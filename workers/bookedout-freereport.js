@@ -46,6 +46,8 @@
 // No alerts to anyone (no host forms, no email to Rickey). The only email is the report to the owner who asked for it.
 // No secrets in this file.
 
+import * as FU from './freereport-followups.js';
+
 const SITE = 'https://getbookedoutsolutions.com';
 const TZ = 'America/Chicago';
 const DAY = 86400;
@@ -170,11 +172,13 @@ function chicagoText(date) {
 
 // ---------- the LIVE guard and the send to the owner ----------
 // Before GO LIVE (LIVE is not "on") the worker never emails or texts a business owner.
+function fuOn(env) { return String((env && env.FOLLOWUPS) || 'off').trim().toLowerCase() === 'on'; }
 function isLive(env) { return String((env && env.LIVE) || 'off').trim().toLowerCase() === 'on'; }
 
 const GMAIL_TOKEN = 'https://oauth2.googleapis.com/token';
 const GMAIL_SEND = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
 const RESEND_SEND = 'https://api.resend.com/emails';
+const GMAIL_THREAD = 'https://gmail.googleapis.com/gmail/v1/users/me/threads/';
 const FROM = 'Rickey Hallor <rickey@getbookedoutsolutions.com>';
 
 // The one email that goes to the owner: a short plain note with the link to his report.
@@ -205,6 +209,7 @@ const b64 = (str) => { const by = new TextEncoder().encode(str); let bin = ''; f
 function mime(m) {
   const hdr = (v) => (v = String(v).replace(/[\r\n]+/g, ' ')) && /^[\x20-\x7e]*$/.test(v) ? v : `=?UTF-8?B?${b64(v)}?=`;
   return [`From: ${m.from}`, `To: ${m.to}`, `Subject: ${hdr(m.subject)}`, 'MIME-Version: 1.0',
+    ...(m.inReplyTo ? [`In-Reply-To: ${hdr(m.inReplyTo)}`, `References: ${hdr(m.inReplyTo)}`] : []),
     'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', b64(m.text)].join('\r\n');
 }
 
@@ -214,14 +219,13 @@ async function sendMail(env, m, f) {
   try {
     if (route === 'gmail') {
       if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) return { ok: false, route, error: 'gmail route not set up' };
-      const t = await out(env, GMAIL_TOKEN, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ client_id: env.GMAIL_CLIENT_ID, client_secret: env.GMAIL_CLIENT_SECRET, refresh_token: env.GMAIL_REFRESH_TOKEN, grant_type: 'refresh_token' }).toString() }, f);
-      if (!t.ok) return { ok: false, route, error: 'gmail token ' + t.status };
-      const tok = (await t.json()).access_token;
-      const r = await out(env, GMAIL_SEND, { method: 'POST', headers: { authorization: 'Bearer ' + tok, 'content-type': 'application/json' },
-        body: JSON.stringify({ raw: b64u(mime(m)) }) }, f);
+      const tok = await gmailToken(env, f);
+      if (!tok.ok) return { ok: false, route, error: tok.error };
+      const r = await out(env, GMAIL_SEND, { method: 'POST', headers: { authorization: 'Bearer ' + tok.token, 'content-type': 'application/json' },
+        body: JSON.stringify(m.threadId ? { raw: b64u(mime(m)), threadId: m.threadId } : { raw: b64u(mime(m)) }) }, f);
       if (!r.ok) return { ok: false, route, error: 'gmail send ' + r.status };
-      return { ok: true, route, id: (await r.json()).id || '' };
+      const j = await r.json();
+      return { ok: true, route, id: j.id || '', threadId: j.threadId || '' };
     }
     if (route === 'cloudflare') {
       // Cloudflare Email Sending (public beta since Apr 16 2026, Workers Paid). The binding's exact call shape is
@@ -239,6 +243,26 @@ async function sendMail(env, m, f) {
     }
     return { ok: false, route, error: 'unknown SEND_ROUTE' };
   } catch (e) { return { ok: false, route, error: String((e && e.message) || e).slice(0, 200) }; }
+}
+
+async function gmailToken(env, f) {
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) return { ok: false, error: 'gmail route not set up' };
+  const t = await out(env, GMAIL_TOKEN, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: env.GMAIL_CLIENT_ID, client_secret: env.GMAIL_CLIENT_SECRET, refresh_token: env.GMAIL_REFRESH_TOKEN, grant_type: 'refresh_token' }).toString() }, f);
+  if (!t.ok) return { ok: false, error: 'gmail token ' + t.status };
+  return { ok: true, token: (await t.json()).access_token };
+}
+// Reads one of our Gmail threads (needs the gmail.readonly scope on the token). Never throws.
+async function gmailThread(env, threadId, f) {
+  try {
+    if (!/^[a-f0-9]{6,40}$/i.test(String(threadId || ''))) return { ok: false, error: 'no thread id' };
+    const tok = await gmailToken(env, f);
+    if (!tok.ok) return { ok: false, error: tok.error };
+    const r = await out(env, GMAIL_THREAD + threadId + '?format=metadata&metadataHeaders=From&metadataHeaders=Message-ID',
+      { headers: { authorization: 'Bearer ' + tok.token } }, f);
+    if (!r.ok) return { ok: false, error: 'gmail thread ' + r.status };
+    return { ok: true, thread: await r.json() };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e).slice(0, 200) }; }
 }
 
 // Every check that must be true before a report goes to an owner. Returns '' when it may go, else the reason.
@@ -259,7 +283,7 @@ async function deliverToOwner(env, rec, f) {
   const why = sendBlock(env, rec);
   if (why) return { sent: false, blocked: true, reason: why };
   const r = await sendMail(env, ownerEmail(env, rec), f);
-  return r.ok ? { sent: true, blocked: false, route: r.route, id: r.id } : { sent: false, blocked: false, route: r.route, reason: r.error };
+  return r.ok ? { sent: true, blocked: false, route: r.route, id: r.id, threadId: r.threadId || '' } : { sent: false, blocked: false, route: r.route, reason: r.error };
 }
 // Every outside call goes through here. Only the lookup worker and the picked send route are allowed.
 function allowed(env, url) {
@@ -267,6 +291,8 @@ function allowed(env, url) {
   const ok = [env.LOOKUP_URL];
   if (isLive(env) && route === 'gmail') ok.push(GMAIL_TOKEN, GMAIL_SEND);
   if (isLive(env) && route === 'resend') ok.push(RESEND_SEND);
+  // Thread reads, only for follow-ups, only with LIVE and FOLLOWUPS on, only our own thread ids.
+  if (isLive(env) && fuOn(env) && route === 'gmail' && url.startsWith(GMAIL_THREAD) && /^[a-f0-9]{6,40}\?format=metadata&metadataHeaders=From&metadataHeaders=Message-ID$/i.test(url.slice(GMAIL_THREAD.length))) return true;
   return ok.filter(Boolean).includes(url);
 }
 async function out(env, url, init, f) {
@@ -611,6 +637,7 @@ async function trySend(env, rec, now, f) {
   if (r.sent) {
     rec.status = 'sent'; rec.sent = now.toISOString(); rec.sent_by = 'auto'; rec.send_route = r.route; rec.send_id = r.id || '';
     await env.KV.delete('open:' + rec.id);
+    await startFollowups(env, rec, now, r.threadId || '');
     return { changed: true, log: 'sent' };
   }
   if (r.blocked) {
@@ -679,6 +706,85 @@ async function check(req, env, now = new Date(), f) {
   return json({ ok: true, id: rec.id, status: rec.status, sent, blocked: rec.send_blocked || '' });
 }
 
+// ---------- follow-ups (locked sequence in freereport-followups-seq.js; logic in freereport-followups.js) ----------
+function fuHelpers() {
+  return { site: SITE, townState, plain, pickFixes, TRADES, local, isBusinessDay, fromLocal,
+    chicagoDate: (d) => new Date(d).toLocaleDateString('en-US', { timeZone: TZ, month: 'long', day: 'numeric' }) };
+}
+async function startFollowups(env, rec, now, threadId) {
+  if (rec.test || rec.fu) return;
+  rec.fu = { day0: now.toISOString(), hour: local(now).h, thread: threadId, subject: ownerEmail(env, rec).subject, done: {}, facts: [], started: now.toISOString() };
+  await env.KV.put('fu:' + rec.id, '1', { expirationTtl: 3 * KEEP });
+}
+async function fuStop(env, rec, why, now) {
+  rec.fu.stopped = { why, at: now.toISOString() };
+  await env.KV.delete('fu:' + rec.id);
+  if (rec.email) await env.KV.put('stop:' + rec.email, why);
+}
+// One pass over every running sequence. At most one email per owner per day; any doubt = hold.
+async function fuTick(env, now, f) {
+  const log = [], h = fuHelpers();
+  const keys = (await env.KV.list({ prefix: 'fu:' })).keys.slice(0, 200);
+  for (const k of keys) {
+    const id = k.name.slice(3), rec = await getJ(env, 'req:' + id);
+    if (!rec || !rec.fu || rec.fu.stopped) { await env.KV.delete(k.name); continue; }
+    const stopKey = rec.email ? await env.KV.get('stop:' + rec.email) : null;
+    const n = FU.next(rec, env, now, h, stopKey);
+    if (n.action === 'stop') { await fuStop(env, rec, n.why, now); await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-stop ' + id); continue; }
+    if (n.action === 'skip') { rec.fu.done[n.step] = { at: now.toISOString(), status: 'skipped', why: n.why }; await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-skip ' + n.step + ' ' + id); continue; }
+    if (n.action === 'hold' && rec.fu.hold !== n.why) { rec.fu.hold = n.why; await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-hold ' + id); continue; }
+    if (n.action !== 'send') continue;
+    // Know there is no reply: the thread read, or a fresh "clear" stamp from the inbox job.
+    let inReplyTo = '';
+    const t = await gmailThread(env, rec.fu.thread, f);
+    if (t.ok) {
+      const th = FU.readThread(t.thread, 'rickey@getbookedoutsolutions.com');
+      if (th.replied) { await fuStop(env, rec, 'reply or bounce in the thread', now); await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-stop-reply ' + id); continue; }
+      inReplyTo = th.messageId;
+    } else if (!(rec.fu.clear_at && now.getTime() - Date.parse(rec.fu.clear_at) < FU.CLEAR_WINDOW_MS)) {
+      const why = 'cannot confirm no reply (' + t.error + '); needs the thread read or an inbox clear stamp';
+      if (rec.fu.hold !== why) {
+        rec.fu.hold = why; await putJ(env, 'req:' + id, rec, KEEP);
+        await sendAlert(env, `Free report follow-up held: ${rec.business_name}`, `Step ${n.step} is due but we cannot confirm there is no reply. ${why}.`, f, 'warn', id);
+      }
+      log.push('fu-hold-noread ' + id); continue;
+    }
+    const m = { from: env.SEND_FROM || FROM, to: rec.email, subject: 'Re: ' + rec.fu.subject, text: n.text, threadId: rec.fu.thread || '', inReplyTo };
+    const r = await sendMail(env, m, f);
+    if (r.ok) {
+      rec.fu.done[n.step] = { at: now.toISOString(), status: 'sent', id: r.id || '' };
+      rec.fu.facts = [...new Set([...(rec.fu.facts || []), ...n.facts])];
+      rec.fu.last_sent_day = new Date(now).toLocaleDateString('en-CA', { timeZone: TZ });
+      rec.fu.hold = ''; rec.fu.clear_at = '';
+      log.push('fu-sent ' + n.step + ' ' + id);
+    } else {
+      rec.fu.fails = (rec.fu.fails || 0) + 1;
+      if (rec.fu.fails === 1 || rec.fu.fails % 4 === 0) await sendAlert(env, `Free report follow-up send failed: ${rec.business_name}`, `Step ${n.step}: ${r.error}`, f, 'problem', id);
+      log.push('fu-fail ' + id);
+    }
+    await putJ(env, 'req:' + id, rec, KEEP);
+  }
+  return log;
+}
+// POST /api/free-report/followup {id, k, action: "stop" | "later" | "clear" | "status", why}
+// stop  = any reply, "no", "stop", bounce, anger, or he paid/started (the reply desk calls this). Forever.
+// later = he said "later" / "check back": the main steps end, the not-now ladder starts from today.
+// clear = the inbox job just looked: no reply from him in the thread (good for 2 hours).
+async function followup(req, env, now = new Date()) {
+  let b; try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
+  if (!keyOk(env, b && b.k)) return json({ ok: false, error: 'no' }, 403);
+  if (!ID.test(String(b.id || '')) || !['stop', 'later', 'clear', 'status'].includes(b.action)) return json({ ok: false, error: 'bad followup' }, 400);
+  const rec = await getJ(env, 'req:' + b.id);
+  if (!rec || !rec.fu) return json({ ok: false, error: 'no sequence for this id' }, 404);
+  if (b.action === 'stop') await fuStop(env, rec, String(b.why || 'stopped by the reply desk').slice(0, 200), now);
+  else if (b.action === 'later' && !rec.fu.stopped) rec.fu.later_at = now.toISOString();
+  else if (b.action === 'clear' && !rec.fu.stopped) rec.fu.clear_at = now.toISOString();
+  if (b.action !== 'status') await putJ(env, 'req:' + rec.id, rec, KEEP);
+  const plan = rec.fu.stopped ? [] : FU.plan(rec, fuHelpers()).map((s) => ({ step: s.id, due: `${s.due.y}-${String(s.due.m).padStart(2, '0')}-${String(s.due.d).padStart(2, '0')}`, done: rec.fu.done[s.id] || null }));
+  return json({ ok: true, id: rec.id, stopped: rec.fu.stopped || null, later_at: rec.fu.later_at || '', hold: rec.fu.hold || '', plan,
+    next: FU.next(rec, env, now, fuHelpers(), null).action });
+}
+
 async function markSent(req, env) {
   let b; try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
   if (!keyOk(env, b && b.k)) return json({ ok: false, error: 'no' }, 403);
@@ -745,6 +851,7 @@ export default {
       if (p === '/api/free-report/check' && req.method === 'POST') return await check(req, env);
       if (p === '/api/free-report/mark-sent' && req.method === 'POST') return await markSent(req, env);
       if (p === '/api/free-report/fill' && req.method === 'POST') return await fill(req, env);
+      if (p === '/api/free-report/followup' && req.method === 'POST') return await followup(req, env);
       const m = p.match(/^\/r\/([a-f0-9]{48})$/);
       if (m && req.method === 'GET') return await report(m[1], u, env);
       return new Response('Booked Out free report', { status: 200, headers: { 'x-robots-tag': 'noindex' } });
@@ -753,11 +860,12 @@ export default {
     }
   },
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(tick(env, new Date()));
+    ctx.waitUntil(tick(env, new Date()).then(() => fuTick(env, new Date())));
   },
   // for workers/test-freereport.mjs (plain node, no network)
   _t: { validate, businessClock, federalHolidays, isBusinessDay, local, fromLocal, chicagoText, isLive, deliverToOwner,
-    sendAlert, isTestRequest, plain, ownerEmail, mime, sendMail, sendBlock, check, review, trySend, sha, budgetLine, renderReport, submit, build, tick, TRADES, REVENUE },
+    sendAlert, isTestRequest, plain, ownerEmail, mime, sendMail, sendBlock, check, review, trySend, sha, budgetLine, renderReport, submit, build, tick, TRADES, REVENUE,
+    fuTick, followup, startFollowups, fuHelpers, gmailThread, allowed, pickFixes },
 };
 
 const GONE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Report not found | Booked Out Solutions</title><style>body{margin:0;font:18px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#F6F1E7;color:#0A0F26}main{max-width:34rem;margin:0 auto;padding:3rem 1.2rem}</style></head><body><main><h1>This report is not here</h1><p>The link may be old or mistyped. Reply to the email it came in and we will send it again, or write to hello@getbookedoutsolutions.com.</p><p>Booked Out Solutions</p></main></body></html>';

@@ -1,0 +1,1545 @@
+// Booked Out Solutions - free report worker "bookedout-freereport" (Nov 16 2026).
+// Saves each free report request from getbookedoutsolutions.com, builds the one-page report,
+// and keeps the 1-business-day clock. The site (Cloudflare Pages, its _worker.js) passes /api/free-report*
+// and /r/* on our domain to this worker, so visitors only ever see our domain.
+//
+// Routes:
+//   POST /api/free-report                 the form (JSON) -> {saved:true, id}
+//   GET  /api/free-report/ping            health check
+//   GET  /api/free-report/status?k=KEY    open requests with due times, check marks, plus the watch list (watchdog)
+//   GET  /api/free-report/review?k=KEY    reports waiting for the 2-agent check, with the lookup data to trace every fact
+//   POST /api/free-report/check           {id, k, checker: 1|2, agent, result: "pass"|"fail", hash, notes}
+//                                         one check mark. Checker 1 and checker 2 must be different agents, and a pass
+//                                         only counts for the exact report version it read (hash). Any change to the
+//                                         report clears both marks. A fail holds the report and goes on the watch list.
+//   POST /api/free-report/mark-sent       {id, k} -> status "sent", clock stops (only for a report sent some other way)
+//   POST /api/free-report/fill            {id, k, section, data} -> a later job fills a pending section
+//                                         section: "google" | "reviews" | "ai" | "booking" | "category"
+//   GET  /r/<token>/                      the report page (noindex, no-store, no-referrer)
+// Cron (every 15 minutes): build new reports; send reports that have two pass marks (only when LIVE is on);
+// put clock trouble (75% of the clock, overdue), failed checks and failed sends on the watch list.
+// Rickey is out of the workflow (Nov 16 4:46 pm): no per-report emails to him, no "check and send", no 75% or overdue
+// emails. Claude checks, a second separate Claude agent checks, then the report goes to the owner automatically.
+// The watchdog reads the watch list and the agents fix it.
+//
+// Statuses: new -> built -> (check 1 pass + check 2 pass) checked -> sent.  A failed check -> held (fixed, re-checked).
+//
+// Storage (KV binding KV):
+//   req:<id>      the request and its clock {status: new | built | held | checked | sent, checks, ...}
+//   open:<id>     marker while the request is not sent (the cron reads these)
+//   tok:<token>   report token -> id
+//   rep:<id>      the report page HTML
+//   rl:<email>    one request per email per 10 minutes
+//   lead:<id>     every lead, kept for good (no expiry): name, business, contact, trade, town, when, page
+//   watch:<time>:<id>  a problem for the watchdog (warn = 75% of the clock, problem = overdue, failed check or failed send), 30 days
+//   alert:last    the last watch entry written
+//
+// Settings (names only, values are added in the Cloudflare dashboard, never here):
+//   LOOKUP_URL, LOOKUP_KEY   optional; the lookup worker. Without them the Google parts say "pending check".
+//   STATUS_KEY               needed for status, review, check, mark-sent and fill.
+//   LIVE                     "off" by default. While off, nothing is ever sent to a business owner.
+//   SEND_ROUTE               "gmail" (picked, Nov 16 night), "cloudflare" or "resend" (the backups). See sendMail().
+//   SEND_FROM                default "Rickey Hallor <rickey@getbookedoutsolutions.com>"
+//   GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN   for "gmail" (Gmail API on our own Workspace mailbox)
+//   EMAIL (send_email binding)                                  for "cloudflare" (Cloudflare Email Sending, Workers Paid)
+//   RESEND_KEY                                                  for "resend"
+// No alerts to anyone (no host forms, no email to Rickey). The only email is the report to the owner who asked for it.
+// No secrets in this file.
+
+// ---- inlined by build-freereport-bundle.mjs ----
+const FU = (() => {
+// Free report follow-up sequence, LOCKED wording (do not edit by hand; source: Drive "FREE REPORT FOLLOW-UP SEQUENCE - locked v4 (Nov 20)").
+// Cold = owner asked from the website form or after a cold email. Warm = came through a person we know.
+const SEQ = {
+ "subject": "Re: + the report email subject (no subject field per step)",
+ "day_rule": "day = business day after day 0 (the report send day); weeks_after_last = weeks after the last main-sequence send (c5 or w3) or the day he replied 'later', not after the previous ladder step",
+ "fallback_rule": "go to the fallback when this node's 'when' is false, OR any of its needs is missing, OR its fact is already in facts-used",
+ "fact_rule": "a step whose fact is already in this thread's facts-used list goes to its fallback",
+ "holidays_slide_next_business_day": [
+  "2026-11-26",
+  "2026-12-25",
+  "2027-11-25",
+  "2027-12-25"
+ ],
+ "max_emails_per_owner_per_day": 1,
+ "send_hour": "hour the report went out, owner's time zone",
+ "stop_on": [
+  "any reply incl. forward/CC",
+  "stop",
+  "no",
+  "remove me",
+  "close my file",
+  "bounce",
+  "angry",
+  "paid or started"
+ ],
+ "later_or_check_back_routes_to": "ladder",
+ "out_of_office": "pause until return date",
+ "signature": "Rickey Hallor\nBooked Out Solutions\nP.O. Box 1166, Smyrna, TN 37167",
+ "footer": {
+  "cold_website": "You got this because you asked for a free report on our website.\nReply \"stop\" and we will not email you again.",
+  "cold_email": "You got this because you asked for a free report.\nReply \"stop\" and we will not email you again.",
+  "warm": "You got this because you asked for a free report.\nReply \"stop\" and we will not email you again."
+ },
+ "cold": [
+  {
+   "step": "c1",
+   "day": 1,
+   "needs": [
+    "business",
+    "first_name",
+    "report_link",
+    "review_count",
+    "review_gap",
+    "top3_avg",
+    "town",
+    "trade_word"
+   ],
+   "body": "Hi {first_name},\n\nHere's the one number from your report I'd look at first.\n\nThe top 3 shops on Google for \"{trade_word} {town}\" average {top3_avg} reviews. {business} has {review_count}. That's a gap of {review_gap}.\n\nYour report lists three fixes, and it's here if you want it again: {report_link}\n\nIs closing that gap something you'd want to work on this month?",
+   "fallback": {
+    "if_missing": [
+     "top3_avg",
+     "review_count",
+     "review_gap"
+    ],
+    "needs": [
+     "first_name",
+     "fix_1",
+     "report_link"
+    ],
+    "body": "Hi {first_name},\n\nHere's the one thing from your report I'd look at first.\n\nThe first of its three fixes is {fix_1}.\n\nYour report is here if you want it again: {report_link}\n\nIs that one you'd want to work on this month?",
+    "fallback": {
+     "skip": true
+    }
+   }
+  },
+  {
+   "step": "c2",
+   "day": 3,
+   "when": "ai_named == 'no'",
+   "needs": [
+    "business",
+    "first_name",
+    "town",
+    "trade_word",
+    "ai_named"
+   ],
+   "body": "Hi {first_name},\n\nHere's one part of your report you can't see by looking at your own Google listing.\n\nWe asked ChatGPT and Gemini to recommend a {trade_word} in {town}. {business} wasn't named in either answer.\n\nYou can check it yourself in under a minute: open ChatGPT on your phone and ask it for a {trade_word} in {town}.\n\nWant me to write out what I'd change first, so you can see it?",
+   "fallback": {
+    "if_missing": [
+     "ai_named"
+    ],
+    "needs": [
+     "business",
+     "first_name",
+     "rank",
+     "town",
+     "trade_word"
+    ],
+    "body": "Hi {first_name},\n\nHere's one more number from your report.\n\nWhen we searched \"{trade_word} {town}\" on the Google map, {business} came up at #{rank}. The shops above you show up first.\n\nYou can check it on your phone in under a minute, searching from a customer's address, not your shop.\n\nWant me to write out the one change I'd make first to your listing?",
+    "when": "rank is a number",
+    "fallback": {
+     "if_missing": [
+      "rank"
+     ],
+     "needs": [
+      "business",
+      "first_name",
+      "town",
+      "trade_word"
+     ],
+     "body": "Hi {first_name},\n\nHere's one more thing from your report.\n\nWhen we searched \"{trade_word} {town}\" on the Google map, {business} didn't show up in the results we checked.\n\nYou can check it on your phone in under a minute, searching from a customer's address, not your shop.\n\nWant me to write out the one change I'd make first to your listing?",
+     "when": "rank == 'not found'",
+     "fallback": {
+      "if_missing": [
+       "rank"
+      ],
+      "needs": [
+       "ai_named",
+       "business",
+       "first_name",
+       "town",
+       "trade_word"
+      ],
+      "body": "Hi {first_name},\n\nHere's one part of your report you can't see by looking at your own Google listing.\n\nWe asked ChatGPT and Gemini to recommend a {trade_word} in {town}, and {business} was named. That's worth knowing, and you can check it yourself in under a minute.\n\nWant me to run the same test again now and send you today's answer?",
+      "when": "ai_named == 'yes'",
+      "fallback": {
+       "skip": true
+      }
+     }
+    }
+   }
+  },
+  {
+   "step": "c3",
+   "day": 7,
+   "needs": [
+    "booking_fix_1",
+    "booking_score",
+    "business",
+    "first_name"
+   ],
+   "body": "Hi {first_name},\n\nI don't expect you to take my word for any of this, so here's one fix from your report written out.\n\nOn the phone booking test in your report, {business} scored {booking_score} out of 10. Here's the first fix, ready to hand to whoever answers your phone:\n\n{booking_fix_1}\n\nNothing to buy or install.\n\nWant me to write the rest of your fixes out the same way?",
+   "fallback": {
+    "if_missing": [
+     "booking_score",
+     "booking_fix_1"
+    ],
+    "needs": [
+     "first_name",
+     "newest_review_replied"
+    ],
+    "body": "Hi {first_name},\n\nI don't expect you to take my word for any of this, so here's something you can check in a minute.\n\nWhen we ran your report, your newest Google review had no reply yet. I can write that reply in your voice, so all you do is paste it in. Nothing to buy or install.\n\nWant me to write it for you?",
+    "when": "newest_review_replied == 'no'",
+    "fallback": {
+     "skip": true
+    }
+   }
+  },
+  {
+   "step": "c4",
+   "day": 12,
+   "needs": [
+    "first_name",
+    "fix_2"
+   ],
+   "body": "Hi {first_name},\n\nOne more piece of your report, in case it got buried:\n\n{fix_2}\n\nIf someone else would make this change, I can write it out for them so it's ready to go.\n\nIs this one you'd do yourself, or should I write it out for whoever would make the change?",
+   "fallback": {
+    "if_missing": [
+     "fix_2"
+    ],
+    "needs": [
+     "first_name",
+     "fix_3"
+    ],
+    "body": "Hi {first_name},\n\nOne more piece of your report, in case it got buried:\n\n{fix_3}\n\nIf someone else would make this change, I can write it out for them so it's ready to go.\n\nIs this one you'd do yourself, or should I write it out for whoever would make the change?",
+    "fallback": {
+     "skip": true
+    }
+   }
+  },
+  {
+   "step": "c5",
+   "day": 18,
+   "needs": [
+    "business",
+    "first_name",
+    "fix_1",
+    "report_link"
+   ],
+   "body": "Hi {first_name},\n\nI'll keep this one short.\n\nYour report stays yours: {report_link}. Use the fixes in it whether or not we ever work together.\n\nThe first fix on its list was {fix_1}. From here I'll only write now and then, when I have something useful for {business}. If it's a no, reply \"no\" and I'll stop.\n\nShould I close your file, or is that fix still on your list?",
+   "fallback": {
+    "if_missing": [
+     "fix_1"
+    ],
+    "needs": [
+     "business",
+     "first_name",
+     "report_link"
+    ],
+    "body": "Hi {first_name},\n\nI'll keep this one short.\n\nYour report stays yours: {report_link}. Use the fixes in it whether or not we ever work together.\n\nFrom here I'll only write now and then, when I have something useful for {business}. If it's a no, reply \"no\" and I'll stop.\n\nShould I close your file, or are the fixes in your report still on your list?",
+    "fallback": {
+     "skip": true
+    }
+   }
+  }
+ ],
+ "warm": [
+  {
+   "step": "w1",
+   "day": 2,
+   "needs": [
+    "business",
+    "first_name",
+    "report_link",
+    "review_count",
+    "review_gap",
+    "top3_avg",
+    "town",
+    "trade_word"
+   ],
+   "body": "Hi {first_name},\n\nSince {introducer} put us in touch, I wanted to make sure your report reached you. Here it is again: {report_link}\n\nOne number in it worth a look: the top 3 on Google for \"{trade_word} {town}\" average {top3_avg} reviews, and {business} has {review_count}. That gap of {review_gap} is where I'd start.\n\nIs that gap something you'd want to work on this month?",
+   "line_rules": [
+    {
+     "if_missing": "introducer",
+     "replace": "Since {introducer} put us in touch, I wanted",
+     "with": "I wanted"
+    },
+    {
+     "if_missing": "introducer",
+     "replace": "\n\nThank you to {introducer} for putting us in touch.",
+     "with": ""
+    }
+   ],
+   "fallback": {
+    "if_missing": [
+     "top3_avg",
+     "review_count",
+     "review_gap"
+    ],
+    "needs": [
+     "first_name",
+     "fix_1",
+     "report_link"
+    ],
+    "body": "Hi {first_name},\n\nSince {introducer} put us in touch, I wanted to make sure your report reached you. Here it is again: {report_link}\n\nOne thing in it worth a look: the first fix, {fix_1}. That's where I'd start.\n\nIs that one you'd want to work on this month?",
+    "fallback": {
+     "skip": true
+    },
+    "optional": [
+     "introducer"
+    ]
+   },
+   "optional": [
+    "introducer"
+   ]
+  },
+  {
+   "step": "w2",
+   "day": 7,
+   "needs": [
+    "booking_fix_1",
+    "booking_score",
+    "business",
+    "first_name"
+   ],
+   "body": "Hi {first_name},\n\nHere's one fix from your report, written out so you can see exactly what it looks like.\n\nOn the phone booking test, {business} scored {booking_score} out of 10. The first fix:\n\n{booking_fix_1}\n\nIt's written so you can hand it straight to whoever answers your phone. Nothing to buy or install.\n\nWant me to write the rest of your fixes out the same way?",
+   "fallback": {
+    "if_missing": [
+     "booking_score",
+     "booking_fix_1"
+    ],
+    "needs": [
+     "first_name",
+     "newest_review_replied"
+    ],
+    "body": "Hi {first_name},\n\nHere's one thing from your report you can check in a minute.\n\nWhen we ran it, your newest Google review had no reply yet. I can write that reply in your voice, so all you do is paste it in. Nothing to buy or install.\n\nWant me to write it for you?",
+    "when": "newest_review_replied == 'no'",
+    "fallback": {
+     "if_missing": [
+      "newest_review_replied"
+     ],
+     "needs": [
+      "first_name",
+      "fix_2"
+     ],
+     "body": "Hi {first_name},\n\nHere's one more fix from your report:\n\n{fix_2}\n\nI can write it out step by step for whoever would make the change, so it's ready to go.\n\nWant me to write it out for you?",
+     "fallback": {
+      "skip": true
+     }
+    }
+   }
+  },
+  {
+   "step": "w3",
+   "day": 12,
+   "needs": [
+    "first_name",
+    "fix_1",
+    "report_link"
+   ],
+   "body": "Hi {first_name},\n\nThis is my last note for now, so I'll keep it short.\n\nYour report stays yours: {report_link}. Use the fixes in it whether or not we ever work together. The first one on its list was {fix_1}. If the timing isn't right, that's completely fine.\n\nThank you to {introducer} for putting us in touch.\n\nWould you like me to check back in a few weeks, or close your file for now?",
+   "line_rules": [
+    {
+     "if_missing": "introducer",
+     "replace": "Since {introducer} put us in touch, I wanted",
+     "with": "I wanted"
+    },
+    {
+     "if_missing": "introducer",
+     "replace": "\n\nThank you to {introducer} for putting us in touch.",
+     "with": ""
+    }
+   ],
+   "fallback": {
+    "if_missing": [
+     "fix_1"
+    ],
+    "needs": [
+     "first_name",
+     "report_link"
+    ],
+    "body": "Hi {first_name},\n\nThis is my last note for now, so I'll keep it short.\n\nYour report stays yours: {report_link}. Use the fixes in it whether or not we ever work together. If the timing isn't right, that's completely fine.\n\nThank you to {introducer} for putting us in touch.\n\nWould you like me to check back in a few weeks, or close your file for now?",
+    "fallback": {
+     "skip": true
+    },
+    "optional": [
+     "introducer"
+    ]
+   },
+   "optional": [
+    "introducer"
+   ]
+  }
+ ],
+ "ladder": [
+  {
+   "step": "n1",
+   "weeks_after_last": 2,
+   "when": "newest_review_replied == 'no'",
+   "needs": [
+    "first_name",
+    "report_date",
+    "newest_review_replied"
+   ],
+   "body": "Hi {first_name},\n\nWhen we ran your report on {report_date}, your newest Google review had no reply yet. If that's still true, I can write the reply in your voice so all you do is paste it in.\n\nWant me to write it?",
+   "fallback": {
+    "if_missing": [
+     "newest_review_replied"
+    ],
+    "needs": [
+     "first_name",
+     "fix_3"
+    ],
+    "body": "Hi {first_name},\n\nHere's one fix from your report I haven't sent you yet:\n\n{fix_3}\n\nIs that one done, or still open?",
+    "fallback": {
+     "skip": true
+    }
+   }
+  },
+  {
+   "step": "n2",
+   "weeks_after_last": 6,
+   "when": "rank is a number",
+   "needs": [
+    "business",
+    "first_name",
+    "rank",
+    "report_date",
+    "town",
+    "trade_word"
+   ],
+   "body": "Hi {first_name},\n\nHere's one number from your report I haven't sent you yet. On {report_date}, {business} came up at #{rank} on the Google map for \"{trade_word} {town}\".\n\nYou can check today's spot yourself: search \"{trade_word} {town}\" on your phone from a customer's address, not your shop, and look at the map.\n\nHas it moved since then?",
+   "fallback": {
+    "if_missing": [
+     "rank"
+    ],
+    "needs": [
+     "business",
+     "first_name",
+     "report_date",
+     "town",
+     "trade_word"
+    ],
+    "body": "Hi {first_name},\n\nHere's one thing from your report I haven't sent you yet. On {report_date}, {business} didn't show up in the Google map results we checked for \"{trade_word} {town}\".\n\nYou can check it yourself: search \"{trade_word} {town}\" on your phone from a customer's address, not your shop, and look at the map.\n\nDo you show up there now?",
+    "when": "rank == 'not found'",
+    "fallback": {
+     "if_missing": [
+      "rank"
+     ],
+     "needs": [
+      "ai_result",
+      "business",
+      "first_name",
+      "report_date",
+      "town",
+      "trade_word"
+     ],
+     "body": "Hi {first_name},\n\nHere's one thing from your report I haven't sent you yet. On {report_date}, we asked ChatGPT and Gemini to recommend a {trade_word} in {town}, and {business} {ai_result}.\n\nYou can check it yourself in under a minute: ask ChatGPT on your phone for a {trade_word} in {town}.\n\nWant me to run it again and send you today's answer?",
+     "when": "ai_named is set",
+     "fallback": {
+      "skip": true
+     }
+    }
+   }
+  },
+  {
+   "step": "n3",
+   "weeks_after_last": 12,
+   "needs": [
+    "business",
+    "checks_list",
+    "first_name",
+    "months_since",
+    "report_date"
+   ],
+   "body": "Hi {first_name},\n\nIt's been {months_since} months since your report on {business}. On {report_date} it checked {checks_list}.\n\nThose numbers are getting old. I can run the same checks again and send you the new numbers next to the old ones, free, same as the first report.\n\nWant me to run it again?",
+   "fallback": {
+    "if_missing": [
+     "checks_list",
+     "report_date"
+    ],
+    "needs": [
+     "business",
+     "first_name",
+     "months_since"
+    ],
+    "body": "Hi {first_name},\n\nIt's been {months_since} months since your report on {business}, so the numbers in it are getting old.\n\nI can run the same checks again and send you the new numbers next to the old ones, free, same as the first report.\n\nWant me to run it again?",
+    "fallback": {
+     "skip": true
+    }
+   }
+  }
+ ],
+ "rerun": {
+  "every_weeks": 13,
+  "starts_after": "n3",
+  "max_no_reply": 2,
+  "needs": [
+   "business",
+   "first_name",
+   "months_since",
+   "report_date",
+   "review_count",
+   "top3_avg",
+   "town",
+   "trade_word"
+  ],
+  "body": "Hi {first_name},\n\nIt's been {months_since} months since your report on {business}. On {report_date} it showed {review_count} Google reviews for {business}, and the top 3 for \"{trade_word} {town}\" averaged {top3_avg}.\n\nI can check those again and send you what changed, side by side, free.\n\nWant the new numbers?",
+  "fallback": {
+   "if_missing": [
+    "review_count",
+    "top3_avg"
+   ],
+   "needs": [
+    "business",
+    "first_name",
+    "fix_1",
+    "months_since",
+    "report_date"
+   ],
+   "body": "Hi {first_name},\n\nIt's been {months_since} months since your report on {business}. On {report_date}, the first fix on its list was {fix_1}.\n\nI can run the same checks again and send you what changed, side by side, free.\n\nWant the new numbers?",
+   "fallback": {
+    "skip": true
+   }
+  },
+  "facts_used_reset": true
+ },
+ "locked": "Nov 20 2026 1:55 am: Salesperson brain wrote it; Hormozi 8.5/8.5, Platten 8/8.5, owner clones 8/8.5; fresh second agent PASS 8.5/8.5 (after 10+1 fixes)."
+};
+
+// Free report follow-ups (Nov 20 2026). Plain logic, no network of its own: the worker hands in send and read helpers.
+// The wording is LOCKED in freereport-followups-seq.js (brains + a fresh second agent, Nov 20). This file only picks
+// the step, fills it from the owner's own report, checks it, and decides whether it may go.
+//
+// Safety, in order, before ANY follow-up goes:
+//   1. FOLLOWUPS must be "on" AND LIVE must be "on". Both are "off" by default. Fake TEST shops never get one.
+//   2. Stopped forever on: any reply in the thread (incl. bounces), POST /followup action "stop", a stop:<email> key.
+//   3. We must KNOW there is no reply: either the Gmail thread read works (needs gmail.readonly on the token) and shows
+//      only our own messages, or the inbox job stamped "clear" for this owner in the last 2 hours. Otherwise it holds.
+//   4. One email per owner per day, never before the hour the report went out, business days only,
+//      Thanksgiving Day and Christmas Day slide to the next business day.
+//   5. The filled email is checked again: under 120 words, exactly one "?" on the last line, no "$", no long dashes,
+//      no emojis, no link but the report link, no {token} left. A fail goes to the step's fallback, or the step is skipped.
+
+
+const FU_SEQ = SEQ;
+const CLEAR_MS = 2 * 3600 * 1000;
+// Placeholders that name the owner or the report; they are not "facts" for the facts-used rule.
+const IDENT = new Set(['first_name', 'business', 'town', 'trade_word', 'search_phrase', 'report_link', 'report_date', 'months_since', 'checks_list', 'introducer']);
+const TRADE_WORD = { hvac: 'HVAC company', plumber: 'plumber', electrician: 'electrician' };
+const BANNED = ['just checking in', 'sorry to bother', 'hope this finds you well', 'quick question'];
+
+const words = (s) => String(s).trim().split(/\s+/).filter(Boolean).length;
+const firstSentence = (s) => { const m = String(s).match(/^.*?[.!?](\s|$)/); return (m ? m[0] : String(s)).trim(); };
+// A fix for {fix_n}: the fix as the report shows it, cut to its first sentence when long; dropped if still long.
+// Inside a sentence it is quoted ("Ask every happy customer..."); alone on its own line it stays a plain sentence.
+function fixLine(s, max = 25) {
+  let x = String(s || '').trim();
+  if (!x) return null;
+  if (words(x) > 20) x = firstSentence(x);
+  if (words(x) > max) return null;
+  x = x.replace(/[.!]$/, '');
+  return x.charAt(0).toUpperCase() + x.slice(1);
+}
+
+// Every placeholder value, from the owner's own report only. A missing value is left out (never guessed).
+// h: { site, townState, plain, pickFixes, TRADES, chicagoDate, now }
+function values(rec, h) {
+  const v = {}, s = rec.sections || {}, g = s.google, rv = s.reviews, bk = s.booking, ai = s.ai;
+  const set = (k, x) => { if (x !== null && x !== undefined && x !== '') v[k] = String(x); };
+  set('first_name', h.plain(rec.first_name));
+  set('business', h.plain(rec.business_name));
+  set('town', h.townState(rec.town).town);
+  const kw = ((h.TRADES[rec.trade] || {}).kw) || '';
+  set('trade_word', TRADE_WORD[kw]);
+  // A quoted search in an email is always the exact search the report ran.
+  const g0 = s.google;
+  set('search_phrase', String((g0 && g0.keyword) || (kw ? `${kw} ${h.townState(rec.town).town}` : '')).replace(/\bhvac\b/gi, 'HVAC'));
+  set('report_link', `${h.site}/r/${rec.token}/`);
+  const sent = rec.fu && rec.fu.day0 ? new Date(rec.fu.day0) : null;
+  if (sent) {
+    set('report_date', h.chicagoDate(sent));
+    const months = Math.max(1, Math.round((h.now.getTime() - sent.getTime()) / (30.44 * 86400000)));
+    set('months_since', months);
+  }
+  if (g && g.has_google_profile) {
+    if (g.review_count != null) set('review_count', +g.review_count);
+    if (g.top3 && g.top3.length) {
+      const avg = Math.round(g.top3.reduce((a, x) => a + (+x.review_count || 0), 0) / g.top3.length);
+      set('top3_avg', avg);
+      if (g.review_count != null && avg - g.review_count > 0) set('review_gap', avg - g.review_count);
+    }
+    if (g.rank_for_keyword) set('rank', +g.rank_for_keyword);
+    else if (kw) set('rank', 'not found');
+  }
+  if (rv && rv.newest_review) set('newest_review_replied', rv.owner_reply_on_newest ? 'yes' : 'no');
+  if (bk && bk.score != null) set('booking_score', Math.max(0, Math.min(10, +bk.score)));
+  if (bk && Array.isArray(bk.fixes) && bk.fixes[0] && words(bk.fixes[0]) <= 45) set('booking_fix_1', h.plain(bk.fixes[0]));
+  if (ai && ai.chatgpt && ai.gemini) {
+    const named = !!(ai.chatgpt.named || ai.gemini.named), both = !!(ai.chatgpt.named && ai.gemini.named);
+    // "yes" only when both named it, "no" only when neither did; a split answer is left out (the step uses its fallback).
+    if (both) set('ai_named', 'yes'); else if (!named) set('ai_named', 'no');
+    set('ai_result', both ? 'was named in both answers' : !named ? "wasn't named in either answer" : null);
+  }
+  const fixes = h.pickFixes(rec);
+  fixes.forEach((f, i) => { const x = fixLine(h.plain(f)); if (x) { set('fix_' + (i + 1), `"${x}"`); set('fix_' + (i + 1) + '_line', x + '.'); } });
+  const checks = [];
+  if (g && g.has_google_profile) checks.push('your Google reviews', 'your map spot');
+  if (ai && ai.chatgpt) checks.push('the ChatGPT and Gemini test');
+  if (bk && bk.score != null) checks.push('the phone booking test');
+  if (checks.length) set('checks_list', checks.length === 1 ? checks[0] : checks.slice(0, -1).join(', ') + ' and ' + checks[checks.length - 1]);
+  if (rec.introducer) set('introducer', h.plain(rec.introducer));
+  return v;
+}
+
+function whenOk(w, v) {
+  if (!w) return true;
+  let m;
+  if ((m = w.match(/^(\w+) == '([^']*)'$/))) return v[m[1]] === m[2];
+  if ((m = w.match(/^(\w+) is a number$/))) return /^\d+$/.test(v[m[1]] || '');
+  if ((m = w.match(/^(\w+) is set$/))) return v[m[1]] !== undefined;
+  return false; // a rule we can't read never sends
+}
+
+// Problems with a filled body (empty list = ok).
+function bodyProblems(body, reportLink) {
+  const p = [], lines = body.trim().split('\n');
+  if (words(body) >= 120) p.push('120 words or more');
+  if ((body.match(/\?/g) || []).length !== 1 || !lines[lines.length - 1].trim().endsWith('?')) p.push('not exactly one question on the last line');
+  if (/\$/.test(body)) p.push('dollar sign');
+  if (/[‒-―]/.test(body)) p.push('long dash');
+  if (/[\p{Extended_Pictographic}]/u.test(body)) p.push('emoji');
+  if (/\{[a-z_0-9]+\}/.test(body)) p.push('placeholder left');
+  const links = body.match(/https?:\/\/\S+|www\.\S+/g) || [];
+  if (links.some((l) => l.replace(/[.,]$/, '') !== reportLink)) p.push('link other than the report');
+  const low = body.toLowerCase();
+  if (BANNED.some((b) => low.includes(b))) p.push('banned phrase');
+  return p;
+}
+
+function fill(text, v) {
+  text = text.replace(/"\{trade_word\} \{town\}"/g, '"{search_phrase}"').replace(/^\{(fix_\d)\}$/gm, '{$1_line}');
+  return text.replace(/\{([a-z_0-9]+)\}/g, (all, k) => (v[k] !== undefined ? v[k] : all)); }
+
+// Walks a step and its fallbacks. Returns {body, facts, node} or null (skip).
+function resolveStep(step, v, factsUsed = []) {
+  let node = step;
+  while (node && !node.skip) {
+    const needs = node.needs || [];
+    const facts = needs.filter((k) => !IDENT.has(k));
+    const quotesSearch = /"\{trade_word\} \{town\}"/.test(node.body || '');
+    const ok = whenOk(node.when, v) && needs.every((k) => v[k] !== undefined) && (!quotesSearch || v.search_phrase !== undefined) && !facts.some((k) => factsUsed.includes(k));
+    if (ok) {
+      let text = node.body;
+      for (const r of node.line_rules || []) if (v[r.if_missing] === undefined) text = text.split(r.replace).join(r.with);
+      const opt = node.optional || [];
+      if (!opt.some((k) => v[k] === undefined && text.includes('{' + k + '}'))) {
+        const body = fill(text, v).replace(/\ba HVAC\b/g, 'an HVAC');
+        if (!bodyProblems(body, v.report_link).length) return { body, facts, node };
+      }
+    }
+    node = node.fallback;
+  }
+  return null;
+}
+
+function footerKind(rec) { return rec.warm ? 'warm' : rec.source === 'cold_email' ? 'cold_email' : 'cold_website'; }
+function composeText(rec, body) {
+  return [body.trim(), '', SEQ.signature, '', SEQ.footer[footerKind(rec)]].join('\n');
+}
+
+// ---- dates (h gives: local(date) -> {y,m,d,h}, isBusinessDay(y,m,d), fromLocal(y,m,d,h,mi)) ----
+const ymd = (p) => `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
+function addDays(p, n) { const d = new Date(Date.UTC(p.y, p.m - 1, p.d + n)); return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate() }; }
+function okDay(p, h) { return h.isBusinessDay(p.y, p.m, p.d) && !(SEQ.holidays_slide_next_business_day || []).includes(ymd(p)); }
+function addBusinessDays(p, n, h) { let x = p, k = 0; while (k < n) { x = addDays(x, 1); if (okDay(x, h)) k++; } return x; }
+function slide(p, h) { let x = p; while (!okDay(x, h)) x = addDays(x, 1); return x; }
+
+// The plan of steps for this owner, in order: [{id, node, due:{y,m,d}}]. Ladder and re-run dates hang off the last
+// main step's actual send day (or the day he said "later").
+function plan(rec, h) {
+  const fu = rec.fu, d0 = h.local(new Date(fu.day0));
+  const main = (rec.warm ? SEQ.warm : SEQ.cold).map((s) => ({ id: s.step, node: s, due: addBusinessDays(d0, s.day, h) }));
+  const out = fu.later_at ? [] : main;
+  const lastMain = fu.later_at ? h.local(new Date(fu.later_at))
+    : (() => { const ids = main.map((m) => m.id); const done = ids.map((i) => fu.done[i]).filter(Boolean);
+      return done.length === ids.length ? h.local(new Date(done[done.length - 1].at)) : null; })();
+  if (!lastMain) return out;
+  for (const n of SEQ.ladder) out.push({ id: n.step, node: n, due: slide(addDays(lastMain, n.weeks_after_last * 7), h) });
+  const last = SEQ.ladder[SEQ.ladder.length - 1].step;
+  if (fu.done[last]) {
+    let base = h.local(new Date(fu.done[last].at));
+    for (let i = 1; i <= SEQ.rerun.max_no_reply; i++) {
+      out.push({ id: 'rerun' + i, node: { ...SEQ.rerun, step: 'rerun' + i }, due: slide(addDays(base, SEQ.rerun.every_weeks * 7), h), reset: true });
+      const r = fu.done['rerun' + i]; if (!r) break; base = h.local(new Date(r.at));
+    }
+  }
+  return out;
+}
+
+// What to do now for one owner. Returns {action:'none'|'wait'|'hold'|'skip'|'send'|'stop', ...}.
+function next(rec, env, now, h, stopKey) {
+  const fu = rec.fu;
+  if (!fu || fu.stopped) return { action: 'none', why: fu && fu.stopped ? 'stopped: ' + fu.stopped.why : 'no sequence' };
+  if (stopKey) return { action: 'stop', why: 'stop list' };
+  if (rec.test) return { action: 'none', why: 'TEST request: never sent' };
+  const today = h.local(now);
+  const due = plan(rec, h).find((s) => !fu.done[s.id]);
+  if (!due) return { action: 'none', why: 'sequence finished' };
+  if (ymd(due.due) > ymd(today)) return { action: 'wait', step: due.id, due: ymd(due.due) };
+  if (!okDay(today, h)) return { action: 'wait', step: due.id, why: 'not a sending day' };
+  if (today.h < (fu.hour ?? 9)) return { action: 'wait', step: due.id, why: 'before send hour' };
+  if (fu.last_sent_day === ymd(today)) return { action: 'wait', step: due.id, why: 'already emailed today' };
+  const v = values(rec, { ...h, now });
+  const r = resolveStep(due.node, v, due.reset ? [] : (fu.facts || []));
+  if (!r) return { action: 'skip', step: due.id, why: 'no version of this step fits his report' };
+  if (String(env.FOLLOWUPS || 'off').trim().toLowerCase() !== 'on') return { action: 'hold', step: due.id, why: 'FOLLOWUPS is off' };
+  if (String(env.LIVE || 'off').trim().toLowerCase() !== 'on') return { action: 'hold', step: due.id, why: 'LIVE is off' };
+  return { action: 'send', step: due.id, body: r.body, facts: r.facts, text: composeText(rec, r.body) };
+}
+
+// Reads the thread: {ok, replied, messageId} using a Gmail thread JSON (format=metadata).
+function readThread(t, ourAddress) {
+  const msgs = (t && t.messages) || [];
+  if (!msgs.length) return { ok: false };
+  let replied = false, messageId = '';
+  for (const m of msgs) {
+    const hd = Object.fromEntries(((m.payload && m.payload.headers) || []).map((x) => [x.name.toLowerCase(), x.value]));
+    const ours = (m.labelIds || []).includes('SENT') && String(hd.from || '').toLowerCase().includes(ourAddress);
+    if (!ours) replied = true;
+    if (hd['message-id']) messageId = hd['message-id'];
+  }
+  return { ok: true, replied, messageId };
+}
+const CLEAR_WINDOW_MS = CLEAR_MS;
+
+return { FU_SEQ, values, whenOk, bodyProblems, resolveStep, footerKind, composeText, addBusinessDays, slide, plan, next, readThread, CLEAR_WINDOW_MS };
+})();
+// ---- end inlined ----
+
+const SITE = 'https://getbookedoutsolutions.com';
+const TZ = 'America/Chicago';
+const DAY = 86400;
+const ID = /^fr-[0-9]{8}-[a-z0-9]{6}$/;
+const TOK = /^[a-f0-9]{48}$/;
+
+const TRADES = {
+  'Heating and air': { slug: 'hvac', kw: 'hvac', price: 'price-hvac.html' },
+  'Plumbing': { slug: 'plumbing', kw: 'plumber', price: 'price-plumbing.html' },
+  'Electrical': { slug: 'electrical', kw: 'electrician', price: 'price-electrical.html' },
+  'Something else': { slug: 'other', kw: '', price: 'free-look.html' },
+};
+const REVENUE = {
+  'Under $250K': [0, 250000],
+  '$250K to $500K': [250000, 500000],
+  '$500K to $1M': [500000, 1000000],
+  '$1M to $3M': [1000000, 3000000],
+  'Over $3M': [3000000, 0],
+  'Rather not say': null,
+};
+const BIG = ['$1M to $3M', 'Over $3M'];
+
+// ---------- validation (the page uses the same rules) ----------
+function validate(b) {
+  const s = (k, n) => String((b && b[k]) == null ? '' : b[k]).trim().slice(0, n);
+  const c = {
+    first_name: s('first_name', 200), business_name: s('business_name', 300), email: s('email', 300).toLowerCase(),
+    phone: s('phone', 60), town: s('town', 200), trade: s('trade', 40) || 'Something else',
+    note: s('note', 5000), revenue: s('revenue', 40),
+    consent: b && (b.consent === true || b.consent === 'yes' || b.consent === 'on'),
+    page: s('page', 120),
+  };
+  const e = {};
+  if (c.first_name.length < 1 || c.first_name.length > 60) e.first_name = 'Please add your first name.';
+  if (c.business_name.length < 2 || c.business_name.length > 120) e.business_name = 'Please add your business name.';
+  if (!/^[^\s@<>()",;:]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(c.email) || c.email.length > 160) e.email = 'Please check your email address. It should look like name@yourbusiness.com.';
+  let n = c.phone.replace(/\D/g, '');
+  if (n.length === 11 && n[0] === '1') n = n.slice(1);
+  if (!/^[2-9]\d{9}$/.test(n)) e.phone = 'Please add a phone number with area code, like 615 555 0123.';
+  else c.phone = `(${n.slice(0, 3)}) ${n.slice(3, 6)}-${n.slice(6)}`;
+  if (c.town.length < 2 || c.town.length > 80) e.town = 'Please add the town your business is in.';
+  if (!TRADES[c.trade]) e.trade = 'Please pick your trade.';
+  if (c.note.length > 1000) e.note = 'Please keep this under 1,000 characters.';
+  if (c.revenue && !(c.revenue in REVENUE)) e.revenue = 'Please pick one of the choices.';
+  return { ok: !Object.keys(e).length, errors: e, clean: c };
+}
+
+// ---------- the 1-business-day clock (America/Chicago) ----------
+const FMT = new Intl.DateTimeFormat('en-US', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', weekday: 'short' });
+const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function local(date) {
+  const o = {};
+  for (const p of FMT.formatToParts(date)) o[p.type] = p.value;
+  return { y: +o.year, m: +o.month, d: +o.day, h: +o.hour % 24, mi: +o.minute, dow: WD.indexOf(o.weekday) };
+}
+function fromLocal(y, m, d, h, mi) {
+  const want = Date.UTC(y, m - 1, d, h, mi);
+  let t = want + 6 * 3600e3;
+  for (let i = 0; i < 3; i++) {
+    const p = local(new Date(t));
+    const diff = Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi) - want;
+    if (!diff) break;
+    t -= diff;
+  }
+  return new Date(t);
+}
+const iso = (y, m, d) => new Date(Date.UTC(y, m - 1, d)).toISOString().slice(0, 10);
+function nth(y, m, dow, n) {
+  if (n > 0) { const first = new Date(Date.UTC(y, m - 1, 1)).getUTCDay(); return 1 + ((dow - first + 7) % 7) + 7 * (n - 1); }
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate(), lw = new Date(Date.UTC(y, m - 1, last)).getUTCDay();
+  return last - ((lw - dow + 7) % 7);
+}
+function observed(y, m, d) {
+  const w = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return iso(y, m, d + (w === 6 ? -1 : w === 0 ? 1 : 0));
+}
+// US federal holidays with the observed weekday (Saturday -> Friday, Sunday -> Monday).
+function federalHolidays(y) {
+  return [observed(y, 1, 1), iso(y, 1, nth(y, 1, 1, 3)), iso(y, 2, nth(y, 2, 1, 3)), iso(y, 5, nth(y, 5, 1, -1)),
+    observed(y, 6, 19), observed(y, 7, 4), iso(y, 9, nth(y, 9, 1, 1)), iso(y, 10, nth(y, 10, 1, 2)),
+    observed(y, 11, 11), iso(y, 11, nth(y, 11, 4, 4)), observed(y, 12, 25)];
+}
+function isBusinessDay(y, m, d) {
+  const w = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  if (w === 0 || w === 6) return false;
+  const day = iso(y, m, d);
+  return ![y - 1, y, y + 1].some((yy) => federalHolidays(yy).includes(day));
+}
+function nextBusinessDay(y, m, d) {
+  for (let i = 1; i < 15; i++) {
+    const t = new Date(Date.UTC(y, m - 1, d + i));
+    const a = [t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate()];
+    if (isBusinessDay(...a)) return a;
+  }
+  throw new Error('no business day');
+}
+// A request on a business day between 8 am and 5 pm is due at the same clock time the next business day.
+// Before 8 am it counts from 8 am that day. After 5 pm, on a weekend or on a holiday it counts from
+// 8 am the next business day, so it is due at 8 am the business day after that.
+// Returns {start, due, warn} as Dates; warn is 75% of the way from start to due.
+function businessClock(received) {
+  const p = local(received);
+  let start, due;
+  if (isBusinessDay(p.y, p.m, p.d) && p.h < 17) {
+    const [h, mi] = p.h < 8 ? [8, 0] : [p.h, p.mi];
+    start = p.h < 8 ? fromLocal(p.y, p.m, p.d, 8, 0) : received;
+    const n = nextBusinessDay(p.y, p.m, p.d);
+    due = fromLocal(n[0], n[1], n[2], h, mi);
+  } else {
+    const s = nextBusinessDay(p.y, p.m, p.d);
+    start = fromLocal(s[0], s[1], s[2], 8, 0);
+    const n = nextBusinessDay(s[0], s[1], s[2]);
+    due = fromLocal(n[0], n[1], n[2], 8, 0);
+  }
+  const warn = new Date(start.getTime() + 0.75 * (due.getTime() - start.getTime()));
+  return { start, due, warn };
+}
+function chicagoText(date) {
+  return new Date(date).toLocaleString('en-US', { timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+// ---------- the LIVE guard and the send to the owner ----------
+// Before GO LIVE (LIVE is not "on") the worker never emails or texts a business owner.
+function fuOn(env) { return String((env && env.FOLLOWUPS) || 'off').trim().toLowerCase() === 'on'; }
+function isLive(env) { return String((env && env.LIVE) || 'off').trim().toLowerCase() === 'on'; }
+
+const GMAIL_TOKEN = 'https://oauth2.googleapis.com/token';
+const GMAIL_SEND = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
+const RESEND_SEND = 'https://api.resend.com/emails';
+const GMAIL_THREAD = 'https://gmail.googleapis.com/gmail/v1/users/me/threads/';
+const FROM = 'Rickey Hallor <rickey@getbookedoutsolutions.com>';
+
+// The one email that goes to the owner: a short plain note with the link to his report.
+// Visitor text rules apply (no long dashes, no emojis); it never promises jobs, calls or rank.
+function ownerEmail(env, rec) {
+  const link = `${SITE}/r/${rec.token}/`;
+  const subject = plain(`Your free report for ${rec.business_name}`).replace(/[\r\n]+/g, ' ');
+  const text = [
+    `Hi ${plain(rec.first_name)},`,
+    '',
+    `Here's the free report you asked for on ${plain(rec.business_name)}:`,
+    link,
+    '',
+    'It is built from your real Google listing and a few quick checks, and it ends with three fixes you can make yourself.',
+    '',
+    'Questions? Just reply to this email.',
+    '',
+    'Rickey Hallor',
+    'Booked Out Solutions',
+    'P.O. Box 1166, Smyrna, TN 37167',
+    '',
+    'You got this because you asked for a free report on our website. Reply "stop" and we will not email you again.',
+  ].join('\n');
+  return { from: env.SEND_FROM || FROM, to: rec.email, subject, text };
+}
+const b64u = (str) => { const by = new TextEncoder().encode(str); let bin = ''; for (const x of by) bin += String.fromCharCode(x); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+const b64 = (str) => { const by = new TextEncoder().encode(str); let bin = ''; for (const x of by) bin += String.fromCharCode(x); return btoa(bin); };
+function mime(m) {
+  const hdr = (v) => (v = String(v).replace(/[\r\n]+/g, ' ')) && /^[\x20-\x7e]*$/.test(v) ? v : `=?UTF-8?B?${b64(v)}?=`;
+  return [`From: ${m.from}`, `To: ${m.to}`, `Subject: ${hdr(m.subject)}`, 'MIME-Version: 1.0',
+    ...(m.inReplyTo ? [`In-Reply-To: ${hdr(m.inReplyTo)}`, `References: ${hdr(m.inReplyTo)}`] : []),
+    'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', b64(m.text)].join('\r\n');
+}
+
+// Sends one email by the picked route. Returns {ok, route, id?, error?}. Never throws.
+async function sendMail(env, m, f) {
+  const route = String(env.SEND_ROUTE || 'gmail').trim().toLowerCase();
+  try {
+    if (route === 'gmail') {
+      if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) return { ok: false, route, error: 'gmail route not set up' };
+      const tok = await gmailToken(env, f);
+      if (!tok.ok) return { ok: false, route, error: tok.error };
+      const r = await out(env, GMAIL_SEND, { method: 'POST', headers: { authorization: 'Bearer ' + tok.token, 'content-type': 'application/json' },
+        body: JSON.stringify(m.threadId ? { raw: b64u(mime(m)), threadId: m.threadId } : { raw: b64u(mime(m)) }) }, f);
+      if (!r.ok) return { ok: false, route, error: 'gmail send ' + r.status };
+      const j = await r.json();
+      return { ok: true, route, id: j.id || '', threadId: j.threadId || '' };
+    }
+    if (route === 'cloudflare') {
+      // Cloudflare Email Sending (public beta since Apr 16 2026, Workers Paid). The binding's exact call shape is
+      // checked on Cloudflare's docs before this route is ever switched on.
+      if (!env.EMAIL || typeof env.EMAIL.send !== 'function') return { ok: false, route, error: 'cloudflare route not set up' };
+      const r = await env.EMAIL.send({ from: m.from, to: m.to, subject: m.subject, text: m.text });
+      return { ok: true, route, id: (r && (r.messageId || r.id)) || '' };
+    }
+    if (route === 'resend') {
+      if (!env.RESEND_KEY) return { ok: false, route, error: 'resend route not set up' };
+      const r = await out(env, RESEND_SEND, { method: 'POST', headers: { authorization: 'Bearer ' + env.RESEND_KEY, 'content-type': 'application/json' },
+        body: JSON.stringify({ from: m.from, to: [m.to], subject: m.subject, text: m.text }) }, f);
+      if (!r.ok) return { ok: false, route, error: 'resend send ' + r.status };
+      return { ok: true, route, id: (await r.json()).id || '' };
+    }
+    return { ok: false, route, error: 'unknown SEND_ROUTE' };
+  } catch (e) { return { ok: false, route, error: String((e && e.message) || e).slice(0, 200) }; }
+}
+
+async function gmailToken(env, f) {
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) return { ok: false, error: 'gmail route not set up' };
+  const t = await out(env, GMAIL_TOKEN, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: env.GMAIL_CLIENT_ID, client_secret: env.GMAIL_CLIENT_SECRET, refresh_token: env.GMAIL_REFRESH_TOKEN, grant_type: 'refresh_token' }).toString() }, f);
+  if (!t.ok) return { ok: false, error: 'gmail token ' + t.status };
+  return { ok: true, token: (await t.json()).access_token };
+}
+// Reads one of our Gmail threads (needs the gmail.readonly scope on the token). Never throws.
+async function gmailThread(env, threadId, f) {
+  try {
+    if (!/^[a-f0-9]{6,40}$/i.test(String(threadId || ''))) return { ok: false, error: 'no thread id' };
+    const tok = await gmailToken(env, f);
+    if (!tok.ok) return { ok: false, error: tok.error };
+    const r = await out(env, GMAIL_THREAD + threadId + '?format=metadata&metadataHeaders=From&metadataHeaders=Message-ID',
+      { headers: { authorization: 'Bearer ' + tok.token } }, f);
+    if (!r.ok) return { ok: false, error: 'gmail thread ' + r.status };
+    return { ok: true, thread: await r.json() };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e).slice(0, 200) }; }
+}
+
+// Every check that must be true before a report goes to an owner. Returns '' when it may go, else the reason.
+function sendBlock(env, rec) {
+  if (!isLive(env)) return 'LIVE is off: nothing goes to a business before GO LIVE';
+  if (rec.test) return 'TEST request (fake shop): never sent';
+  if (rec.status === 'sent') return 'already sent';
+  if (rec.status !== 'checked') return 'not checked by both agents';
+  if (!rec.complete || (rec.pending || []).length) return 'report still has pending sections';
+  const c = rec.checks || {}, c1 = c['1'], c2 = c['2'];
+  if (!c1 || !c2 || c1.result !== 'pass' || c2.result !== 'pass') return 'needs two pass marks';
+  if (!c1.agent || !c2.agent || c1.agent === c2.agent) return 'the two checks must come from two different agents';
+  if (c1.hash !== rec.hash || c2.hash !== rec.hash) return 'report changed after it was checked';
+  if (!validate({ ...rec, consent: rec.consent }).ok) return 'contact details no longer valid';
+  return '';
+}
+async function deliverToOwner(env, rec, f) {
+  const why = sendBlock(env, rec);
+  if (why) return { sent: false, blocked: true, reason: why };
+  const r = await sendMail(env, ownerEmail(env, rec), f);
+  return r.ok ? { sent: true, blocked: false, route: r.route, id: r.id, threadId: r.threadId || '' } : { sent: false, blocked: false, route: r.route, reason: r.error };
+}
+// Every outside call goes through here. Only the lookup worker and the picked send route are allowed.
+function allowed(env, url) {
+  const route = String(env.SEND_ROUTE || 'gmail').trim().toLowerCase();
+  const ok = [env.LOOKUP_URL];
+  if (isLive(env) && route === 'gmail') ok.push(GMAIL_TOKEN, GMAIL_SEND);
+  if (isLive(env) && route === 'resend') ok.push(RESEND_SEND);
+  // Thread reads, only for follow-ups, only with LIVE and FOLLOWUPS on, only our own thread ids.
+  if (isLive(env) && fuOn(env) && route === 'gmail' && url.startsWith(GMAIL_THREAD) && /^[a-f0-9]{6,40}\?format=metadata&metadataHeaders=From&metadataHeaders=Message-ID$/i.test(url.slice(GMAIL_THREAD.length))) return true;
+  return ok.filter(Boolean).includes(url);
+}
+async function out(env, url, init, f) {
+  if (!allowed(env, url)) throw new Error('blocked outbound call');
+  return (f || fetch)(url, init);
+}
+
+// ---------- the watch list (read by the watchdog; nothing is emailed) ----------
+// level: "warn" (75% of the clock) or "problem" (overdue); "test" for fake TEST shops (never counted as problems).
+// The 2-agent checkers and the watchdog act on warn and problem.
+async function sendAlert(env, subject, message, f, level = 'warn', id = '') {
+  const at = new Date().toISOString();
+  const entry = { at, level, id, subject: String(subject).slice(0, 200), message: String(message).slice(0, 5000) };
+  if (env.KV) {
+    await env.KV.put(`watch:${at}:${level}:${id || 'x'}`, JSON.stringify(entry), { expirationTtl: 30 * DAY });
+    await env.KV.put('alert:last', JSON.stringify({ at, level, subject: entry.subject }));
+  }
+  return 'kv';
+}
+
+// ---------- lookup (only for real requests; each call costs us a little) ----------
+function isTestRequest(rec) {
+  return /@example\.(com|org|net)$/i.test(rec.email || '') || /\(FAKE\)/i.test(rec.business_name || '');
+}
+function townState(town) {
+  const m = String(town).match(/^(.*?)[\s,]+([A-Za-z]{2})$/);
+  return m ? { town: m[1].trim(), state: m[2].toUpperCase() } : { town: String(town).trim(), state: '' };
+}
+async function lookup(env, rec, f) {
+  if (!env.LOOKUP_URL || !env.LOOKUP_KEY || isTestRequest(rec)) return null;
+  const ts = townState(rec.town), kw = (TRADES[rec.trade] || {}).kw || '';
+  const call = async (body) => {
+    const r = await out(env, env.LOOKUP_URL, { method: 'POST', headers: { 'content-type': 'application/json', 'x-lookup-key': env.LOOKUP_KEY }, body: JSON.stringify(body) }, f);
+    if (!r.ok) throw new Error('lookup ' + r.status);
+    return r.json();
+  };
+  const g = await call({ business_name: rec.business_name, town: ts.town, state: ts.state, keyword: kw ? `${kw} ${ts.town}` : '' });
+  const google = { has_google_profile: !!g.has_google_profile, rating: g.rating ?? null, review_count: g.review_count ?? null,
+    rank_for_keyword: g.rank_for_keyword ?? null, top3: Array.isArray(g.top3) ? g.top3.slice(0, 3) : [], keyword: kw ? `${kw} ${ts.town}` : '' };
+  let reviews = null;
+  if (google.has_google_profile && g.reviews_task_id) {
+    reviews = { task: g.reviews_task_id, tries: 0 };
+    try { Object.assign(reviews, await reviewsCall(env, g.reviews_task_id, f)); } catch (e) { /* tried again by the cron */ }
+  } else if (google.has_google_profile && g.newest_review) {
+    reviews = { newest_review: g.newest_review, owner_reply_on_newest: !!g.owner_reply_on_newest };
+  }
+  return { google, reviews };
+}
+async function reviewsCall(env, task, f) {
+  const r = await out(env, env.LOOKUP_URL, { method: 'POST', headers: { 'content-type': 'application/json', 'x-lookup-key': env.LOOKUP_KEY }, body: JSON.stringify({ reviews_task_id: task }) }, f);
+  if (!r.ok) throw new Error('reviews ' + r.status);
+  const j = await r.json();
+  if (!j.newest_review) return {};
+  return { newest_review: j.newest_review, owner_reply_on_newest: !!j.owner_reply_on_newest };
+}
+
+// ---------- the report ----------
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Visitor text rules: no long dashes, no emojis (also cleans text that comes from Google reviews).
+function plain(s) {
+  return String(s == null ? '' : s).replace(/\s*[\u2012-\u2015]\s*/g, ', ').replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, '').replace(/\s{2,}/g, ' ').trim();
+}
+const t = (s) => esc(plain(s));
+const money = (n) => '$' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+function budgetLine(revenue) {
+  const r = REVENUE[revenue];
+  if (!r) return '';
+  const [lo, hi] = r;
+  let x;
+  if (!lo) x = `up to about ${money(hi * 0.08 / 12)} a month`;
+  else if (!hi) x = `about ${money(lo * 0.06 / 12)} a month or more`;
+  else x = `about ${money(lo * 0.06 / 12)} to ${money(hi * 0.08 / 12)} a month`;
+  return `Shops your size spend 6 to 8% of revenue to grow; for you that's ${x}. Core is $997.`;
+}
+
+function pickFixes(rec) {
+  const s = rec.sections || {}, g = s.google, rv = s.reviews, bk = s.booking, ct = s.category, ai = s.ai, out = [];
+  if (g && !g.has_google_profile) out.push('Set up your free Google Business Profile with your real address or service area, hours and phone number. Without it, you do not show on the Google map.');
+  if (g && g.has_google_profile && g.top3 && g.top3.length && g.review_count != null) {
+    const avg = Math.round(g.top3.reduce((a, x) => a + (+x.review_count || 0), 0) / g.top3.length);
+    if (avg > g.review_count) out.push(`Ask every happy customer for a Google review the day the job is done. The top 3 near you average ${avg} reviews; you have ${g.review_count}.`);
+  }
+  if (rv && rv.newest_review && !rv.owner_reply_on_newest) out.push('Reply to your newest Google review today, and to every new review within a day from now on. The next customer reads those replies.');
+  if (ct && ct.match === false) out.push(`Change your Google main category to the one that fits ${plain(ct.big_job || 'the big-ticket job you want most')}, so Google shows you for that work.`);
+  if (bk && Array.isArray(bk.fixes) && bk.fixes[0]) out.push(plain(bk.fixes[0]));
+  if (ai && ai.chatgpt && ai.chatgpt.named === false) out.push('Put your town, your main services and your best reviews in plain words on your website, so ChatGPT and Gemini have something to say about you.');
+  const base = [
+    'Put your phone number and a clear "Get a quote" button at the top of every page of your website.',
+    'Call or text back every new lead within 5 minutes, even after hours.',
+    'Follow up on every quote you send: a short note 2 days later, then again a week later.',
+  ];
+  for (const b of base) if (out.length < 3) out.push(b);
+  return out.slice(0, 3);
+}
+
+const PENDING = '<p class="pending"><b>Pending check.</b> We are finishing this part now. It will be filled in before we send your report.</p>';
+
+// Returns {html, pending:[section names], complete}
+function renderReport(rec) {
+  const s = rec.sections || {}, g = s.google, rv = s.reviews, ai = s.ai, bk = s.booking, ct = s.category;
+  const trade = TRADES[rec.trade] || TRADES['Something else'];
+  const pending = [], parts = [];
+  let n = 0;
+  const sec = (title, body) => { n++; parts.push(`<section class="rsec"><h2><span class="num">${n}</span>${esc(title)}</h2>${body}</section>`); };
+
+  // 1 Google
+  let b1 = '';
+  if (!g) { b1 = PENDING; pending.push('1 Google'); }
+  else if (!g.has_google_profile) {
+    b1 = `<p>We could not find a Google Business Profile for ${t(rec.business_name)} in ${t(rec.town)}. Without one, you do not show on the Google map at all, so there is no place to report yet. The good news: it is free to set up, and fix 1 below shows how.</p>`;
+  } else {
+    const rows = [];
+    rows.push(['Google profile', 'Found']);
+    if (g.rating != null) rows.push(['Stars', `${t(g.rating)} out of 5`]);
+    if (g.review_count != null) rows.push(['Reviews', t(g.review_count)]);
+    const kw = g.keyword || (trade.kw ? `${trade.kw} ${townState(rec.town).town}` : '');
+    if (!kw) { pending.push('1 Google (search to check)'); }
+    else if (g.rank_for_keyword) rows.push([`Where you show for "${t(kw)}"`, `Number ${t(g.rank_for_keyword)}`]);
+    else rows.push([`Where you show for "${t(kw)}"`, 'Not in the first 20 results']);
+    b1 = '<div class="rows">' + rows.map(([a, v]) => `<div><span>${esc(a)}</span><b>${v}</b></div>`).join('') + '</div>';
+    if (!kw) b1 += PENDING;
+    if (g.top3 && g.top3.length) {
+      b1 += '<h3>The top 3 near you</h3><ol class="top3">' + g.top3.map((x) => `<li><b>${t(x.name)}</b> <span>${x.rating != null ? t(x.rating) + ' stars, ' : ''}${t(x.review_count ?? 0)} reviews</span></li>`).join('') + '</ol>';
+      if (g.review_count != null) {
+        const avg = Math.round(g.top3.reduce((a, x) => a + (+x.review_count || 0), 0) / g.top3.length);
+        const inTop = g.rank_for_keyword && g.rank_for_keyword <= 3;
+        b1 += inTop ? `<p class="gap">You are already in the top 3 for this search. The top 3 average ${avg} reviews; you have ${t(g.review_count)}.</p>`
+          : avg > g.review_count ? `<p class="gap"><b>Gap to the top 3:</b> they average ${avg} reviews; you have ${t(g.review_count)}. That is about ${avg - g.review_count} reviews behind.</p>`
+            : `<p class="gap">You already have as many reviews as the top 3 (they average ${avg}). The gap is in other places, like the fixes below.</p>`;
+      }
+    }
+  }
+  sec('What we found on Google', b1);
+
+  // 2 newest review
+  let b2 = '';
+  if (g && !g.has_google_profile) b2 = '<p>No Google profile yet, so there are no Google reviews to check.</p>';
+  else if (rv && rv.newest_review) {
+    const r = rv.newest_review, txt = plain(r.text || '').slice(0, 280);
+    b2 = `<blockquote>${r.rating != null ? `<b>${t(r.rating)} stars.</b> ` : ''}${txt ? '"' + esc(txt) + (plain(r.text || '').length > 280 ? '..."' : '"') : '(No words, stars only.)'}${r.date ? ` <span class="when">${t(r.date)}</span>` : ''}</blockquote>`
+      + (rv.owner_reply_on_newest ? '<p><b>Did it get a reply from you?</b> Yes. Nice work. Keep replying to every review.</p>'
+        : '<p><b>Did it get a reply from you?</b> Not yet. A short, kind reply within a day shows the next customer that you care.</p>');
+  } else { b2 = PENDING; pending.push('2 Newest review'); }
+  sec('Your newest review, and whether it got a reply', b2);
+
+  // 3 ChatGPT and Gemini
+  let b3 = '';
+  if (ai && ai.chatgpt && ai.gemini) {
+    const line = (name, x) => `<li><b>${name}:</b> ${x.named ? 'you were on the list' : 'you were not on the list'}${x.correct === false ? ', and some of what it said about you was wrong' : ''}.${x.note ? ' ' + t(x.note) : ''}</li>`;
+    b3 = (ai.question ? `<p>We asked both: "${t(ai.question)}"</p>` : '') + `<ul class="plainlist">${line('ChatGPT', ai.chatgpt)}${line('Gemini', ai.gemini)}</ul>`;
+  } else { b3 = PENDING; pending.push('3 ChatGPT and Gemini test'); }
+  sec('The ChatGPT and Gemini 2-minute test', '<p class="sub">More people now ask ChatGPT or Gemini who to call. We ask both the question your best customer would ask, and check if you come up.</p>' + b3);
+
+  // 4 booking test
+  let b4 = '';
+  if (bk && bk.score != null) {
+    const fx = (bk.fixes || []).slice(0, 3).map((x) => `<li>${t(x)}</li>`).join('');
+    b4 = `<p class="score"><b>${t(Math.max(0, Math.min(10, +bk.score)))}</b> out of 10</p>${fx ? `<p>Three fixes:</p><ol class="plainlist">${fx}</ol>` : ''}`;
+  } else { b4 = PENDING; pending.push('4 Booking test'); }
+  sec('Booking test from a phone', '<p class="sub">We open your website on a phone the way a customer would and score how easy it is to ask for a quote. We never send your form.</p>' + b4);
+
+  // 5 main category
+  let b5 = '';
+  if (ct && ct.main_category) {
+    b5 = `<div class="rows"><div><span>Your Google main category</span><b>${t(ct.main_category)}</b></div>${ct.big_job ? `<div><span>The big-ticket job you want</span><b>${t(ct.big_job)}</b></div>` : ''}</div>`
+      + (ct.match === false ? '<p>These do not match. Google leans on your main category to decide which searches to show you for.</p>' : '<p>These match. Good.</p>')
+      + (ct.note ? `<p>${t(ct.note)}</p>` : '');
+  } else { b5 = PENDING; pending.push('5 Main category'); }
+  sec('Your Google main category and the big job you want', b5);
+
+  // 6 budget (only when the owner told us a range)
+  const bl = budgetLine(rec.revenue);
+  if (bl) sec('A marketing budget line for your size', `<p>${esc(bl)}</p><p class="sub">Based only on the range you gave us.</p>`);
+
+  // 7 three fixes
+  sec('Three fixes, in plain words', '<ol class="plainlist">' + pickFixes(rec).map((x) => `<li>${t(x)}</li>`).join('') + '</ol>');
+
+  // 8 next step
+  const href = `${SITE}/${trade.price}`;
+  sec('One next step', `<p><a class="btn" href="${href}">Start your free 30 days</a></p><p class="sub">Nothing is charged for 30 days. Cancel any time with one reply.</p>`);
+
+  const day = new Date(rec.received || Date.now()).toLocaleDateString('en-US', { timeZone: TZ, month: 'long', day: 'numeric', year: 'numeric' });
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer"><title>Your free report | Booked Out Solutions</title><style>${CSS}</style></head><body><main>`
+    + `<p class="brand">Booked Out Solutions</p><p class="kicker">Free report, ${esc(day)}</p>`
+    + `<h1>Your free report for ${t(rec.business_name)}</h1>`
+    + `<p class="lead">${t(rec.town)}. Built from your real Google listing and a few quick checks. It is yours to keep.</p>`
+    + parts.join('')
+    + `<footer><p>Questions? Reply to the email this came in, or write to <a href="mailto:hello@getbookedoutsolutions.com">hello@getbookedoutsolutions.com</a>.</p><p>Booked Out Solutions, Smyrna, Tennessee</p></footer>`
+    + '</main></body></html>';
+  return { html, pending, complete: pending.length === 0 };
+}
+
+const CSS = '@font-face{font-family:"Bricolage";src:url("/fonts/bricolage-grotesque.woff2") format("woff2");font-weight:200 800;font-display:swap}'
+  + '@font-face{font-family:"Instrument";src:url("/fonts/instrument-sans.woff2") format("woff2");font-weight:400 700;font-display:swap}'
+  + ':root{--ink:#0A0F26;--navy:#16204A;--royal:#2D3E86;--paper:#F6F1E7;--card:#FFFDF7;--gold:#EDB547;--goldhi:#FFD56B;--muted:#565B70;--line:rgba(10,15,38,.12)}'
+  + '*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:18px/1.6 "Instrument",system-ui,-apple-system,"Segoe UI",sans-serif;overflow-x:hidden}'
+  + 'main{max-width:46rem;margin:0 auto;padding:28px 16px 60px}h1,h2,h3{font-family:"Bricolage","Instrument",system-ui,sans-serif;letter-spacing:-.02em;line-height:1.1;margin:0}'
+  + 'h1{font-size:clamp(30px,6vw,46px);margin:6px 0 10px}h2{font-size:22px;display:flex;gap:12px;align-items:center;margin-bottom:12px}h3{font-size:18px;margin:16px 0 8px}'
+  + '.brand{font:800 15px/1 "Bricolage",sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--royal);margin:0 0 4px}.kicker{color:var(--muted);margin:0}.lead{font-size:19px;color:var(--muted)}'
+  + '.rsec{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px 18px;margin:16px 0;box-shadow:0 12px 30px -20px rgba(10,15,38,.35)}'
+  + '.num{flex:none;display:inline-grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--navy);color:var(--goldhi);font-size:16px}'
+  + '.rows div{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line)}.rows div:first-child{border-top:0}.rows span{color:var(--muted)}.rows b{text-align:right}'
+  + '.top3{margin:0;padding-left:22px}.top3 li{margin:4px 0}.top3 span{color:var(--muted)}.gap{background:#FFF1D2;border-radius:12px;padding:10px 12px;margin:12px 0 0}'
+  + 'blockquote{margin:0 0 10px;padding:12px 14px;border-left:4px solid var(--gold);background:#fff;border-radius:8px}.when{color:var(--muted);font-size:15px}'
+  + '.pending{background:rgba(45,62,134,.08);color:var(--royal);border-radius:12px;padding:10px 12px;margin:0}.sub{color:var(--muted);font-size:16.5px}'
+  + '.plainlist{margin:0;padding-left:22px}.plainlist li{margin:6px 0}.score{font-size:20px}.score b{font:800 40px/1 "Bricolage",sans-serif;color:var(--royal)}'
+  + '.btn{display:inline-block;background:linear-gradient(180deg,#FFF3C8 0%,#FFD56B 30%,#EDB547 62%,#C08A23 100%);color:#140F02;font-weight:700;text-decoration:none;padding:16px 26px;border-radius:999px}'
+  + 'footer{color:var(--muted);font-size:16px;margin-top:28px}a{color:var(--royal)}';
+
+// ---------- KV helpers ----------
+const getJ = async (env, k) => JSON.parse((await env.KV.get(k)) || 'null');
+const putJ = (env, k, v, ttl) => env.KV.put(k, JSON.stringify(v), ttl ? { expirationTtl: ttl } : undefined);
+const KEEP = 365 * DAY;
+function rand(n) { const a = new Uint8Array(n); crypto.getRandomValues(a); return Array.from(a, (x) => x.toString(16).padStart(2, '0')).join(''); }
+function newId(now) {
+  const p = local(now), a = 'abcdefghijklmnopqrstuvwxyz0123456789', r = new Uint8Array(6);
+  crypto.getRandomValues(r);
+  return `fr-${p.y}${String(p.m).padStart(2, '0')}${String(p.d).padStart(2, '0')}-${Array.from(r, (x) => a[x % a.length]).join('')}`;
+}
+const keyOk = (env, k) => !!env.STATUS_KEY && typeof k === 'string' && k.length === env.STATUS_KEY.length && k === env.STATUS_KEY;
+
+// ---------- request handlers ----------
+async function submit(req, env, now = new Date()) {
+  const raw = await req.text();
+  if (raw.length > 10000) return json({ saved: false, error: 'too big' }, 413);
+  let b; try { b = JSON.parse(raw); } catch { return json({ saved: false, error: 'bad json' }, 400); }
+  if (b && (b.bot_field || b['bot-field'] || b.website)) return json({ saved: true, id: null }); // bots get a quiet "ok"
+  if (!(+b.elapsed_ms >= 3000)) return json({ saved: false, error: 'too fast' }, 400);
+  const v = validate(b);
+  if (!v.ok) return json({ saved: false, error: 'check fields', errors: v.errors }, 400);
+  const c = v.clean;
+  if (await env.KV.get('rl:' + c.email)) return json({ saved: false, duplicate: true, error: 'already have it' }, 429);
+  await env.KV.put('rl:' + c.email, '1', { expirationTtl: 600 });
+  const id = newId(now), clock = businessClock(now);
+  const rec = { id, token: rand(24), ...c, received: now.toISOString(), start: clock.start.toISOString(), due: clock.due.toISOString(),
+    warn: clock.warn.toISOString(), status: 'new', alerts: {}, sections: {}, pending: [], complete: false,
+    big_shop: BIG.includes(c.revenue), test: isTestRequest(c) };
+  await putJ(env, 'req:' + id, rec, KEEP);
+  await env.KV.put('open:' + id, '1', { expirationTtl: KEEP });
+  await putJ(env, 'lead:' + id, { id, received: rec.received, first_name: c.first_name, business_name: c.business_name, email: c.email,
+    phone: c.phone, trade: c.trade, town: c.town, revenue: c.revenue || '', consent: !!c.consent, page: c.page || '', test: rec.test });
+  return json({ saved: true, id });
+}
+
+async function sha(str) {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(d), (x) => x.toString(16).padStart(2, '0')).join('').slice(0, 32);
+}
+
+async function saveReport(env, rec) {
+  const r = renderReport(rec);
+  rec.pending = r.pending; rec.complete = r.complete;
+  const h = await sha(r.html);
+  if (h !== rec.hash) {
+    // A new version of the report: any earlier check marks were for the old version, so they no longer count.
+    if (rec.checks && Object.keys(rec.checks).length) rec.checks_cleared = (rec.checks_cleared || 0) + 1;
+    rec.checks = {};
+    if (rec.status === 'checked' || rec.status === 'held') rec.status = 'built';
+    rec.hash = h;
+  }
+  await env.KV.put('rep:' + rec.id, r.html, { expirationTtl: KEEP });
+  await env.KV.put('tok:' + rec.token, rec.id, { expirationTtl: KEEP });
+  return r;
+}
+
+async function build(env, rec, f) {
+  try {
+    const l = await lookup(env, rec, f);
+    if (l) { rec.sections.google = l.google; if (l.reviews) rec.sections.reviews = l.reviews; }
+  } catch (e) { rec.lookup_error = String((e && e.message) || e).slice(0, 200); }
+  await saveReport(env, rec);
+  rec.status = 'built';
+  rec.built = new Date().toISOString();
+}
+
+function alertText(rec, why) {
+  const lines = [
+    why,
+    '',
+    `Business: ${rec.business_name}`, `Town: ${rec.town}`, `Trade: ${rec.trade}`,
+    `Name: ${rec.first_name}`, `Email: ${rec.email}`, `Phone: ${rec.phone}`,
+    `OK to call or text: ${rec.consent ? 'yes' : 'no (email only)'}`,
+    `Revenue range: ${rec.revenue || 'not given'}`,
+  ];
+  if (rec.big_shop) lines.push('FLAG: Booker call now option first (shop does $1M or more a year).');
+  if (rec.note) lines.push(`What's going on: ${rec.note}`);
+  lines.push('', `Received: ${chicagoText(rec.received)}`, `Due by: ${chicagoText(rec.due)} (Central)`,
+    `Report: ${SITE}/r/${rec.token}/`,
+    rec.complete ? 'Report is complete.' : `Still pending: ${(rec.pending || []).join(', ') || 'none'}`,
+    rec.lookup_error ? `Lookup problem: ${rec.lookup_error}` : '',
+    rec.test ? 'This is a TEST request (fake shop). Do not send.' : '',
+    `Request id: ${rec.id}.`,
+    'Nothing has been sent to this business.');
+  return lines.filter((x, i, a) => x !== '' || a[i - 1] !== '').join('\n');
+}
+
+// The cron. Returns a short log of what it did (handy for tests).
+async function tick(env, now = new Date(), f) {
+  const log = [];
+  const keys = (await env.KV.list({ prefix: 'open:' })).keys.slice(0, 200);
+  let builds = 0;
+  for (const k of keys) {
+    const id = k.name.slice(5);
+    const rec = await getJ(env, 'req:' + id);
+    if (!rec || rec.status === 'sent') { await env.KV.delete(k.name); continue; }
+    let changed = false;
+    if (rec.status === 'new' && builds < 10) {
+      builds++;
+      await build(env, rec, f);
+      changed = true;
+      rec.alerts.built = now.toISOString(); log.push('built ' + id);
+    } else if (rec.status === 'built' && rec.sections.reviews && rec.sections.reviews.task && !rec.sections.reviews.newest_review && (rec.sections.reviews.tries || 0) < 4) {
+      rec.sections.reviews.tries = (rec.sections.reviews.tries || 0) + 1;
+      try { Object.assign(rec.sections.reviews, await reviewsCall(env, rec.sections.reviews.task, f)); } catch (e) { /* next run */ }
+      await saveReport(env, rec); changed = true; log.push('reviews ' + id);
+    }
+    if (rec.status === 'checked' && !rec.test) {
+      const r = await trySend(env, rec, now, f);
+      if (r.changed) { changed = true; log.push(r.log + ' ' + id); }
+      if (rec.status === 'sent') { await putJ(env, 'req:' + id, rec, KEEP); continue; }
+    }
+    if (rec.status !== 'new') {
+      const due = Date.parse(rec.due), warn = Date.parse(rec.warn), at = now.getTime();
+      if (at >= due && !rec.alerts.overdue) {
+        await sendAlert(env, `OVERDUE free report: ${rec.business_name}`, alertText(rec, 'This free report is past its 1 business day promise and is not marked sent.'), f, rec.test ? 'test' : 'problem', id);
+        rec.alerts.overdue = now.toISOString(); rec.alerts.warn = rec.alerts.warn || now.toISOString(); changed = true; log.push('overdue ' + id);
+      } else if (at >= warn && at < due && !rec.alerts.warn) {
+        await sendAlert(env, `Free report due soon: ${rec.business_name}`, alertText(rec, 'This free report is 75% of the way to its due time and is not marked sent.'), f, rec.test ? 'test' : 'warn', id);
+        rec.alerts.warn = now.toISOString(); changed = true; log.push('warn ' + id);
+      }
+    }
+    if (changed) await putJ(env, 'req:' + id, rec, KEEP);
+  }
+  return log;
+}
+
+// Sends a report that has two pass marks. Blocked sends (LIVE off) are only noted, once; real failures go on the
+// watch list so the agents fix them. Returns {changed, log}.
+async function trySend(env, rec, now, f) {
+  const r = await deliverToOwner(env, rec, f);
+  if (r.sent) {
+    rec.status = 'sent'; rec.sent = now.toISOString(); rec.sent_by = 'auto'; rec.send_route = r.route; rec.send_id = r.id || '';
+    await env.KV.delete('open:' + rec.id);
+    await startFollowups(env, rec, now, r.threadId || '');
+    return { changed: true, log: 'sent' };
+  }
+  if (r.blocked) {
+    if (rec.send_blocked === r.reason) return { changed: false, log: '' };
+    rec.send_blocked = r.reason;
+    return { changed: true, log: 'blocked' };
+  }
+  rec.send_fails = (rec.send_fails || 0) + 1;
+  rec.send_error = r.reason;
+  if (rec.send_fails === 1 || rec.send_fails % 4 === 0) {
+    await sendAlert(env, `Free report send failed: ${rec.business_name}`, alertText(rec, `The report passed both checks but the send failed (${r.route}): ${r.reason}. It is tried again every 15 minutes. If the route is down, switch SEND_ROUTE to a backup.`), f, 'problem', rec.id);
+  }
+  return { changed: true, log: 'sendfail' };
+}
+
+// What the two checkers read: everything needed to trace every fact in the report to the lookup data.
+function reviewItem(r) {
+  const c = r.checks || {};
+  return { id: r.id, status: r.status, test: !!r.test, first_name: r.first_name, business_name: r.business_name, email: r.email,
+    town: r.town, trade: r.trade, revenue: r.revenue || '', note: r.note || '', big_shop: !!r.big_shop,
+    received: r.received, due: r.due, due_text: chicagoText(r.due), complete: !!r.complete, pending: r.pending || [],
+    report: `${SITE}/r/${r.token}/`, hash: r.hash || '', sections: r.sections || {}, lookup_error: r.lookup_error || '',
+    checks: { 1: c['1'] || null, 2: c['2'] || null },
+    needs: !r.complete ? 'fill pending sections first' : !(c['1'] && c['1'].result === 'pass' && c['1'].hash === r.hash) ? 'checker 1'
+      : !(c['2'] && c['2'].result === 'pass' && c['2'].hash === r.hash) ? 'checker 2' : 'send' };
+}
+async function review(u, env) {
+  if (!keyOk(env, u.searchParams.get('k'))) return json({ error: 'no' }, 403);
+  const list = [];
+  for (const k of (await env.KV.list({ prefix: 'open:' })).keys) {
+    const r = await getJ(env, 'req:' + k.name.slice(5));
+    if (!r || !['built', 'held', 'checked'].includes(r.status)) continue;
+    list.push(reviewItem(r));
+  }
+  list.sort((a, b) => a.due.localeCompare(b.due));
+  return json({ waiting: list, count: list.length, live: isLive(env) });
+}
+async function check(req, env, now = new Date(), f) {
+  let b; try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
+  if (!keyOk(env, b && b.k)) return json({ ok: false, error: 'no' }, 403);
+  const slot = String(b.checker);
+  const agent = String(b.agent || '').trim().slice(0, 80);
+  if (!ID.test(String(b.id || '')) || !['1', '2'].includes(slot) || !agent || !['pass', 'fail'].includes(b.result)) return json({ ok: false, error: 'bad check' }, 400);
+  const rec = await getJ(env, 'req:' + b.id);
+  if (!rec) return json({ ok: false, error: 'not found' }, 404);
+  if (rec.status === 'sent') return json({ ok: false, error: 'already sent' }, 409);
+  if (!['built', 'held', 'checked'].includes(rec.status)) return json({ ok: false, error: 'not built yet' }, 409);
+  if (String(b.hash || '') !== rec.hash) return json({ ok: false, error: 'report changed; read it again', hash: rec.hash }, 409);
+  rec.checks = rec.checks || {};
+  const other = rec.checks[slot === '1' ? '2' : '1'];
+  if (other && other.agent === agent) return json({ ok: false, error: 'checker 1 and checker 2 must be different agents' }, 409);
+  if (slot === '2' && b.result === 'pass' && !(rec.checks['1'] && rec.checks['1'].result === 'pass' && rec.checks['1'].hash === rec.hash))
+    return json({ ok: false, error: 'checker 1 must pass first' }, 409);
+  if (b.result === 'pass' && !rec.complete) return json({ ok: false, error: 'report has pending sections; it cannot pass' }, 409);
+  const notes = String(b.notes || '').slice(0, 2000);
+  rec.checks[slot] = { agent, result: b.result, hash: rec.hash, at: now.toISOString(), notes };
+  let sent = false;
+  if (b.result === 'fail') {
+    rec.status = 'held';
+    await sendAlert(env, `Free report failed check ${slot}: ${rec.business_name}`, alertText(rec, `Checker ${slot} (${agent}) failed this report: ${notes || 'no notes'}. Fix it (fill the section again), then both checkers read it again.`), f, rec.test ? 'test' : 'problem', rec.id);
+  } else if (rec.checks['1'] && rec.checks['2'] && rec.checks['1'].result === 'pass' && rec.checks['2'].result === 'pass') {
+    rec.status = 'checked';
+    if (!rec.test) { const r = await trySend(env, rec, now, f); sent = rec.status === 'sent'; }
+  }
+  await putJ(env, 'req:' + rec.id, rec, KEEP);
+  return json({ ok: true, id: rec.id, status: rec.status, sent, blocked: rec.send_blocked || '' });
+}
+
+// ---------- follow-ups (locked sequence in freereport-followups-seq.js; logic in freereport-followups.js) ----------
+function fuHelpers() {
+  return { site: SITE, townState, plain, pickFixes, TRADES, local, isBusinessDay, fromLocal,
+    chicagoDate: (d) => new Date(d).toLocaleDateString('en-US', { timeZone: TZ, month: 'long', day: 'numeric' }) };
+}
+async function startFollowups(env, rec, now, threadId) {
+  if (rec.test || rec.fu) return;
+  rec.fu = { day0: now.toISOString(), hour: local(now).h, thread: threadId, subject: ownerEmail(env, rec).subject, done: {}, facts: [], started: now.toISOString() };
+  await env.KV.put('fu:' + rec.id, '1', { expirationTtl: 3 * KEEP });
+}
+async function fuStop(env, rec, why, now) {
+  rec.fu.stopped = { why, at: now.toISOString() };
+  await env.KV.delete('fu:' + rec.id);
+  if (rec.email) await env.KV.put('stop:' + rec.email, why);
+}
+// One pass over every running sequence. At most one email per owner per day; any doubt = hold.
+async function fuTick(env, now, f) {
+  const log = [], h = fuHelpers();
+  const keys = (await env.KV.list({ prefix: 'fu:' })).keys.slice(0, 200);
+  for (const k of keys) {
+    const id = k.name.slice(3), rec = await getJ(env, 'req:' + id);
+    if (!rec || !rec.fu || rec.fu.stopped) { await env.KV.delete(k.name); continue; }
+    const stopKey = rec.email ? await env.KV.get('stop:' + rec.email) : null;
+    const n = FU.next(rec, env, now, h, stopKey);
+    if (n.action === 'stop') { await fuStop(env, rec, n.why, now); await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-stop ' + id); continue; }
+    if (n.action === 'skip') { rec.fu.done[n.step] = { at: now.toISOString(), status: 'skipped', why: n.why }; await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-skip ' + n.step + ' ' + id); continue; }
+    if (n.action === 'hold' && rec.fu.hold !== n.why) { rec.fu.hold = n.why; await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-hold ' + id); continue; }
+    if (n.action !== 'send') continue;
+    // Know there is no reply: the thread read, or a fresh "clear" stamp from the inbox job.
+    let inReplyTo = '';
+    const t = await gmailThread(env, rec.fu.thread, f);
+    if (t.ok) {
+      const th = FU.readThread(t.thread, 'rickey@getbookedoutsolutions.com');
+      if (th.replied) { await fuStop(env, rec, 'reply or bounce in the thread', now); await putJ(env, 'req:' + id, rec, KEEP); log.push('fu-stop-reply ' + id); continue; }
+      inReplyTo = th.messageId;
+    } else if (!(rec.fu.clear_at && now.getTime() - Date.parse(rec.fu.clear_at) < FU.CLEAR_WINDOW_MS)) {
+      const why = 'cannot confirm no reply (' + t.error + '); needs the thread read or an inbox clear stamp';
+      if (rec.fu.hold !== why) {
+        rec.fu.hold = why; await putJ(env, 'req:' + id, rec, KEEP);
+        await sendAlert(env, `Free report follow-up held: ${rec.business_name}`, `Step ${n.step} is due but we cannot confirm there is no reply. ${why}.`, f, 'warn', id);
+      }
+      log.push('fu-hold-noread ' + id); continue;
+    }
+    const m = { from: env.SEND_FROM || FROM, to: rec.email, subject: 'Re: ' + rec.fu.subject, text: n.text, threadId: rec.fu.thread || '', inReplyTo };
+    const r = await sendMail(env, m, f);
+    if (r.ok) {
+      rec.fu.done[n.step] = { at: now.toISOString(), status: 'sent', id: r.id || '' };
+      rec.fu.facts = [...new Set([...(rec.fu.facts || []), ...n.facts])];
+      rec.fu.last_sent_day = new Date(now).toLocaleDateString('en-CA', { timeZone: TZ });
+      rec.fu.hold = ''; rec.fu.clear_at = '';
+      log.push('fu-sent ' + n.step + ' ' + id);
+    } else {
+      rec.fu.fails = (rec.fu.fails || 0) + 1;
+      if (rec.fu.fails === 1 || rec.fu.fails % 4 === 0) await sendAlert(env, `Free report follow-up send failed: ${rec.business_name}`, `Step ${n.step}: ${r.error}`, f, 'problem', id);
+      log.push('fu-fail ' + id);
+    }
+    await putJ(env, 'req:' + id, rec, KEEP);
+  }
+  return log;
+}
+// POST /api/free-report/followup {id, k, action: "stop" | "later" | "clear" | "status", why}
+// stop  = any reply, "no", "stop", bounce, anger, or he paid/started (the reply desk calls this). Forever.
+// later = he said "later" / "check back": the main steps end, the not-now ladder starts from today.
+// clear = the inbox job just looked: no reply from him in the thread (good for 2 hours).
+async function followup(req, env, now = new Date()) {
+  let b; try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
+  if (!keyOk(env, b && b.k)) return json({ ok: false, error: 'no' }, 403);
+  if (!ID.test(String(b.id || '')) || !['stop', 'later', 'clear', 'status'].includes(b.action)) return json({ ok: false, error: 'bad followup' }, 400);
+  const rec = await getJ(env, 'req:' + b.id);
+  if (!rec || !rec.fu) return json({ ok: false, error: 'no sequence for this id' }, 404);
+  if (b.action === 'stop') await fuStop(env, rec, String(b.why || 'stopped by the reply desk').slice(0, 200), now);
+  else if (b.action === 'later' && !rec.fu.stopped) rec.fu.later_at = now.toISOString();
+  else if (b.action === 'clear' && !rec.fu.stopped) rec.fu.clear_at = now.toISOString();
+  if (b.action !== 'status') await putJ(env, 'req:' + rec.id, rec, KEEP);
+  const plan = rec.fu.stopped ? [] : FU.plan(rec, fuHelpers()).map((s) => ({ step: s.id, due: `${s.due.y}-${String(s.due.m).padStart(2, '0')}-${String(s.due.d).padStart(2, '0')}`, done: rec.fu.done[s.id] || null }));
+  return json({ ok: true, id: rec.id, stopped: rec.fu.stopped || null, later_at: rec.fu.later_at || '', hold: rec.fu.hold || '', plan,
+    next: FU.next(rec, env, now, fuHelpers(), null).action });
+}
+
+async function markSent(req, env) {
+  let b; try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
+  if (!keyOk(env, b && b.k)) return json({ ok: false, error: 'no' }, 403);
+  if (!ID.test(String(b.id || ''))) return json({ ok: false, error: 'bad id' }, 400);
+  const rec = await getJ(env, 'req:' + b.id);
+  if (!rec) return json({ ok: false, error: 'not found' }, 404);
+  rec.status = 'sent'; rec.sent = new Date().toISOString(); rec.sent_by = 'manual';
+  await putJ(env, 'req:' + rec.id, rec, KEEP);
+  await env.KV.delete('open:' + rec.id);
+  return json({ ok: true, id: rec.id, status: 'sent' });
+}
+
+const FILL = ['google', 'reviews', 'ai', 'booking', 'category'];
+async function fill(req, env) {
+  let b; try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
+  if (!keyOk(env, b && b.k)) return json({ ok: false, error: 'no' }, 403);
+  if (!ID.test(String(b.id || '')) || !FILL.includes(b.section) || !b.data || typeof b.data !== 'object') return json({ ok: false, error: 'bad fill' }, 400);
+  const rec = await getJ(env, 'req:' + b.id);
+  if (!rec) return json({ ok: false, error: 'not found' }, 404);
+  rec.sections[b.section] = b.data;
+  const r = await saveReport(env, rec);
+  await putJ(env, 'req:' + rec.id, rec, KEEP);
+  return json({ ok: true, id: rec.id, complete: r.complete, pending: r.pending });
+}
+
+async function status(u, env) {
+  if (!keyOk(env, u.searchParams.get('k'))) return json({ error: 'no' }, 403);
+  const keys = (await env.KV.list({ prefix: 'open:' })).keys;
+  const now = Date.now(), list = [];
+  for (const k of keys) {
+    const r = await getJ(env, 'req:' + k.name.slice(5));
+    if (!r || r.status === 'sent') continue;
+    list.push({ id: r.id, business_name: r.business_name, town: r.town, trade: r.trade, status: r.status, test: !!r.test,
+      big_shop: !!r.big_shop, consent: !!r.consent, received: r.received, due: r.due, due_text: chicagoText(r.due),
+      overdue: now >= Date.parse(r.due), complete: !!r.complete, pending: r.pending || [], report: `${SITE}/r/${r.token}/`,
+      checks: reviewItem(r).checks, needs: reviewItem(r).needs, send_blocked: r.send_blocked || '', send_error: r.send_error || '' });
+  }
+  list.sort((a, b) => a.due.localeCompare(b.due));
+  const watch = [];
+  for (const k of (await env.KV.list({ prefix: 'watch:' })).keys.slice(-50)) {
+    const w = await getJ(env, k.name); if (w) watch.push({ at: w.at, level: w.level, id: w.id, subject: w.subject });
+  }
+  return json({ open: list, count: list.length, live: isLive(env), watch, problems: watch.filter((w) => w.level === 'problem').length });
+}
+
+async function report(token, u, env) {
+  if (!u.pathname.endsWith('/')) return Response.redirect(`${SITE}/r/${token}/`, 301);
+  const id = await env.KV.get('tok:' + token);
+  const html = id ? await env.KV.get('rep:' + id) : null;
+  return new Response(html || GONE, { status: html ? 200 : 404, headers: {
+    'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow',
+    'referrer-policy': 'no-referrer', 'x-frame-options': 'SAMEORIGIN' } });
+}
+
+export default {
+  async fetch(req, env, ctx) {
+    const u = new URL(req.url);
+    const p = u.pathname.replace(/\/+$/, '');
+    try {
+      if (p === '/api/free-report' && req.method === 'POST') return await submit(req, env);
+      if (p === '/api/free-report/ping') return json({ ok: true, at: new Date().toISOString(), live: isLive(env) });
+      if (p === '/api/free-report/status' && req.method === 'GET') return await status(u, env);
+      if (p === '/api/free-report/review' && req.method === 'GET') return await review(u, env);
+      if (p === '/api/free-report/check' && req.method === 'POST') return await check(req, env);
+      if (p === '/api/free-report/mark-sent' && req.method === 'POST') return await markSent(req, env);
+      if (p === '/api/free-report/fill' && req.method === 'POST') return await fill(req, env);
+      if (p === '/api/free-report/followup' && req.method === 'POST') return await followup(req, env);
+      const m = p.match(/^\/r\/([a-f0-9]{48})$/);
+      if (m && req.method === 'GET') return await report(m[1], u, env);
+      return new Response('Booked Out free report', { status: 200, headers: { 'x-robots-tag': 'noindex' } });
+    } catch (e) {
+      return json({ saved: false, error: 'server' }, 500);
+    }
+  },
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(tick(env, new Date()).then(() => fuTick(env, new Date())));
+  },
+  // for workers/test-freereport.mjs (plain node, no network)
+  _t: { validate, businessClock, federalHolidays, isBusinessDay, local, fromLocal, chicagoText, isLive, deliverToOwner,
+    sendAlert, isTestRequest, plain, ownerEmail, mime, sendMail, sendBlock, check, review, trySend, sha, budgetLine, renderReport, submit, build, tick, TRADES, REVENUE,
+    fuTick, followup, startFollowups, fuHelpers, gmailThread, allowed, pickFixes },
+};
+
+const GONE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Report not found | Booked Out Solutions</title><style>body{margin:0;font:18px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#F6F1E7;color:#0A0F26}main{max-width:34rem;margin:0 auto;padding:3rem 1.2rem}</style></head><body><main><h1>This report is not here</h1><p>The link may be old or mistyped. Reply to the email it came in and we will send it again, or write to hello@getbookedoutsolutions.com.</p><p>Booked Out Solutions</p></main></body></html>';
+
+function json(o, s = 200) {
+  return new Response(JSON.stringify(o), { status: s, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-robots-tag': 'noindex' } });
+}

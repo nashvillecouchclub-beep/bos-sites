@@ -1,7 +1,9 @@
 // Tests for workers/bookedout-freereport.js. Run: node workers/test-freereport.mjs
 // No network: mock KV, mock fetch, fixed clock. Uses a clearly fake shop only.
-import W from './bookedout-freereport.js';
+import W0 from './bookedout-freereport.js';
 import assert from 'node:assert/strict';
+// BUNDLE=1 runs the same tests against the one-file dashboard bundle (node workers/build-freereport-bundle.mjs first).
+const W = process.env.BUNDLE ? (await import('./dist/bookedout-freereport.bundle.js')).default : W0;
 
 const T = W._t;
 let pass = 0, fail = 0;
