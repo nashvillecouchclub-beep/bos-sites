@@ -31,7 +31,7 @@ const FILLS = {
 // The sections added Nov 20 (item 215). A fast answer and a big review count, so the fixes the sequence quotes do not change.
 const NEW = {
   speed: { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: 3, after_hours: { tested: true, answered: true, when: 'Mon Nov 16, 7:40 pm' } },
-  known_for: { texts: ['On time and fair price', 'Showed up on time, fair price', 'On time again, clean work', 'Fair price and clean', 'Clean and on time'] },
+  known_for: { scanned: 5, reviews: ['On time and fair price', 'Showed up on time, fair price', 'On time again, clean work', 'Fair price and clean', 'Clean and on time'].map((text) => ({ text, rating: 5 })) },
   competitor: { name: 'Fake Air One', theirs: { photos: 80 }, yours: { photos: 12 } },
   listings: { sites: { google: { found: true }, yelp: { found: false }, bbb: { found: true }, facebook: { found: true }, nextdoor: { found: false }, chamber: { found: false } } },
   spot: { zone: 'Smyrna', open: true },
@@ -62,7 +62,7 @@ async function sent(extra = {}, shop = SHOP, fills = FILLS) {
   const env = { KV: kv(), STATUS_KEY: KEY, LIVE: 'on', ...GMAIL, ...extra };
   const j = await (await T.submit(post(shop), env, at('2026-11-17T10:30:00-06:00'))).json();
   await T.tick(env, at('2026-11-17T10:45:00-06:00'), f);
-  const all = { ...fills, ai: { google_ai: { named: false }, ...fills.ai }, ...NEW };
+  const all = { ...fills, ai: { google_ai: { named: false }, ...fills.ai }, ...Object.fromEntries(Object.entries(NEW).filter(([k]) => !(k in fills))) };
   for (const [section, data] of Object.entries(all)) await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section, data });
   const rec = () => JSON.parse(env.KV.m.get('req:' + j.id));
   assert.equal(rec().complete, true, 'report complete before the checks: ' + rec().pending.join(', '));
@@ -220,12 +220,32 @@ await test('Two overlapping cron runs on the same day send once (the day is clai
 });
 
 await test('Facts never repeat: map "not found" in c2 means n2 does not send it again', async () => {
-  const fills = { ...FILLS, google: { ...FILLS.google, rank_for_keyword: null }, ai: { chatgpt: { named: true }, gemini: { named: false } } };
+  const fills = { ...FILLS, google: { ...FILLS.google, rank_for_keyword: null, rank_checked: true }, ai: { chatgpt: { named: true }, gemini: { named: false } } };
   const { env, rec } = await sent({ FOLLOWUPS: 'on' }, SHOP, fills);
   const f = gfetch();
   for (let d = new Date('2026-11-18T17:15:00Z'), i = 0; i < 150; i++, d = new Date(d.getTime() + 86400000)) await T.fuTick(env, d, f);
   const texts = sends(f).map((c) => decode(c).text);
   assert.equal(texts.filter((t) => /didn't show up/.test(t)).length, 1, texts.map((t) => t.slice(10, 60)).join(' | '));
+});
+
+await test('Few reviews + slow answer: the three fixes on the sent page are saved and the follow-ups quote exactly those', async () => {
+  const fills = { ...FILLS, google: { ...FILLS.google, review_count: 8, top3: [{ name: 'Fake Air One', rating: 4.8, review_count: 6 }, { name: 'Fake Air Two', rating: 4.7, review_count: 5 }, { name: 'Fake Air Three', rating: 4.9, review_count: 4 }] },
+    reviews: { ...FILLS.reviews, owner_reply_on_newest: true }, booking: { score: 6, fixes: [] } };
+  const { env, id, rec } = await sent({ FOLLOWUPS: 'on' }, SHOP, { ...fills, speed: { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: null, waited_hours: 48 } });
+  const saved = rec().fu.fixes;
+  assert.equal(saved.length, 3);
+  assert.match(saved[0], /^Ask every happy customer for a Google review the day the job is done\. You have 8 Google reviews so far/);
+  assert.ok(saved.some((x) => /within 5 minutes/.test(x)), saved.join(' | '));
+  assert.deepEqual(saved, T.pickFixes(rec()), 'saved = what the page showed');
+  // later code or data changes must not change what the follow-ups quote
+  const r = rec(); r.sections.google.review_count = 500; r.sections.speed.minutes = 1; env.KV.m.set('req:' + id, JSON.stringify(r));
+  assert.notDeepEqual(T.pickFixes(rec()), saved);
+  const v = FU.values(rec(), { ...T.fuHelpers(), now: new Date('2026-11-18T17:15:00Z') });
+  assert.equal(v.fix_1_line, 'Ask every happy customer for a Google review the day the job is done.'.replace(/\.$/, '') + '.', JSON.stringify(v));
+  const f = gfetch();
+  for (let d = new Date('2026-11-18T17:15:00Z'), i = 0; i < 40; i++, d = new Date(d.getTime() + 86400000)) await T.fuTick(env, d, f);
+  const texts = sends(f).map((c) => decode(c).text).join('\n');
+  assert.doesNotMatch(texts, /500/, 'never quotes the changed data');
 });
 
 await test('A bare domain in a filled email is refused (it would turn into a link)', () => {

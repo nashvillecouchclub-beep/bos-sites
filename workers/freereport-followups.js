@@ -73,7 +73,8 @@ export function values(rec, h) {
     if (both) set('ai_named', 'yes'); else if (!named) set('ai_named', 'no');
     set('ai_result', both ? 'was named in both answers' : !named ? "wasn't named in either answer" : null);
   }
-  const fixes = h.pickFixes(rec);
+  // The fixes saved on the record when the report was sent (what he actually read); older records fall back to a re-pick.
+  const fixes = rec.fu && Array.isArray(rec.fu.fixes) ? rec.fu.fixes : h.pickFixes(rec);
   fixes.forEach((f, i) => { const x = fixLine(h.plain(f)); if (x) { set('fix_' + (i + 1), `"${x}"`); set('fix_' + (i + 1) + '_line', x + '.'); } });
   const checks = [];
   if (g && g.has_google_profile) checks.push('your Google reviews', 'your map spot');

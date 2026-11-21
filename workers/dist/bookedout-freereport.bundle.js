@@ -584,7 +584,8 @@ function values(rec, h) {
     if (both) set('ai_named', 'yes'); else if (!named) set('ai_named', 'no');
     set('ai_result', both ? 'was named in both answers' : !named ? "wasn't named in either answer" : null);
   }
-  const fixes = h.pickFixes(rec);
+  // The fixes saved on the record when the report was sent (what he actually read); older records fall back to a re-pick.
+  const fixes = rec.fu && Array.isArray(rec.fu.fixes) ? rec.fu.fixes : h.pickFixes(rec);
   fixes.forEach((f, i) => { const x = fixLine(h.plain(f)); if (x) { set('fix_' + (i + 1), `"${x}"`); set('fix_' + (i + 1) + '_line', x + '.'); } });
   const checks = [];
   if (g && g.has_google_profile) checks.push('your Google reviews', 'your map spot');
@@ -1020,7 +1021,9 @@ async function lookup(env, rec, f) {
     return r.json();
   };
   const g = await call({ business_name: rec.business_name, town: ts.town, state: ts.state, keyword: kw ? `${kw} ${ts.town}` : '' });
-  const google = { has_google_profile: !!g.has_google_profile, rating: g.rating ?? null, review_count: g.review_count ?? null,
+  // No yes/no answer about the profile = the lookup failed; the section stays pending (never "not found" from missing data).
+  if (typeof g.has_google_profile !== 'boolean') throw new Error('lookup gave no profile answer');
+  const google = { has_google_profile: g.has_google_profile, rank_checked: !!kw && Object.prototype.hasOwnProperty.call(g, 'rank_for_keyword'), rating: g.rating ?? null, review_count: g.review_count ?? null,
     rank_for_keyword: g.rank_for_keyword ?? null, top3: Array.isArray(g.top3) ? g.top3.slice(0, 3) : [], keyword: kw ? `${kw} ${ts.town}` : '' };
   let reviews = null;
   if (google.has_google_profile && g.reviews_task_id) {
@@ -1079,7 +1082,8 @@ function pickFixes(rec) {
     'Call or text back every new lead within 5 minutes, even after hours.',
     'Follow up on every quote you send: a short note 2 days later, then again a week later.',
   ];
-  for (const b of base) if (out.length < 3 && !out.includes(b)) out.push(b);
+  const fast = s.speed && s.speed.tested !== false && s.speed.minutes != null && +s.speed.minutes <= 5;
+  for (const b of base) if (out.length < 3 && !out.includes(b) && !(fast && /within 5 minutes/.test(b))) out.push(b);
   return out.slice(0, 3);
 }
 
@@ -1090,12 +1094,14 @@ const FEW_REVIEWS = 20; // under this many Google reviews, the report points to 
 function fewReviews(g) { return !!(g && g.has_google_profile && g.review_count != null && +g.review_count < FEW_REVIEWS); }
 // Outside research (checked Nov 20 2026). Only these numbers may appear in an estimate.
 const SOURCES = {
-  hbr: 'Oldroyd, McElheran and Elkington, "The Short Life of Online Sales Leads," Harvard Business Review, March 2011 (a test of 2,241 U.S. companies)',
+  hbr: 'Oldroyd, McElheran and Elkington, "The Short Life of Online Sales Leads," Harvard Business Review, March 2011 (an analysis of 1.25 million leads at 42 U.S. companies)',
   mit: 'Oldroyd (MIT Sloan) and InsideSales.com, "Lead Response Management Study," 2007',
   st: 'ServiceTitan, "When Summer Demand Spikes, After-Hours Calls Do Too," June 3 2026 (residential heating and air shops on its platform, 2025; ServiceTitan says the figures are not nationally representative)',
 };
 // After-hours share of inbound calls, by trade. Only trades with a sourced number get an after-hours estimate.
 const AFTER_HOURS = { hvac: { low: 9.8, high: 14.1, src: 'st', who: 'home heating and air shops' } };
+// True only when the three fixes on the page really include the Google review fix.
+function reviewFixIn(rec) { return pickFixes(rec).some((x) => /^Ask every happy customer for a Google review/.test(x)); }
 function slowAnswer(sp) { return !!(sp && sp.tested !== false && (sp.minutes == null || +sp.minutes > 5)); }
 // Answer speed -> the booking-rate estimate (from outside research, never from his own numbers).
 function speedEstimate(sp) {
@@ -1105,6 +1111,12 @@ function speedEstimate(sp) {
   if (m != null && m <= 60) return { text: 'One study found the odds of qualifying a lead (a real talk about a real job) fell about 21 times between a 5 minute answer and a 30 minute answer.', src: 'mit' };
   if (m != null && m < 1440) return { text: 'A Harvard Business Review study found companies that answered within an hour were nearly 7 times as likely to qualify the lead as companies that answered an hour or more later.', src: 'hbr' };
   return { text: 'A Harvard Business Review study found companies that answered within an hour were more than 60 times as likely to qualify the lead as companies that waited 24 hours or longer.', src: 'hbr' };
+}
+// Screenshot links: our own domain, a plain path, an image; no "//" and no ".." anywhere in the path.
+function shotOk(u) {
+  u = String(u || '');
+  const m = u.match(/^https:\/\/getbookedoutsolutions\.com(\/[\w./-]+\.(png|jpe?g|webp))$/i);
+  return !!m && !m[1].includes('//') && !m[1].includes('..');
 }
 const pct = (n) => (Math.round(n * 10) / 10).toString();
 
@@ -1116,9 +1128,12 @@ function diagnose(rec) {
   const trade = TRADES[rec.trade] || TRADES['Something else'];
   const kw = g.keyword || (trade.kw ? `${trade.kw} ${townState(rec.town).town}` : '');
   const aiNone = ai && ai.chatgpt && ai.gemini && ai.chatgpt.named === false && ai.gemini.named === false && (!ai.google_ai || ai.google_ai.named === false);
+  if (g.has_google_profile !== true && g.has_google_profile !== false) return null;
   if (!g.has_google_profile) return { kind: 'not found', line: `Not found. We could not find a Google Business Profile for ${plain(rec.business_name)} in ${plain(rec.town)}, so you do not show on the Google map.` };
   if (!kw) return null;
   const avg = g.top3 && g.top3.length ? Math.round(g.top3.reduce((a, x) => a + (+x.review_count || 0), 0) / g.top3.length) : null;
+  // "Not found" from the search only when the lookup really ran the search (a positive flag), never from missing data.
+  if (!g.rank_for_keyword && g.rank_checked !== true) return null;
   if (!g.rank_for_keyword) return { kind: 'not found', line: `Not found. You are not in the first 20 Google results for "${plain(kw)}"${aiNone ? ', and ChatGPT and Gemini did not name you either' : ''}.` };
   const r = +g.rank_for_keyword;
   if (r > 3) return { kind: 'found but not chosen', line: `Found but not chosen. You show at number ${r} for "${plain(kw)}", below the top 3${avg != null && g.review_count != null && avg > g.review_count ? `, and they average ${avg} reviews to your ${g.review_count}` : ''}.` };
@@ -1129,28 +1144,42 @@ function diagnose(rec) {
     const why = sp.minutes == null ? `our test ${CHANNEL[sp.channel] || 'request'} got no answer in ${+sp.waited_hours || 24} hours` : +sp.minutes > 60 ? `our test ${CHANNEL[sp.channel] || 'request'} took ${+sp.minutes >= 1440 ? 'a day or more' : `about ${Math.round(+sp.minutes / 60)} ${Math.round(+sp.minutes / 60) === 1 ? 'hour' : 'hours'}`} to get an answer` : 'our after-hours test call was not answered';
     return { kind: 'chosen but never followed up', line: `Chosen but never followed up. You are number ${r} for "${plain(kw)}", but ${why}.` };
   }
-  return { kind: 'chosen', line: `Found and chosen. You are number ${r} for "${plain(kw)}", and you answered our test ${CHANNEL[sp.channel] || 'request'} in ${+sp.minutes} minutes. The fixes below are about keeping it that way.` };
+  if (+sp.minutes > 5) return { kind: 'chosen but slow to answer', line: `Found and chosen, but slow to answer. You are number ${r} for "${plain(kw)}", and our test ${CHANNEL[sp.channel] || 'request'} took ${+sp.minutes} minutes to get an answer.` };
+  return { kind: 'chosen', line: `Found and chosen. You are number ${r} for "${plain(kw)}", and you answered our test ${CHANNEL[sp.channel] || 'request'} in ${+sp.minutes} ${+sp.minutes === 1 ? 'minute' : 'minutes'}. The fixes below are about keeping it that way.` };
 }
 const CHANNEL = { call: 'call', text: 'text', email: 'email' };
 const TESTED = { call: 'We made one test call to your business', text: 'We sent one test text to your business', email: 'We sent one test email to your business' };
 const AI_NAME = { chatgpt: 'ChatGPT', gemini: 'Gemini', google_ai: 'Google AI answer' };
+// Word for word from sites/getbookedoutsolutions.com/terms.html (and the trade terms pages). Do not reword.
+const TERMS_GUARANTEE = 'We guarantee our part of every piece: the writing, the sending, the posting, the submitting. Not the printer, the mail, Google or your customers. We never promise jobs, revenue or a spot on Google. If we miss any piece of your package, your next month is free.';
+const TERMS_FREE = 'There are no guarantees during a free period, because nothing is being charged.';
 const TRADE_NAME = { hvac: 'heating and air shop', plumbing: 'plumbing shop', electrical: 'electrical shop', other: 'shop in your trade' };
 
 // "What you're known for": the words that repeat across his Google reviews. The worker counts them itself from the
 // review texts the fill gives, so nothing is guessed. A phrase counts once per review; it must be in 3 or more reviews.
 const STOP = new Set(('a an and are as at be been but by can did do for from had has have he her him his how i if in is it its just me my of on or our out so than that the their them then there they this to too up us very was we were what when which who will with would you your yours also all any after again back came come could get got here into more most much no not now one only over said she some two way well went where while who why yes am being both each few just like make made many may might must need off own same should such take very really highly recommend recommended great good excellent amazing awesome best service services job jobs work worked company business thanks thank called call guy guys team everything definitely always never ever will again use used').split(' '));
+// Words that turn the next words around ("not happy", "never on time"), and complaint words that are never shown.
+const NEGATE = new Set('not no never nor without hardly barely wasnt wasn\'t didnt didn\'t isnt isn\'t wont won\'t dont don\'t couldnt couldn\'t wouldnt wouldn\'t cant can\'t arent aren\'t werent weren\'t'.split(' '));
+const NEGATIVE = new Set(('late rude slow expensive overpriced pricey dirty mess messy bad worst terrible awful horrible poor unprofessional rip scam ' +
+  'waited waiting wait cancel cancelled canceled broke broken problem problems issue issues complaint complain disappointed disappointing ' +
+  'ignored unhappy angry careless lazy damage damaged leak leaking leaked wrong mistake refund lied liar rushed sloppy unreliable noshow').split(' '));
 function knownFor(texts, extraStop = []) {
   const stop = new Set([...STOP, ...extraStop]);
   const df = new Map();
   for (const raw of texts) {
-    const words = plain(raw).toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).map((w) => w.replace(/^'+|'+$/g, '').replace(/'s$/, '')).filter(Boolean);
+    const words = plain(raw).toLowerCase().replace(/\u2019/g, "'").replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).map((w) => w.replace(/^'+|'+$/g, '').replace(/'s$/, '')).filter(Boolean);
+    // a word is "turned around" when one of the 3 words before it negates it
+    const neg = words.map((_, i) => words.slice(Math.max(0, i - 3), i).some((x) => NEGATE.has(x)));
+    const bad = (i) => NEGATE.has(words[i]) || NEGATIVE.has(words[i]) || neg[i];
     const seen = new Set();
     for (let i = 0; i < words.length; i++) {
       const a = words[i], b = words[i + 1];
+      if (bad(i)) continue;
       if (a.length > 2 && !stop.has(a) && !/^\d+$/.test(a)) seen.add(a);
-      if (b && !stop.has(a) && !stop.has(b) && a.length > 1 && b.length > 1 && !/^\d+$/.test(a + b)) seen.add(a + ' ' + b);
+      if (b == null || bad(i + 1)) continue;
+      if (!stop.has(a) && !stop.has(b) && a.length > 1 && b.length > 1 && !/^\d+$/.test(a + b)) seen.add(a + ' ' + b);
       // "on time", "fair price" style pairs: a short word in front of a real word
-      if (b && ['on', 'fair', 'fast', 'same', 'very'].includes(a) && !stop.has(b) && b.length > 2) seen.add(a + ' ' + b);
+      if (['on', 'fair', 'fast', 'same', 'very'].includes(a) && !stop.has(b) && b.length > 2) seen.add(a + ' ' + b);
     }
     for (const w of seen) df.set(w, (df.get(w) || 0) + 1);
   }
@@ -1215,10 +1244,22 @@ function fillProblem(rec, section, d) {
   const str = (x, n) => typeof x === 'string' && x.trim().length > 0 && x.length <= n;
   const bool = (x) => typeof x === 'boolean';
   const num = (x, lo, hi) => typeof x === 'number' && isFinite(x) && x >= lo && x <= hi;
+  if (section === 'google') {
+    if (!bool(d.has_google_profile)) return 'google.has_google_profile must be true or false';
+    if (d.has_google_profile) {
+      if (d.rating != null && !num(d.rating, 1, 5)) return 'google.rating must be 1 to 5 or null';
+      if (d.review_count != null && !(Number.isInteger(d.review_count) && d.review_count >= 0)) return 'google.review_count must be a whole number or null';
+      if (d.rank_for_keyword != null && !(Number.isInteger(d.rank_for_keyword) && d.rank_for_keyword >= 1 && d.rank_for_keyword <= 20)) return 'google.rank_for_keyword must be 1 to 20 or null';
+      if (d.rank_for_keyword == null && d.rank_checked !== true && d.rank_checked !== false) return 'google.rank_checked (true = we ran the search and he was not in the first 20) is needed when rank_for_keyword is null';
+      if (d.keyword != null && !str(d.keyword, 120)) return 'google.keyword must be text';
+      if (d.top3 != null && (!Array.isArray(d.top3) || d.top3.length > 3 || !d.top3.every((x) => x && str(x.name, 160) && (x.rating == null || num(x.rating, 1, 5)) && (x.review_count == null || (Number.isInteger(x.review_count) && x.review_count >= 0)))))
+        return 'google.top3 must be up to 3 of {name, rating, review_count}';
+    }
+  }
   if (section === 'ai') {
     if (d.google_ai != null && (typeof d.google_ai !== 'object' || !bool(d.google_ai.named))) return 'google_ai needs {named: true|false}';
     for (const e of ['chatgpt', 'gemini', 'google_ai']) if (d[e] && d[e].top != null && (!Array.isArray(d[e].top) || d[e].top.length > 5 || !d[e].top.every((x) => str(x, 120)))) return e + '.top must be a list of up to 5 names';
-    if (d.screenshots != null && (!Array.isArray(d.screenshots) || d.screenshots.length > 3 || !d.screenshots.every((x) => x && ['chatgpt', 'gemini', 'google_ai'].includes(x.engine) && /^https:\/\/getbookedoutsolutions\.com\/[\w./-]+\.(png|jpe?g|webp)$/i.test(String(x.url || '')))))
+    if (d.screenshots != null && (!Array.isArray(d.screenshots) || d.screenshots.length > 3 || !d.screenshots.every((x) => x && ['chatgpt', 'gemini', 'google_ai'].includes(x.engine) && shotOk(x.url))))
       return 'screenshots: up to 3 of {engine: chatgpt|gemini|google_ai, url: https://getbookedoutsolutions.com/....png}';
   }
   if (section === 'speed') {
@@ -1231,7 +1272,9 @@ function fillProblem(rec, section, d) {
     if (d.leads_per_month != null && (!num(d.leads_per_month, 1, 100000) || d.leads_source !== 'owner')) return 'speed.leads_per_month is only allowed when the owner told us (leads_source: "owner")';
   }
   if (section === 'known_for') {
-    if (!Array.isArray(d.texts) || d.texts.length > 300 || !d.texts.every((x) => typeof x === 'string' && x.length <= 5000)) return 'known_for.texts must be a list of up to 300 review texts (copied from his Google reviews)';
+    if (!Array.isArray(d.reviews) || d.reviews.length > 300 || !d.reviews.every((x) => x && typeof x.text === 'string' && x.text.length <= 5000 && num(x.rating, 1, 5)))
+      return 'known_for.reviews must be a list of up to 300 {text, rating 1 to 5} copied from his Google reviews';
+    if (!Number.isInteger(d.scanned) || d.scanned < d.reviews.length || d.scanned > 10000) return 'known_for.scanned (how many reviews we scanned, at least the number sent) is needed';
   }
   if (section === 'competitor') {
     if (!g || !g.has_google_profile || !g.top3 || !g.top3.length) return 'fill google (with the top 3) first';
@@ -1271,7 +1314,7 @@ function renderReport(rec) {
   const trade = TRADES[rec.trade] || TRADES['Something else'];
   const pending = [], parts = [];
   let n = 0;
-  const sec = (title, body) => { n++; parts.push(`<section class="rsec"><h2><span class="num">${n}</span>${esc(title)}</h2>${body}</section>`); };
+  const sec = (title, body) => { n++; parts.push(`<section class="rsec"><h2><span class="num">${n}</span>${t(title)}</h2>${body}</section>`); };
 
   // 1 Google
   let b1 = '';
@@ -1286,10 +1329,11 @@ function renderReport(rec) {
     const kw = g.keyword || (trade.kw ? `${trade.kw} ${townState(rec.town).town}` : '');
     if (!kw) { pending.push('1 Google (search to check)'); }
     else if (g.rank_for_keyword) rows.push([`Where you show for "${t(kw)}"`, `Number ${t(g.rank_for_keyword)}`]);
-    else rows.push([`Where you show for "${t(kw)}"`, 'Not in the first 20 results']);
+    else if (g.rank_checked === true) rows.push([`Where you show for "${t(kw)}"`, 'Not in the first 20 results']);
+    else pending.push('1 Google (search not run)');
     b1 = '<div class="rows">' + rows.map(([a, v]) => `<div><span>${esc(a)}</span><b>${v}</b></div>`).join('') + '</div>';
     if (!kw) b1 += PENDING;
-    if (fewReviews(g)) b1 += `<p class="gap"><b>Few reviews so far.</b> With ${t(g.review_count)} Google ${+g.review_count === 1 ? 'review' : 'reviews'}, a new customer has little to go on. The review fix below is the place to start.</p>`;
+    if (fewReviews(g)) b1 += `<p class="gap"><b>Few reviews so far.</b> With ${t(g.review_count)} Google ${+g.review_count === 1 ? 'review' : 'reviews'}, a new customer has little to go on.${reviewFixIn(rec) ? ' The review fix below is the place to start.' : ''}</p>`;
     if (g.top3 && g.top3.length) {
       b1 += '<h3>The top 3 near you</h3><ol class="top3">' + g.top3.map((x) => `<li><b>${t(x.name)}</b> <span>${x.rating != null ? t(x.rating) + ' stars, ' : ''}${t(x.review_count ?? 0)} reviews</span></li>`).join('') + '</ol>';
       if (g.review_count != null) {
@@ -1320,7 +1364,7 @@ function renderReport(rec) {
     const line = (name, x) => `<li><b>${name}:</b> ${x.named ? 'you were on the list' : 'you were not on the list'}${x.correct === false ? ', and some of what it said about you was wrong' : ''}.${Array.isArray(x.top) && x.top.length ? ` It named: ${x.top.slice(0, 5).map((n) => t(n)).join(', ')}.` : ''}${x.note ? ' ' + t(x.note) : ''}</li>`;
     b3 = (ai.question ? `<p>We asked each one: "${t(ai.question)}"</p>` : '') + `<ul class="plainlist">${line('ChatGPT', ai.chatgpt)}${line('Gemini', ai.gemini)}${ai.google_ai ? line('Google AI answer', ai.google_ai) : ''}</ul>`;
     if (!ai.google_ai) { b3 += PENDING; pending.push('3 Google AI answer'); }
-    const shots = Array.isArray(ai.screenshots) ? ai.screenshots.filter((x) => x && /^https:\/\/getbookedoutsolutions\.com\/[\w./-]+\.(png|jpe?g|webp)$/i.test(String(x.url || ''))).slice(0, 3) : [];
+    const shots = Array.isArray(ai.screenshots) ? ai.screenshots.filter((x) => x && shotOk(x.url)).slice(0, 3) : [];
     if (shots.length) b3 += '<h3>What they said (screenshots)</h3><div class="shots">' + shots.map((x) => `<figure><img src="${esc(x.url)}" alt="${esc(AI_NAME[x.engine] || 'AI')} answer" loading="lazy"><figcaption>${esc(AI_NAME[x.engine] || '')}</figcaption></figure>`).join('') + '</div>';
   } else { b3 = PENDING; pending.push('3 ChatGPT and Gemini test'); }
   sec(`Who ChatGPT, Gemini and Google say is best in ${townState(rec.town).town}`, '<p class="sub">More people now ask ChatGPT, Gemini or Google\'s AI answer who to call. We ask each one the question your best customer would ask, and check if you come up.</p>' + b3);
@@ -1353,15 +1397,15 @@ function renderReport(rec) {
         : m < 120 ? `You answered in ${t(m)} ${m === 1 ? 'minute' : 'minutes'}.</p>`
           : m < 1440 ? `You answered in about ${Math.round(m / 60)} hours.</p>` : `The answer took a day or more.</p>`);
     const e = speedEstimate(sp);
-    if (e) b6 += `<p class="est"><b>Booking-rate estimate (from outside research, not your own numbers):</b> ${esc(e.text)}</p><p class="src">Source: ${esc(SOURCES[e.src])}.</p>`;
+    if (e) b6 += `<p class="est"><b>What research says about answer speed (outside research, not your numbers):</b> ${esc(e.text)}</p><p class="src">Source: ${esc(SOURCES[e.src])}.</p>`;
     const ah = sp.after_hours;
     if (ah && ah.tested) b6 += `<p>We also called after hours, on ${t(ah.when)}. ${ah.answered ? 'A person answered.' : 'Nobody answered.'}</p>`;
     const share = AFTER_HOURS[trade.slug];
     if (share) {
       let x = `In 2025, about ${pct(share.low)} to ${pct(share.high)} of every 100 calls to ${share.who} came outside business hours, depending on the month.`;
       if (sp.leads_per_month) x += ` You told us you get about ${t(+sp.leads_per_month)} calls a month, so that is roughly ${Math.round(+sp.leads_per_month * share.low / 100)} to ${Math.round(+sp.leads_per_month * share.high / 100)} calls a month after hours.`;
-      if (ah && ah.tested && !ah.answered) x += ' Our after-hours call was not answered, so some of those calls may be going unanswered now.';
-      b6 += `<p class="est"><b>Missed after-hours calls (estimate):</b> ${esc(x)}</p><p class="src">Source: ${esc(SOURCES[share.src])}.</p>`;
+      if (ah && ah.tested && ah.answered === false) x += ' Our after-hours call was not answered, so some of those calls may be going unanswered now.';
+      b6 += `<p class="est"><b>After-hours calls (estimate):</b> ${esc(x)}</p><p class="src">Source: ${esc(SOURCES[share.src])}.</p>`;
     } else b6 += '<p class="sub">We do not have a trusted outside number for after-hours calls in your trade, so we give no after-hours estimate.</p>';
   } else { b6 = PENDING; pending.push('6 Answer speed'); }
   sec('How fast you answer a new customer', b6);
@@ -1370,13 +1414,17 @@ function renderReport(rec) {
   let b7 = '';
   const kf = s.known_for;
   if (g && !g.has_google_profile) b7 = '<p>No Google profile yet, so there are no Google reviews to read.</p>';
-  else if (kf && Array.isArray(kf.texts)) {
-    const texts = kf.texts.filter((x) => plain(x).length > 0);
+  else if (kf && Array.isArray(kf.reviews)) {
+    // only his 4 and 5 star reviews with words in them; the count of reviews we scanned comes from the fill
+    const texts = kf.reviews.filter((x) => x && +x.rating >= 4 && plain(x.text).length > 0).map((x) => x.text);
+    const scanned = +kf.scanned;
     const own = plain(rec.business_name).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
     const words = texts.length >= 5 ? knownFor(texts, own) : [];
-    if (words.length) b7 = `<p>We read ${texts.length} of your Google reviews. These words came up again and again:</p><ul class="plainlist">${words.map((w) => `<li><b>"${esc(w.word)}"</b> in ${w.count} reviews</li>`).join('')}</ul><p>That is what your customers already say you are known for. Those are good words to use on your website and your Google profile.</p>`;
-    else if (texts.length < 5 || fewReviews(g)) b7 = `<p>There are not enough Google reviews with words in them yet (we found ${texts.length}) to see what customers say you are known for. The review fix below is the place to start.</p>`;
-    else b7 = `<p>We read ${texts.length} of your Google reviews. No one word or phrase came up in 3 or more of them, so customers have not settled on one thing you are known for yet.</p>`;
+    const read = `We read ${scanned === 1 ? 'your one Google review' : `${scanned} of your Google reviews`}. ${texts.length === 1 ? 'One was' : `${texts.length} were`} 4 or 5 stars with words in ${texts.length === 1 ? 'it' : 'them'}.`;
+    const toFix = reviewFixIn(rec) ? ' The review fix below is the place to start.' : '';
+    if (words.length) b7 = `<p>${read} In those, these words came up again and again:</p><ul class="plainlist">${words.map((w) => `<li><b>"${esc(w.word)}"</b> in ${w.count} reviews</li>`).join('')}</ul><p>That is what your happy customers already say you are known for. Those are good words to use on your website and your Google profile.</p>`;
+    else if (texts.length < 5) b7 = `<p>${read} That is not enough yet to see what customers say you are known for.${toFix}</p>`;
+    else b7 = `<p>${read} No one word or phrase came up in 3 or more of them, so customers have not settled on one thing you are known for yet.</p>`;
   } else { b7 = PENDING; pending.push('7 What you are known for'); }
   sec('What your reviews say you are known for', b7);
 
@@ -1413,15 +1461,18 @@ function renderReport(rec) {
   // three fixes
   sec('Three fixes, in plain words', '<ol class="plainlist">' + pickFixes(rec).map((x) => `<li>${t(x)}</li>`).join('') + '</ol>');
 
-  // his open spot and his named guarantee
+  // his open spot and his named guarantee. Every guarantee sentence is the site's own terms wording (terms.html).
+  // Zone locks are only offered on the heating and air, plumbing and electrical price pages, so "Something else" gets neither.
   const spt = s.spot;
-  if (spt) {
-    const tw = TRADE_NAME[trade.slug];
-    const spotP = spt.open ? `<p><b>Your spot is open.</b> We lock each zone to one ${esc(tw)}. The ${t(spt.zone)} zone is open for your trade right now. Once you lock it, we never work for or email another ${esc(tw)} in your zone.</p>` : '';
-    sec('Your spot and your guarantee', spotP
-      + `<p class="est"><b>The ${t(rec.business_name)} Quote Promise.</b> Once your first paid month starts, every new quote you forward gets its first follow-up note within 2 business days. We guarantee our part of every piece of the work: the writing, the sending, the posting, the submitting.</p>`
-      + '<p class="sub">We never promise jobs, revenue or a spot on Google. No guarantees apply during the free 30 days, because nothing is charged.</p>');
-  } else { pending.push('Spot and guarantee'); sec('Your spot and your guarantee', PENDING); }
+  if (trade.slug !== 'other') {
+    if (spt) {
+      const tw = TRADE_NAME[trade.slug];
+      const spotP = spt.open ? `<p><b>Your spot is open.</b> We lock each zone to one ${esc(tw)}. The ${t(spt.zone)} zone is open for your trade right now. If your area is locked to you, we never work for or email another shop in your trade in your zone.</p>` : '';
+      sec('Your spot and your guarantee', spotP
+        + `<p class="est"><b>The ${t(rec.business_name)} Quote Guarantee.</b> Once your first paid month starts: new quotes you forward are contacted within 2 business days. ${esc(TERMS_GUARANTEE)}</p>`
+        + `<p class="sub">${esc(TERMS_FREE)}</p>`);
+    } else { pending.push('Spot and guarantee'); sec('Your spot and your guarantee', PENDING); }
+  }
 
   // next step
   const href = `${SITE}/${trade.price}`;
@@ -1570,6 +1621,13 @@ async function tick(env, now = new Date(), f) {
       await saveReport(env, rec); changed = true; log.push('reviews ' + id);
     }
     if (rec.status === 'checked' && !rec.test) {
+      // Re-render first: if the current code makes a different page (old record, new sections), the old marks are cleared
+      // and nothing is sent until both checkers pass the new version.
+      const before = rec.hash;
+      await saveReport(env, rec);
+      if (rec.hash !== before) { changed = true; log.push('rerendered ' + id); }
+    }
+    if (rec.status === 'checked' && !rec.test) {
       const r = await trySend(env, rec, now, f);
       if (r.changed) { changed = true; log.push(r.log + ' ' + id); }
       if (rec.status === 'sent') { await putJ(env, 'req:' + id, rec, KEEP); continue; }
@@ -1644,6 +1702,11 @@ async function check(req, env, now = new Date(), f) {
   if (!rec) return json({ ok: false, error: 'not found' }, 404);
   if (rec.status === 'sent') return json({ ok: false, error: 'already sent' }, 409);
   if (!['built', 'held', 'checked'].includes(rec.status)) return json({ ok: false, error: 'not built yet' }, 409);
+  // Always judge the page as the CURRENT code renders it: an old record (saved by older code) can carry a stale
+  // complete flag and hash. A re-render that changes the page clears the old marks and makes a new version.
+  const before = rec.hash;
+  await saveReport(env, rec);
+  if (rec.hash !== before) await putJ(env, 'req:' + rec.id, rec, KEEP);
   if (String(b.hash || '') !== rec.hash) return json({ ok: false, error: 'report changed; read it again', hash: rec.hash }, 409);
   rec.checks = rec.checks || {};
   const other = rec.checks[slot === '1' ? '2' : '1'];
@@ -1673,7 +1736,9 @@ function fuHelpers() {
 async function startFollowups(env, rec, now, threadId) {
   if (rec.test || rec.fu) return;
   rec.fu = { day0: now.toISOString(), hour: Math.min(16, Math.max(8, local(now).h)), thread: threadId, msgid: rec.send_msgid || '',
-    subject: ownerEmail(env, rec).subject, done: {}, facts: [], started: now.toISOString() };
+    subject: ownerEmail(env, rec).subject, done: {}, facts: [], started: now.toISOString(),
+    // the three fixes exactly as they were on the page he got; follow-ups quote these, never a re-pick by newer code
+    fixes: pickFixes(rec) };
   try { await env.KV.put('fu:' + rec.id, '1', { expirationTtl: 3 * KEEP }); } catch (e) { rec.fu.marker_error = String((e && e.message) || e).slice(0, 200); }
 }
 async function fuStop(env, rec, why, now) {

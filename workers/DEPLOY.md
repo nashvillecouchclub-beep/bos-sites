@@ -56,19 +56,33 @@ Endpoints for later jobs (all need `k` = STATUS_KEY):
   - speed: `{"tested":true,"channel":"call|text|email","when":"Mon Nov 16, 2:10 pm","minutes":42,"after_hours":{"tested":true,"answered":false,"when":"Mon Nov 16, 7:40 pm"}}`
     `minutes:null` means no answer and then `waited_hours` is needed. Never `form` (the report says we never send his form).
     `leads_per_month` only with `"leads_source":"owner"` (he told us). Can't test: `{"tested":false,"reason":"..."}`.
-    The page shows the booking-rate estimate (HBR 2011 or the 2007 lead response study, picked by his answer time) and, for heating
-    and air only, the after-hours estimate (ServiceTitan June 3 2026: 9.8 to 14.1 of every 100 calls). Both are labeled estimates with the source.
-  - known_for: `{"texts":["review text", ...]}` (his Google review texts, up to 300). The worker counts the repeated words itself
-    (once per review, 3 or more reviews, his own business name left out). Under 5 texts, or under 20 Google reviews and nothing repeats,
-    it points to the review fix. No Google profile: not needed.
+    The page shows "What research says about answer speed (outside research, not your numbers)" (HBR 2011 or the 2007 lead response
+    study, picked by his answer time; these studies measure reaching and qualifying web leads, not jobs booked) and, for heating
+    and air only, "After-hours calls (estimate)" (ServiceTitan June 3 2026: 9.8 to 14.1 of every 100 calls arrive after hours).
+    Each has its source line. "May be going unanswered" shows only when the after-hours call was not answered.
+  - known_for: `{"scanned":25,"reviews":[{"text":"review text","rating":5}, ...]}` (the Google reviews we scanned, up to 300, with
+    their stars; `scanned` = how many we looked at). Only 4 and 5 star reviews are counted. The worker counts the repeated words itself
+    (once per review, 3 or more reviews, his own business name left out, complaint words and words after "not", "never" and the like
+    left out). Under 5 usable reviews it says so, and points to the review fix only when that fix is in his three fixes.
+    No Google profile: not needed.
   - competitor: `{"name":"<exactly one of the google top3 names, above him>","theirs":{"photos":80,"reply_pct":90,"posts_90d":6,"website":true,"hours":true},"yours":{...same keys}}`
     Stars and review counts always come from the google section. Not needed when he is number 1, has no profile, or Google gave no top 3.
   - listings: `{"sites":{"google":{"found":true,"complete":true},"yelp":{"found":false},"bbb":{"found":true,"complete":false,"fix":"one simple fix"},"facebook":{...},"nextdoor":{...},"chamber":{...}}}`
     All six needed. Not found gets the standard free fix; found but not complete needs its own `fix`.
-  - spot: `{"zone":"Smyrna","open":true}` (is his trade's zone lock still free?). The named guarantee ("The <business> Quote Promise")
-    uses the site's own guaranteed clock (first note on a forwarded quote within 2 business days) and the terms' limits.
+  - spot: `{"zone":"Smyrna","open":true}` (is his trade's zone lock still free?). The named guarantee ("The <business> Quote Guarantee")
+    uses the terms page word for word (quotes contacted within 2 business days; "Not the printer, the mail, Google or your customers";
+    "your next month is free"; no guarantees during a free period). "Something else" trades get no spot and no guarantee (the site
+    offers zone locks only for heating and air, plumbing and electrical), and spot is not needed for them.
+  - google (now checked on fill): `has_google_profile` must be true or false. With a profile, `rank_for_keyword` is 1 to 20 or null,
+    and null needs `rank_checked: true` (we ran the search and he was not in the first 20). Without that flag the report never says
+    "Not found" or "Not in the first 20 results"; it stays pending. The worker's own lookup sets `rank_checked` itself, and a lookup
+    answer with no yes/no on the profile is treated as a failed lookup.
+  - Re-render rule: check (before any mark) and the cron (before any send) render the report again with the current code. An old
+    record whose page changes gets a new hash, its marks are cleared and it needs both checks again. The three fixes are saved on the
+    record when it is sent (`fu.fixes`) and the follow-ups quote those.
   - The one-line diagnosis at the top is not filled: the worker works it out from google, ai and speed ("Not found", "Found but not
-    chosen", "Chosen but never followed up", or "Found and chosen"). It stays pending ("0 Diagnosis") until the data it needs is in.
+    chosen", "Chosen but never followed up" (no answer, over an hour, or an unanswered after-hours call), "Found and chosen, but slow
+    to answer" (6 to 60 minutes), or "Found and chosen"). It stays pending ("0 Diagnosis") until the data it needs is in.
 
 ## getbookedoutsolutions.com on Cloudflare Pages (Nov 16)
 

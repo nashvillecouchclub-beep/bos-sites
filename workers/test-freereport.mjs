@@ -2,6 +2,7 @@
 // No network: mock KV, mock fetch, fixed clock. Uses a clearly fake shop only.
 import W0 from './bookedout-freereport.js';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 // BUNDLE=1 runs the same tests against the one-file dashboard bundle (node workers/build-freereport-bundle.mjs first).
 const W = process.env.BUNDLE ? (await import('./dist/bookedout-freereport.bundle.js')).default : W0;
 
@@ -52,7 +53,8 @@ const FIX = {
 // The sections added Nov 20 (item 215, item 211, the Nov 19 diagnosis line). Fake TEST data only.
 const NEW = {
   speed: { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: null, waited_hours: 48, after_hours: { tested: true, answered: false, when: 'Mon Nov 16, 7:40 pm' } },
-  known_for: { texts: ['On time and a fair price.', 'Showed up on time, fair price, clean work.', 'Fair price, on time again.', 'They were on time and clean.', 'Clean work and a fair price.', 'Great service'] },
+  known_for: { scanned: 7, reviews: ['On time and a fair price.', 'Showed up on time, fair price, clean work.', 'Fair price, on time again.', 'They were on time and clean.', 'Clean work and a fair price.', 'Great service'].map((text) => ({ text, rating: 5 }))
+    .concat([{ text: 'Late and rude, not on time, not a fair price, not clean.', rating: 1 }]) },
   competitor: { name: 'Fake Air One', theirs: { photos: 80, reply_pct: 90, posts_90d: 6, website: true, hours: true }, yours: { photos: 12, reply_pct: 10, posts_90d: 0, website: true, hours: true } },
   listings: { sites: { google: { found: true, complete: true }, yelp: { found: false }, bbb: { found: true, complete: false, fix: 'Fix the old phone number on your BBB page.' },
     facebook: { found: true }, nextdoor: { found: false }, chamber: { found: true } } },
@@ -463,7 +465,7 @@ const top = (html) => visible(html.split('<section')[0]).replace(/\s+/g, ' ');
 await test('Diagnosis line: "not found" (no profile / not in first 20), "found but not chosen", "chosen but never followed up", backed by the data', () => {
   let r = rr({ google: { has_google_profile: false } });
   assert.match(top(r.html), /In one line: Not found\. We could not find a Google Business Profile for Test Shop Heating and Air \(FAKE\) in Smyrna TN/);
-  r = rr({ google: { ...G7, rank_for_keyword: null }, ai: { chatgpt: { named: false }, gemini: { named: false } } });
+  r = rr({ google: { ...G7, rank_for_keyword: null, rank_checked: true }, ai: { chatgpt: { named: false }, gemini: { named: false } } });
   assert.match(top(r.html), /Not found\. You are not in the first 20 Google results for &quot;hvac Smyrna&quot;, and ChatGPT and Gemini did not name you either\./);
   r = rr({ google: G7 });
   assert.equal(r.diagnosis, 'found but not chosen');
@@ -478,6 +480,21 @@ await test('Diagnosis line: "not found" (no profile / not in first 20), "found b
   assert.match(top(r.html), /but our after-hours test call was not answered/);
   r = rr({ google: g2, speed: { tested: true, channel: 'call', when: 'Mon', minutes: 4 } });
   assert.equal(r.diagnosis, 'chosen'); assert.match(top(r.html), /Found and chosen\. You are number 2 .* in 4 minutes/);
+  r = rr({ google: g2, speed: { tested: true, channel: 'call', when: 'Mon', minutes: 30 } });
+  assert.equal(r.diagnosis, 'chosen but slow to answer');
+  assert.match(top(r.html), /Found and chosen, but slow to answer\. You are number 2 for &quot;hvac Smyrna&quot;, and our test call took 30 minutes to get an answer\./);
+  // never "Not found" from missing data: no rank and no positive "we ran the search" flag = pending
+  r = rr({ google: { ...G7, rank_for_keyword: null } });
+  assert.equal(r.pending[0], '0 Diagnosis'); assert.ok(r.pending.includes('1 Google (search not run)'));
+  assert.doesNotMatch(visible(r.html), /Not found|Not in the first 20/);
+  r = rr({ google: { rating: 4 } });
+  assert.equal(r.pending[0], '0 Diagnosis', 'no yes/no on the profile = pending, not "not found"');
+  assert.match(T.fillProblem({ sections: {} }, 'google', { rating: 4 }), /has_google_profile/);
+  assert.match(T.fillProblem({ sections: {} }, 'google', { ...G7, rank_for_keyword: null }), /rank_checked/);
+  assert.match(T.fillProblem({ sections: {} }, 'google', { ...G7, rank_for_keyword: 31 }), /1 to 20/);
+  assert.match(T.fillProblem({ sections: {} }, 'google', { ...G7, top3: [{ rating: 4 }] }), /top3/);
+  assert.equal(T.fillProblem({ sections: {} }, 'google', G7), '');
+  assert.equal(T.fillProblem({ sections: {} }, 'google', { has_google_profile: false }), '');
   r = rr({ google: g2 });
   assert.equal(r.pending[0], '0 Diagnosis', 'top 3 shop with no speed test yet: the diagnosis waits, never guessed');
   assert.doesNotMatch(top(r.html), /In one line/);
@@ -488,11 +505,13 @@ await test('Answer speed: booking-rate estimate is labeled, sourced, and picked 
   const cases = [[3, /fastest group/, /Lead Response Management Study/], [20, /about 21 times between a 5 minute answer and a 30 minute answer/, /Lead Response Management Study/],
     [180, /A Harvard Business Review study found .* nearly 7 times as likely/, /Harvard Business Review, March 2011/],
     [2000, /more than 60 times as likely .* 24 hours or longer/, /Harvard Business Review/],
-    [null, /A Harvard Business Review study found .* more than 60 times as likely .* 24 hours or longer/, /2,241 U\.S\. companies/]];
+    [null, /A Harvard Business Review study found .* more than 60 times as likely .* 24 hours or longer/, /1\.25 million leads at 42 U\.S\. companies/]];
   for (const [m, want, src] of cases) {
     const sp = m == null ? { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: null, waited_hours: 48 } : { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: m };
     const txt = visible(rr({ google: G7, speed: sp }).html).replace(/\s+/g, ' ');
-    assert.match(txt, /Booking-rate estimate \(from outside research, not your own numbers\):/);
+    assert.match(txt, /What research says about answer speed \(outside research, not your numbers\):/);
+    assert.doesNotMatch(txt, /Booking-rate|booking rate/i, 'the studies measure reaching and qualifying leads, not jobs booked');
+    if (m === 3) assert.doesNotMatch(txt.split('What research says')[1].split('Source:')[0], /estimate/i, 'the under-5-minutes text is not an estimate');
     assert.match(txt, want, String(m)); assert.match(txt, src, String(m));
     assert.match(txt, m == null ? /We made one test call to your business on Mon Nov 16, 2:10 pm\. We waited 48 hours and got no answer/
       : m === 180 ? /You answered in about 3 hours\./ : m === 2000 ? /The answer took a day or more\./ : new RegExp(`You answered in ${m} minutes`));
@@ -502,10 +521,15 @@ await test('Answer speed: booking-rate estimate is labeled, sourced, and picked 
 
 await test('After-hours estimate: labeled, sourced, HVAC only; a count only when the owner told us his calls', () => {
   let txt = visible(rr({ speed: NEW.speed }).html).replace(/\s+/g, ' ');
-  assert.match(txt, /Missed after-hours calls \(estimate\): In 2025, about 9\.8 to 14\.1 of every 100 calls to home heating and air shops came outside business hours/);
+  assert.match(txt, /After-hours calls \(estimate\): In 2025, about 9\.8 to 14\.1 of every 100 calls to home heating and air shops came outside business hours/);
   assert.match(txt, /Our after-hours call was not answered, so some of those calls may be going unanswered now\./);
   assert.match(txt, /ServiceTitan, .*June 3 2026.*not nationally representative/);
   assert.doesNotMatch(txt, /calls a month after hours/);
+  assert.doesNotMatch(txt, /Missed/);
+  for (const answered of [true, undefined]) {
+    const t2 = visible(rr({ speed: { ...NEW.speed, after_hours: answered === undefined ? undefined : { tested: true, answered, when: 'Mon 8 pm' } } }).html);
+    assert.doesNotMatch(t2, /may be going unanswered/, 'only when the after-hours call was not answered');
+  }
   txt = visible(rr({ speed: { ...NEW.speed, leads_per_month: 200, leads_source: 'owner' } }).html).replace(/\s+/g, ' ');
   assert.match(txt, /You told us you get about 200 calls a month, so that is roughly 20 to 28 calls a month after hours\./);
   txt = visible(rr({ speed: NEW.speed }, { trade: 'Plumbing' }).html).replace(/\s+/g, ' ');
@@ -518,17 +542,32 @@ await test('After-hours estimate: labeled, sourced, HVAC only; a count only when
 });
 
 await test('What you are known for: words repeated across his reviews, counted once per review, his own name left out', () => {
-  const k = T.knownFor(NEW.known_for.texts);
+  const k = T.knownFor(NEW.known_for.reviews.filter((x) => x.rating >= 4).map((x) => x.text));
   assert.deepEqual(k.map((x) => x.word).sort(), ['clean', 'fair price', 'on time']);
   assert.equal(k.find((x) => x.word === 'fair price').count, 4); assert.equal(k.find((x) => x.word === 'on time').count, 4);
   assert.equal(T.knownFor(['Smyrna Air was on time', 'smyrna air on time', 'Smyrna Air, on time'], ['smyrna', 'air']).map((x) => x.word).join(), 'on time');
   assert.equal(T.knownFor(['on time on time on time', 'great', 'good']).length, 0, 'one review saying it 3 times is not a pattern');
   const txt = visible(rr({ google: G7, known_for: NEW.known_for }).html).replace(/\s+/g, ' ');
-  assert.match(txt, /We read 6 of your Google reviews\. These words came up again and again: "fair price" in 4 reviews/);
-  assert.match(txt, /That is what your customers already say you are known for/);
-  const few = visible(rr({ google: G7, known_for: { texts: ['Good', 'Fine job'] } }).html);
-  assert.match(few, /not enough Google reviews with words in them yet \(we found 2\).*The review fix below is the place to start/s);
-  assert.match(T.fillProblem({ sections: {} }, 'known_for', { texts: 'x' }), /list of up to 300/);
+  assert.match(txt, /We read 7 of your Google reviews\. 6 were 4 or 5 stars with words in them\. In those, these words came up again and again: "fair price" in 4 reviews/);
+  assert.match(txt, /That is what your happy customers already say you are known for/);
+  assert.doesNotMatch(txt, /"late"|"rude"/, 'the 1 star review is never counted');
+  // complaint words and turned-around words never surface, even in good reviews
+  const mixed = ['Not happy at first but fixed it, on time', 'Never late, on time', 'Was not rude at all, on time and friendly', 'Friendly and on time', 'Friendly crew', 'Late once but friendly'];
+  const k2 = T.knownFor(mixed).map((x) => x.word);
+  assert.ok(k2.includes('on time') && k2.includes('friendly'), k2.join());
+  for (const bad of ['happy', 'late', 'rude', 'not', 'never']) assert.ok(!k2.some((w) => w.split(' ').includes(bad)), bad + ' in ' + k2.join());
+  // few words: points to the review fix only when the review fix is really in the three fixes
+  const fewG = { ...G7, review_count: 8, top3: [] };
+  const few = visible(rr({ google: fewG, known_for: { scanned: 8, reviews: [{ text: 'Good', rating: 5 }, { text: 'Fine job', rating: 4 }, { text: 'Bad', rating: 2 }] } }).html).replace(/\s+/g, ' ');
+  assert.match(few, /We read 8 of your Google reviews\. 2 were 4 or 5 stars with words in them\. That is not enough yet to see what customers say you are known for\. The review fix below is the place to start\./);
+  assert.match(T.pickFixes({ ...base, sections: { google: fewG } })[0], /Google review the day/);
+  const noFix = visible(rr({ google: { has_google_profile: true, rating: 5, review_count: 400, rank_for_keyword: 1, keyword: 'hvac Smyrna', top3: [] },
+    reviews: { newest_review: { rating: 5, text: 'x' }, owner_reply_on_newest: true }, known_for: { scanned: 3, reviews: [{ text: 'Good', rating: 5 }] } }).html);
+  assert.doesNotMatch(noFix, /review fix below/, 'no review fix in the three fixes, so the page never points to one');
+  assert.match(T.fillProblem({ sections: {} }, 'known_for', { texts: ['x'] }), /up to 300 \{text, rating/);
+  assert.match(T.fillProblem({ sections: {} }, 'known_for', { reviews: [{ text: 'x', rating: 5 }] }), /scanned/);
+  assert.match(T.fillProblem({ sections: {} }, 'known_for', { scanned: 2, reviews: [{ text: 'x', rating: 7 }] }), /rating/);
+  assert.equal(T.fillProblem({ sections: {} }, 'known_for', NEW.known_for), '');
 });
 
 await test('Item 211: few Google reviews -> the report points to the review fix, and the review fix is in the three fixes', () => {
@@ -539,6 +578,11 @@ await test('Item 211: few Google reviews -> the report points to the review fix,
   assert.match(visible(rr(sec).html).replace(/\s+/g, ' '), /Few reviews so far\. With 8 Google reviews, a new customer has little to go on\. The review fix below is the place to start\./);
   assert.doesNotMatch(visible(rr({ google: G7 }).html), /Few reviews so far/, '61 reviews is not few');
   const one = T.pickFixes({ ...base, sections: { google: { ...g, review_count: 1, top3: [] } } });
+  // a fast answer drops the base "call back within 5 minutes" fix; a slow one keeps it
+  const fastFx = T.pickFixes({ ...base, sections: { google: G7, reviews: { ...FIX.reviews, owner_reply_on_newest: true }, speed: { tested: true, channel: 'call', when: 'Mon', minutes: 2 } } });
+  assert.ok(!fastFx.some((x) => /within 5 minutes/.test(x)), fastFx.join(' | '));
+  const slowFx = T.pickFixes({ ...base, sections: { google: G7, reviews: { ...FIX.reviews, owner_reply_on_newest: true }, speed: { tested: true, channel: 'call', when: 'Mon', minutes: 40 } } });
+  assert.ok(slowFx.some((x) => /within 5 minutes/.test(x)), slowFx.join(' | '));
   assert.match(one[0], /You have 1 Google review so far/);
   assert.equal(T.pickFixes({ ...base, sections: { google: { ...G7, review_count: 8 } } }).filter((x) => /Google review the day/.test(x)).length, 1, 'never twice');
 });
@@ -582,11 +626,22 @@ await test('Listing check: all six places, one simple fix per weak one, a missin
 await test('Open spot and the named guarantee: written for this shop, true to the site terms, no promise of jobs', () => {
   let txt = visible(rr({ spot: NEW.spot }).html).replace(/\s+/g, ' ');
   assert.match(txt, /Your spot is open\. We lock each zone to one heating and air shop\. The Smyrna zone is open for your trade right now\./);
-  assert.match(txt, /The Test Shop Heating and Air \(FAKE\) Quote Promise\. Once your first paid month starts, every new quote you forward gets its first follow-up note within 2 business days\./);
-  assert.match(txt, /We never promise jobs, revenue or a spot on Google\. No guarantees apply during the free 30 days/);
+  assert.match(txt, /The Test Shop Heating and Air \(FAKE\) Quote Guarantee\. Once your first paid month starts: new quotes you forward are contacted within 2 business days\./);
+  assert.ok(txt.includes('We guarantee our part of every piece: the writing, the sending, the posting, the submitting. Not the printer, the mail, Google or your customers. We never promise jobs, revenue or a spot on Google. If we miss any piece of your package, your next month is free.'));
+  assert.ok(txt.includes('There are no guarantees during a free period, because nothing is being charged.'));
+  assert.doesNotMatch(txt, /Quote Promise/);
+  // the guarantee sentences are word for word on the site's terms page
+  const terms = readFileSync(new URL('../sites/getbookedoutsolutions.com/terms.html', import.meta.url), 'utf8').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  for (const line of ['We guarantee our part of every piece: the writing, the sending, the posting, the submitting. Not the printer, the mail, Google or your customers. We never promise jobs, revenue or a spot on Google.',
+    'If we miss any piece of your package, your next month is free.', 'There are no guarantees during a free period, because nothing is being charged.', 'New quotes you forward are contacted within 2 business days.'])
+    assert.ok(terms.includes(line), 'not on the terms page: ' + line);
   txt = visible(rr({ spot: { zone: 'Smyrna', open: false } }).html);
-  assert.doesNotMatch(txt, /Your spot is open/); assert.match(txt, /Quote Promise/);
+  assert.doesNotMatch(txt, /Your spot is open/); assert.match(txt, /Quote Guarantee/);
   assert.ok(rr({}).pending.includes('Spot and guarantee'));
+  // "Something else": the site offers no zone lock there, so no spot line, no guarantee, and nothing pending for it
+  const other = rr({ spot: NEW.spot }, { trade: 'Something else' });
+  assert.doesNotMatch(visible(other.html), /Your spot is open|Quote Guarantee|zone/);
+  assert.ok(!rr({}, { trade: 'Something else' }).pending.includes('Spot and guarantee'));
   assert.match(T.fillProblem({ sections: {} }, 'spot', { zone: 'Smyrna' }), /open/);
 });
 
@@ -595,6 +650,8 @@ await test('AI answer check: ChatGPT, Gemini and Google AI, who each named, scre
     screenshots: [{ engine: 'chatgpt', url: 'https://getbookedoutsolutions.com/r-img/test-chatgpt.png' }] };
   assert.equal(T.fillProblem({ sections: {} }, 'ai', ai), '');
   assert.match(T.fillProblem({ sections: {} }, 'ai', { ...ai, screenshots: [{ engine: 'chatgpt', url: 'https://evil.example/x.png' }] }), /screenshots/);
+  for (const bad of ['https://getbookedoutsolutions.com//evil.example/x.png', 'https://getbookedoutsolutions.com/r-img/../../x.png', 'https://getbookedoutsolutions.com/a//b.png'])
+    assert.match(T.fillProblem({ sections: {} }, 'ai', { ...ai, screenshots: [{ engine: 'chatgpt', url: bad }] }), /screenshots/, bad);
   assert.match(T.fillProblem({ sections: {} }, 'ai', { ...ai, google_ai: { note: 'x' } }), /google_ai/);
   const r = rr({ ai });
   const txt = visible(r.html).replace(/\s+/g, ' ');
@@ -611,6 +668,9 @@ await test('AI answer check: ChatGPT, Gemini and Google AI, who each named, scre
 await test('Full report with every new section: complete, the gentle growth line, no dashes, emojis or promises anywhere', () => {
   const r = rr(FULL, { revenue: '$500K to $1M' });
   assert.equal(r.complete, true, r.pending.join(', '));
+  // section titles go through the same cleaning as every other visitor text (a long dash in the town never reaches an h2)
+  const dashed = rr(FULL, { town: 'Smyrna \u2014 Rutherford' });
+  for (const h of dashed.html.match(/<h2>[\s\S]*?<\/h2>/g)) assert.doesNotMatch(h, DASH, h);
   const txt = visible(r.html).replace(/\s+/g, ' ');
   assert.match(txt, /Is your growth making you money\? Some shops get busier and keep less\./);
   assert.doesNotMatch(txt, DASH); assert.doesNotMatch(txt, EMOJI);
@@ -620,8 +680,8 @@ await test('Full report with every new section: complete, the gentle growth line
   // every estimate on the page is labeled as one and carries a source line
   const ests = (r.html.match(/<p class="est"><b>[^<]*<\/b>/g) || []).map((x) => x.replace(/<[^>]+>/g, ''));
   assert.ok(ests.length >= 2);
-  for (const e of ests.filter((x) => !/Quote Promise/.test(x))) assert.match(e, /estimate/i, e);
-  assert.equal((r.html.match(/class="src">Source:/g) || []).length, ests.filter((x) => /estimate/i.test(x)).length);
+  for (const e of ests.filter((x) => !/Quote Guarantee/.test(x))) assert.match(e, /\(estimate\)|\(outside research, not your numbers\)/, e);
+  assert.equal((r.html.match(/class="src">Source:/g) || []).length, ests.filter((x) => !/Quote Guarantee/.test(x)).length, 'every outside number has a source line');
 });
 
 await test('Pending new sections stop the checkers: a report missing any one of them cannot pass', async () => {
@@ -642,6 +702,40 @@ await test('Pending new sections stop the checkers: a report missing any one of 
   const bad = await call(env, '/api/free-report/fill', { id, k: KEY, section: 'competitor', data: { name: 'Not In Top Three' } });
   assert.equal(bad.status, 400); assert.match((await bad.json()).error, /top 3/);
   assert.equal(rec().hash, h);
+});
+
+await test('Old-shape record (built by older code, stale complete + hash): check and cron re-render first; the old page can never pass or send', async () => {
+  const OLD = { google: FILLS.google, reviews: FILLS.reviews, ai: { question: 'Q?', chatgpt: { named: false }, gemini: { named: true } }, booking: FILLS.booking, category: FILLS.category };
+  const make = async (status, checks) => {
+    const f = sendFetch();
+    const env = { KV: kv(), STATUS_KEY: KEY, ...GMAIL, LIVE: 'on', _f: f };
+    const j = await (await T.submit(post(REAL), env, at('2026-11-17T10:30:00-06:00'))).json();
+    const r = JSON.parse(env.KV.m.get('req:' + j.id));
+    Object.assign(r, { status, sections: OLD, complete: true, pending: [], hash: 'f'.repeat(32), checks: checks || {} });
+    env.KV.m.set('req:' + j.id, JSON.stringify(r));
+    env.KV.m.set('rep:' + j.id, '<html>old page</html>');
+    return { env, f, id: j.id, rec: () => JSON.parse(env.KV.m.get('req:' + j.id)) };
+  };
+  // check(): the stale hash no longer matches what the current code renders -> 409, and the record is brought up to date
+  const a = await make('built');
+  const r1 = await mark(a.env, a.id, 1, 'checker-a', 'pass', 'f'.repeat(32));
+  assert.equal(r1.status, 409); assert.match((await r1.json()).error, /report changed/);
+  assert.equal(a.rec().complete, false); assert.notEqual(a.rec().hash, 'f'.repeat(32));
+  assert.ok(a.rec().pending.includes('6 Answer speed'));
+  assert.equal((await mark(a.env, a.id, 1, 'checker-a', 'pass', a.rec().hash)).status, 409, 'the fresh page still has pending sections');
+  // tick(): an old "checked" record with two old pass marks is re-rendered before any send, its marks cleared, nothing sent
+  const old = { agent: 'x', result: 'pass', hash: 'f'.repeat(32) };
+  const b = await make('checked', { 1: { ...old, agent: 'checker-a' }, 2: { ...old, agent: 'checker-b' } });
+  const log = await T.tick(b.env, at('2026-11-17T11:15:00-06:00'), b.f);
+  assert.ok(log.some((x) => x.startsWith('rerendered ')), log.join());
+  assert.equal(b.f.calls.length, 0, 'the old page is never sent');
+  assert.equal(b.rec().status, 'built'); assert.deepEqual(b.rec().checks, {});
+  assert.notEqual(b.env.KV.m.get('rep:' + b.id), '<html>old page</html>');
+  // once every new section is filled and both checkers pass the new version, it sends once
+  for (const [section, data] of Object.entries(FILLS)) await call(b.env, '/api/free-report/fill', { id: b.id, k: KEY, section, data });
+  const h = b.rec().hash;
+  await mark(b.env, b.id, 1, 'checker-a', 'pass', h);
+  assert.equal((await (await mark(b.env, b.id, 2, 'checker-b', 'pass', h)).json()).sent, true);
 });
 
 await test('E2E mirror of fr-20261120-vbukvz: fill all, checker 1 + checker 2 pass; LIVE off sends nothing; LIVE on sends once; TEST never', async () => {
