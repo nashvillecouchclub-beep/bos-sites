@@ -163,5 +163,10 @@
   "id": "deploy-studio-cards-nov20",
   "site": "getbookedoutsolutions.com",
   "do": "deploy"
+ },
+ {
+  "id": "deploy-studio-cards-nov21",
+  "site": "getbookedoutsolutions.com",
+  "do": "deploy"
  }
 ]
