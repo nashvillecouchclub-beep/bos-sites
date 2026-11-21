@@ -68,3 +68,27 @@ Endpoints for later jobs (all need `k` = STATUS_KEY):
   verification TXTs, wildcard CNAME to uixie.porkbun.com).
 - Fallback until Nov 23: put the bare-address records back to A 75.2.60.5 and A 99.83.231.61 (DNS only) and www back to
   CNAME getbookedoutsolutions.netlify.app (DNS only). The Netlify project bookedout-solutions is untouched.
+
+## Free report follow-ups (Nov 20 2026, PR "free report follow-up sequence")
+
+- Wording is LOCKED in `workers/freereport-followups-seq.js` (Salesperson brain wrote it; Hormozi, Platten and owner clones 8+;
+  a fresh second agent PASS 8.5/8.5). Full text and grades: Drive "FREE REPORT FOLLOW-UP SEQUENCE - locked v4 (Nov 20)".
+- Logic: `workers/freereport-followups.js`. The worker starts a sequence when a report is SENT (key `fu:<id>`), and the cron
+  runs `fuTick` after the normal tick.
+- Cold (website form, or `rec.source = "cold_email"`): business days 1, 3, 7, 12, 18 after the report, then the not-now ladder
+  (2, 6, 12 weeks after the last main step) and up to 2 quarterly re-run offers. Warm (`rec.warm = true`, optional
+  `rec.introducer`): business days 2, 7, 12, then the same ladder.
+- Each email: same Gmail thread (threadId + In-Reply-To), subject "Re: <report subject>", one per owner per day, not before the
+  hour the report went out, business days only, Thanksgiving and Christmas slide. Every fact comes from his own report; a step
+  that can't be filled truthfully goes to its fallback or is skipped. No price, no links but his report link.
+- Switches: `FOLLOWUPS` = `off` (default). Nothing goes unless `FOLLOWUPS` = `on` AND `LIVE` = `on`.
+- Stop rules: any message in the thread that is not ours (a reply or a bounce) stops it forever; `stop:<email>` stops it.
+- Knowing there is no reply: the token today has `gmail.send` only, so the thread read fails and every step HOLDS (watch entry)
+  unless the inbox job posts `{action:"clear"}` for that owner within the last 30 minutes. The report email now carries our
+  own Message-ID, so follow-ups set In-Reply-To even without the thread read (check on the first live send that Gmail kept it). To make it fully automatic, the same
+  OAuth client needs `gmail.readonly` added and consent given once by rickey@getbookedoutsolutions.com (a Rickey sign-in step).
+- Endpoint: `POST /api/free-report/followup {id, k, action}` with action `stop` (any reply, "no", bounce, anger, paid/started),
+  `later` (he said later / check back: main steps end, ladder starts today), `clear` (inbox checked, no reply), `status` (plan).
+- Deploy: the dashboard editor takes one file, so run `node workers/build-freereport-bundle.mjs` and paste
+  `workers/dist/bookedout-freereport.bundle.js`. Tests: `node workers/test-freereport.mjs`, `node workers/test-freereport-followups.mjs`,
+  and the same two with `BUNDLE=1` against the bundle.
