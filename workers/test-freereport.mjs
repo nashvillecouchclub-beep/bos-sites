@@ -892,6 +892,44 @@ await test('Cron re-render writes nothing when the page did not change (no KV wr
   assert.equal(await T.refreshReport(env, rec()), false);
 });
 
+await test('Fourth review regressions: reserved fix wins over a duplicate, every "5 minutes" wording is filtered, picker follows the diagnosis', () => {
+  const weak = { google: { ...G7, review_count: 4, rank_for_keyword: 2, top3: [{ name: 'Fake Air One', rating: 4.8, review_count: 300 }] },
+    reviews: { ...FIX.reviews, owner_reply_on_newest: false }, category: { main_category: 'Plumber', big_job: 'new systems', match: false } };
+  const ah = (answered, channel = 'call') => ({ tested: true, answered, when: 'Mon 8 pm', channel });
+  const SPEED = 'Call or text back every new lead within 5 minutes, even after hours.';
+  const AH = 'Make sure every after-hours call reaches a person or gets a call back first thing the next morning.';
+  // 1. the booking fix has the same words as the reserved fix: the reserved one still shows, once
+  let fx = T.pickFixes({ ...base, sections: { ...weak, booking: { score: 4, fixes: [SPEED] }, speed: { tested: true, channel: 'call', when: 'Mon', minutes: null, waited_hours: 48 } } });
+  assert.equal(fx.length, 3); assert.equal(fx.filter((x) => x === SPEED).length, 1, fx.join(' | '));
+  fx = T.pickFixes({ ...base, sections: { booking: { score: 4, fixes: [AH] }, reviews: weak.reviews, category: weak.category, google: weak.google,
+    speed: { tested: true, channel: 'call', when: 'Mon', minutes: 3, after_hours: ah(false) } } });
+  assert.equal(fx.length, 3); assert.equal(fx.filter((x) => x === AH).length, 1, fx.join(' | '));
+  // 2. every way of writing "5 minutes" is filtered for a shop that answered within 5 minutes: picker, booking list, follow-ups
+  const fiveWays = ['Answer every new call in under 5 minutes.', 'Reply to every lead within five minutes.', 'Set a 5-minute callback rule for the office.', 'Call back in 5 mins.', 'Put your phone number at the top.'];
+  const fastSp = { tested: true, channel: 'call', when: 'Mon', minutes: 2 };
+  for (const x of fiveWays.slice(0, 4)) assert.match(x, T.FIVE_MIN, x);
+  fx = T.pickFixes({ ...base, sections: { booking: { score: 5, fixes: fiveWays }, speed: fastSp } });
+  assert.ok(!fx.some((x) => T.FIVE_MIN.test(x)), fx.join(' | ')); assert.equal(fx.length, 3);
+  const page = visible(rr({ booking: { score: 5, fixes: fiveWays.slice(0, 2).concat(fiveWays[4]) }, speed: fastSp }).html).replace(/\s+/g, ' ');
+  assert.match(page, /5 out of 10 One fix: Put your phone number at the top\./);
+  assert.doesNotMatch(page.split('Booking test from a phone')[1].split('Your Google main category')[0], /under 5 minutes|five minutes/);
+  const slowPage = visible(rr({ booking: { score: 5, fixes: fiveWays.slice(0, 2) }, speed: { ...fastSp, minutes: 40 } }).html);
+  assert.match(slowPage, /under 5 minutes/, 'a slow answerer still sees them');
+  // 3. a 6 to 60 minute answer with an unanswered after-hours test: the diagnosis talks about after hours, so the picker keeps the after-hours fix
+  const sp3 = { tested: true, channel: 'call', when: 'Mon', minutes: 30, after_hours: ah(false) };
+  assert.match(T.diagnose({ ...base, sections: { ...weak, speed: sp3 } }).line, /after-hours test call got no answer/);
+  assert.equal(T.speedFinding(sp3).fix, 'after hours');
+  fx = T.pickFixes({ ...base, sections: { ...weak, speed: sp3 } });
+  assert.equal(fx.length, 3); assert.equal(fx[2], AH, fx.join(' | '));
+  // the picker and the diagnosis agree in every speed case for a top 3 shop
+  for (const sp of [{ ...fastSp, minutes: null, waited_hours: 24 }, { ...fastSp, minutes: 90 }, { ...fastSp, minutes: 30 }, sp3, { ...fastSp, after_hours: ah(false, 'text') }, fastSp]) {
+    const f = T.speedFinding(sp), d = T.diagnose({ ...base, sections: { ...weak, speed: sp } }), p3 = T.pickFixes({ ...base, sections: { ...weak, speed: sp } });
+    if (!f) { assert.equal(d.kind, 'chosen'); continue; }
+    assert.equal(p3[2], f.fix === 'after hours' ? T.pickFixes({ ...base, sections: { speed: sp } }).find((x) => /after-hours/.test(x)) : SPEED, JSON.stringify(sp));
+    assert.equal(/after-hours/.test(d.line), f.fix === 'after hours', d.line);
+  }
+});
+
 await test('E2E mirror of fr-20261120-vbukvz: fill all, checker 1 + checker 2 pass; LIVE off sends nothing; LIVE on sends once; TEST never', async () => {
   // the exact fake data used on the live worker Nov 20 (plus the new sections)
   const E2E = { google: { has_google_profile: true, rating: 4.3, review_count: 27, rank_for_keyword: 9, keyword: 'hvac Smyrna',

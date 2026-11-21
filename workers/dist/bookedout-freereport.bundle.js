@@ -548,6 +548,11 @@ function fixLine(s, max = 25) {
   return x.charAt(0).toUpperCase() + x.slice(1);
 }
 
+// "5 minutes", "five minutes", "5-minute", "5 mins", "under 5 min": a fix about answering within 5 minutes. A shop that already
+// answered our test that fast never gets one (report fixes, booking test list, follow-ups). Shared with the worker.
+const FIVE_MIN = /\b(5|five)\s*(-\s*)?min(ute)?s?\b/i;
+function answeredFast(sp) { return !!(sp && sp.tested === true && sp.minutes != null && +sp.minutes <= 5); }
+
 // Every placeholder value, from the owner's own report only. A missing value is left out (never guessed).
 // h: { site, townState, plain, pickFixes, TRADES, chicagoDate, now }
 function values(rec, h) {
@@ -580,7 +585,8 @@ function values(rec, h) {
   }
   if (rv && rv.newest_review) set('newest_review_replied', rv.owner_reply_on_newest ? 'yes' : 'no');
   if (bk && bk.score != null) set('booking_score', Math.max(0, Math.min(10, +bk.score)));
-  if (bk && Array.isArray(bk.fixes) && bk.fixes[0] && words(bk.fixes[0]) <= 45) set('booking_fix_1', h.plain(bk.fixes[0]));
+  const bfix = bk && Array.isArray(bk.fixes) ? bk.fixes.find((x) => x && !(answeredFast(s.speed) && FIVE_MIN.test(x))) : null;
+  if (bfix && bfix === bk.fixes[0] && words(bfix) <= 45) set('booking_fix_1', h.plain(bfix));
   if (ai && ai.chatgpt && ai.gemini) {
     const named = !!(ai.chatgpt.named || ai.gemini.named), both = !!(ai.chatgpt.named && ai.gemini.named);
     // "yes" only when both named it, "no" only when neither did; a split answer is left out (the step uses its fallback).
@@ -735,7 +741,7 @@ function readThread(t, ourAddress) {
 }
 const CLEAR_WINDOW_MS = CLEAR_MS;
 
-return { FU_SEQ, values, whenOk, bodyProblems, resolveStep, footerKind, composeText, addBusinessDays, slide, plan, next, readThread, CLEAR_WINDOW_MS };
+return { FU_SEQ, FIVE_MIN, answeredFast, values, whenOk, bodyProblems, resolveStep, footerKind, composeText, addBusinessDays, slide, plan, next, readThread, CLEAR_WINDOW_MS };
 })();
 // ---- end inlined ----
 
@@ -1072,19 +1078,33 @@ function afterHoursFix(ch) {
   return `Make sure every after-hours ${c} reaches a person or gets ${c === 'call' ? 'a call back' : 'an answer'} first thing the next morning.`;
 }
 const normFix = (x) => plain(x).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-// The three fixes. The fix that matches his own answer speed result (no answer, slow answer, or an unanswered after-hours
-// test) always has a place among the three: it takes the place of the last other fix. No fix twice. Always three.
+// What his answer speed test found, in the order the diagnosis line uses. diagnose() and pickFixes() both read this, so the
+// fix kept among the three is always the one the diagnosis points at. Returns null (nothing to fix), or
+// {kind: 'no answer' | 'slow follow up' | 'after hours' | 'slow answer', fix: 'speed' | 'after hours'}.
+function speedFinding(sp) {
+  if (!sp || sp.tested !== true) return null;
+  if (sp.minutes == null) return { kind: 'no answer', fix: 'speed' };
+  const m = +sp.minutes;
+  if (m > 60) return { kind: 'slow follow up', fix: 'speed' };
+  if (sp.after_hours && sp.after_hours.tested === true && sp.after_hours.answered === false) return { kind: 'after hours', fix: 'after hours' };
+  if (m > 5) return { kind: 'slow answer', fix: 'speed' };
+  return null;
+}
+// The three fixes. The fix matching his speed finding is built first and always keeps a place (it takes the place of the last
+// other fix); any other fix with the same words is dropped. No fix twice. Always three.
 function pickFixes(rec) {
   const s = rec.sections || {}, g = s.google, rv = s.reviews, bk = s.booking, ct = s.category, ai = s.ai, sp = s.speed;
-  const tested = !!(sp && sp.tested === true);
-  const fast = tested && sp.minutes != null && +sp.minutes <= 5;
-  const ahNo = tested && sp.after_hours && sp.after_hours.tested === true && sp.after_hours.answered === false;
+  const fast = FU.answeredFast(sp);
+  const ahNo = !!(sp && sp.tested === true && sp.after_hours && sp.after_hours.tested === true && sp.after_hours.answered === false);
+  const found = speedFinding(sp);
+  const reserved = found ? (found.fix === 'after hours' ? afterHoursFix(sp.after_hours.channel) : SPEED_FIX) : '';
   const out = [];
-  const add = (x, list = out) => {
+  const seen = (x, list) => list.some((y) => normFix(y) === normFix(x));
+  const add = (x) => {
     x = plain(x);
-    if (!x || (fast && /within 5 minutes/i.test(x))) return; // he already answers that fast
-    if ([...out, ...list].some((y) => normFix(y) === normFix(x))) return;
-    list.push(x);
+    if (!x || (fast && FU.FIVE_MIN.test(x))) return; // he already answers that fast
+    if ((reserved && normFix(x) === normFix(reserved)) || seen(x, out)) return;
+    out.push(x);
   };
   if (g && !g.has_google_profile) add('Set up your free Google Business Profile with your real address or service area, hours and phone number. Without it, you do not show on the Google map.');
   if (g && g.has_google_profile && g.top3 && g.top3.length && g.review_count != null) {
@@ -1098,14 +1118,14 @@ function pickFixes(rec) {
   if (ct && ct.match === false) add(`Change your Google main category to the one that fits ${plain(ct.big_job || 'the big-ticket job you want most')}, so Google shows you for that work.`);
   if (bk && Array.isArray(bk.fixes) && bk.fixes[0]) add(bk.fixes[0]);
   if (ai && ai.chatgpt && ai.chatgpt.named === false) add('Put your town, your main services and your best reviews in plain words on your website, so ChatGPT and Gemini have something to say about you.');
-  // the speed fixes: the one matching the diagnosis is reserved; the other one only if there is room
-  const speed = [];
-  if (tested && (sp.minutes == null || +sp.minutes > 5)) add(SPEED_FIX, speed);
-  if (ahNo) add(afterHoursFix(sp.after_hours.channel), speed);
-  const keep = speed.slice(0, 1);
-  const pick = out.filter((x) => !keep.some((k) => normFix(k) === normFix(x))).slice(0, 3 - keep.length).concat(keep);
-  for (const x of speed.slice(1)) if (pick.length < 3 && !pick.some((y) => normFix(y) === normFix(x))) pick.push(x);
+  // the other speed fix (not the reserved one) only if there is room
+  const extra = [];
+  if (sp && sp.tested === true && (sp.minutes == null || +sp.minutes > 5) && normFix(SPEED_FIX) !== normFix(reserved)) extra.push(SPEED_FIX);
+  if (ahNo && normFix(afterHoursFix(sp.after_hours.channel)) !== normFix(reserved)) extra.push(afterHoursFix(sp.after_hours.channel));
+  const pick = out.slice(0, reserved ? 2 : 3);
+  if (reserved) pick.push(reserved);
   const base = [
+    ...out.slice(reserved ? 2 : 3), ...extra,
     'Put your phone number and a clear "Get a quote" button at the top of every page of your website.',
     SPEED_FIX,
     'Follow up on every quote you send: a short note 2 days later, then again a week later.',
@@ -1113,9 +1133,10 @@ function pickFixes(rec) {
   ];
   for (const b of base) {
     if (pick.length >= 3) break;
-    if (fast && /within 5 minutes/.test(b)) continue;
-    if (!pick.some((y) => normFix(y) === normFix(b))) pick.push(b);
+    if (fast && FU.FIVE_MIN.test(b)) continue;
+    if (!seen(b, pick)) pick.push(b);
   }
+  // the reserved fix keeps its place even when the fill-up above came before it in the list order
   return pick.slice(0, 3);
 }
 
@@ -1173,14 +1194,13 @@ function diagnose(rec) {
   if (!sp) return null;
   if (sp.tested === false) return { kind: 'chosen', line: `Found and chosen. You are number ${r} for "${plain(kw)}". We could not test how fast you answer, so we cannot say more than that.` };
   const ch = own(CHANNEL, sp.channel) || 'request';
-  const ahNo = sp.after_hours && sp.after_hours.tested === true && sp.after_hours.answered === false;
   const ahCh = sp.after_hours ? own(CHANNEL, sp.after_hours.channel) || 'request' : '';
-  // "never followed up" only when there was no answer at all (the main test, or the after-hours test)
-  if (sp.minutes == null) return { kind: 'chosen but never followed up', line: `Chosen but never followed up. You are number ${r} for "${plain(kw)}", but our test ${ch} got no answer in ${+sp.waited_hours || 24} hours.` };
-  const m = +sp.minutes;
-  if (m > 60) return { kind: 'chosen but slow to follow up', line: `Chosen but slow to follow up. You are number ${r} for "${plain(kw)}", but our test ${ch} took ${waitText(m)} to get an answer.` };
-  if (ahNo) return { kind: 'chosen but never followed up', line: `Chosen but never followed up. You are number ${r} for "${plain(kw)}", but our after-hours test ${ahCh} got no answer.` };
-  if (m > 5) return { kind: 'chosen but slow to answer', line: `Found and chosen, but slow to answer. You are number ${r} for "${plain(kw)}", and our test ${ch} took ${waitText(m)} to get an answer.` };
+  const m = sp.minutes == null ? null : +sp.minutes;
+  const found = speedFinding(sp); // the same finding the fix picker keeps a place for
+  if (found && found.kind === 'no answer') return { kind: 'chosen but never followed up', line: `Chosen but never followed up. You are number ${r} for "${plain(kw)}", but our test ${ch} got no answer in ${+sp.waited_hours || 24} hours.` };
+  if (found && found.kind === 'slow follow up') return { kind: 'chosen but slow to follow up', line: `Chosen but slow to follow up. You are number ${r} for "${plain(kw)}", but our test ${ch} took ${waitText(m)} to get an answer.` };
+  if (found && found.kind === 'after hours') return { kind: 'chosen but never followed up', line: `Chosen but never followed up. You are number ${r} for "${plain(kw)}", but our after-hours test ${ahCh} got no answer.` };
+  if (found && found.kind === 'slow answer') return { kind: 'chosen but slow to answer', line: `Found and chosen, but slow to answer. You are number ${r} for "${plain(kw)}", and our test ${ch} took ${waitText(m)} to get an answer.` };
   return { kind: 'chosen', line: `Found and chosen. You are number ${r} for "${plain(kw)}", and you answered our test ${ch} in ${waitText(m)}. The fixes below are about keeping it that way.` };
 }
 const CHANNEL = { call: 'call', text: 'text', email: 'email' };
@@ -1419,8 +1439,10 @@ function renderReport(rec) {
   // 4 booking test
   let b4 = '';
   if (bk && bk.score != null) {
-    const fx = (bk.fixes || []).slice(0, 3).map((x) => `<li>${t(x)}</li>`).join('');
-    b4 = `<p class="score"><b>${t(Math.max(0, Math.min(10, +bk.score)))}</b> out of 10</p>${fx ? `<p>Three fixes:</p><ol class="plainlist">${fx}</ol>` : ''}`;
+    // a shop that already answered our test within 5 minutes is not told to answer within 5 minutes
+    const list = (bk.fixes || []).filter((x) => plain(x) && !(FU.answeredFast(s.speed) && FU.FIVE_MIN.test(x))).slice(0, 3);
+    const fx = list.map((x) => `<li>${t(x)}</li>`).join('');
+    b4 = `<p class="score"><b>${t(Math.max(0, Math.min(10, +bk.score)))}</b> out of 10</p>${fx ? `<p>${['', 'One fix', 'Two fixes', 'Three fixes'][list.length]}:</p><ol class="plainlist">${fx}</ol>` : ''}`;
   } else { b4 = PENDING; pending.push('4 Booking test'); }
   sec('Booking test from a phone', '<p class="sub">We open your website on a phone the way a customer would and score how easy it is to ask for a quote. We never send your form.</p>' + b4);
 
@@ -2003,7 +2025,7 @@ export default {
   _t: { validate, businessClock, federalHolidays, isBusinessDay, local, fromLocal, chicagoText, isLive, deliverToOwner,
     sendAlert, isTestRequest, plain, ownerEmail, mime, sendMail, sendBlock, check, review, trySend, sha, budgetLine, renderReport, submit, build, tick, TRADES, REVENUE,
     fuTick, followup, startFollowups, fuHelpers, gmailThread, allowed, pickFixes,
-    diagnose, knownFor, competitorView, refreshReport, speedEstimate, fillProblem, fill, rerender, SOURCES, FEW_REVIEWS, FILL },
+    diagnose, speedFinding, FIVE_MIN: FU.FIVE_MIN, knownFor, competitorView, refreshReport, speedEstimate, fillProblem, fill, rerender, SOURCES, FEW_REVIEWS, FILL },
 };
 
 const GONE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Report not found | Booked Out Solutions</title><style>body{margin:0;font:18px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#F6F1E7;color:#0A0F26}main{max-width:34rem;margin:0 auto;padding:3rem 1.2rem}</style></head><body><main><h1>This report is not here</h1><p>The link may be old or mistyped. Reply to the email it came in and we will send it again, or write to hello@getbookedoutsolutions.com.</p><p>Booked Out Solutions</p></main></body></html>';

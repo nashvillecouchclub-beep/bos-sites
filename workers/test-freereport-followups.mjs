@@ -248,6 +248,15 @@ await test('Few reviews + slow answer: the three fixes on the sent page are save
   assert.doesNotMatch(texts, /500/, 'never quotes the changed data');
 });
 
+await test('Follow-ups: booking_fix_1 is never a "5 minutes" fix for a shop that answered within 5 minutes', () => {
+  const h = { ...T.fuHelpers(), now: new Date('2026-11-18T17:15:00Z') };
+  const rec = (minutes, fixes) => ({ ...SHOP, token: 'a'.repeat(48), sections: { ...FILLS, booking: { score: 5, fixes }, speed: { tested: true, channel: 'call', when: 'Mon', minutes } } });
+  for (const x of ['Answer every new call in under 5 minutes.', 'Reply within five minutes.', 'Use a 5-minute callback rule.'])
+    assert.equal(FU.values(rec(2, [x, 'Make the quote button bigger.']), h).booking_fix_1, undefined, x);
+  assert.equal(FU.values(rec(40, ['Reply within five minutes.']), h).booking_fix_1, 'Reply within five minutes.', 'a slow answerer still gets it');
+  assert.equal(FU.values(rec(2, ['Make the quote button bigger.']), h).booking_fix_1, 'Make the quote button bigger.');
+});
+
 await test('A bare domain in a filled email is refused (it would turn into a link)', () => {
   assert.deepEqual(FU.bodyProblems('Hi,\nAirPros.com has 4 reviews.\nWant it?', 'https://getbookedoutsolutions.com/r/x/'), ['bare domain']);
   assert.deepEqual(FU.bodyProblems('Hi,\nhttps://getbookedoutsolutions.com/r/x/\nWant it?', 'https://getbookedoutsolutions.com/r/x/'), []);
