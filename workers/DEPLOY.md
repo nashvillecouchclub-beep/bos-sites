@@ -53,7 +53,9 @@ Endpoints for later jobs (all need `k` = STATUS_KEY):
   - ai (now 3 answers): add `"google_ai":{"named":false,"correct":true,"note":""}`. Optional on each engine: `"top":["names it gave", ...]` (up to 5).
     Optional `"screenshots":[{"engine":"chatgpt|gemini|google_ai","url":"https://getbookedoutsolutions.com/....png"}]` (up to 3,
     our own domain only; hosting for these is not built yet, so leave it out until it is). Without google_ai the AI part stays pending.
-  - speed: `{"tested":true,"channel":"call|text|email","when":"Mon Nov 16, 2:10 pm","minutes":42,"after_hours":{"tested":true,"answered":false,"when":"Mon Nov 16, 7:40 pm"}}`
+  - speed: `{"tested":true,"channel":"call|text|email","when":"Mon Nov 16, 2:10 pm","minutes":42,"after_hours":{"tested":true,"answered":false,"when":"Mon Nov 16, 7:40 pm","channel":"call"}}`
+    `tested` must be a real true or false. A tested result for a real (non-TEST) request is refused by the worker (403) unless the
+    plain variable `SPEED_TEST_LIVE` = `on` (default off; turn on only after GO LIVE, once the speed test is OK'd).
     `minutes:null` means no answer and then `waited_hours` is needed. Never `form` (the report says we never send his form).
     `leads_per_month` only with `"leads_source":"owner"` (he told us). Can't test: `{"tested":false,"reason":"..."}`.
     The page shows "What research says about answer speed (outside research, not your numbers)" (HBR 2011 or the 2007 lead response
@@ -81,8 +83,9 @@ Endpoints for later jobs (all need `k` = STATUS_KEY):
     record whose page changes gets a new hash, its marks are cleared and it needs both checks again. The three fixes are saved on the
     record when it is sent (`fu.fixes`) and the follow-ups quote those.
   - The one-line diagnosis at the top is not filled: the worker works it out from google, ai and speed ("Not found", "Found but not
-    chosen", "Chosen but never followed up" (no answer, over an hour, or an unanswered after-hours call), "Found and chosen, but slow
-    to answer" (6 to 60 minutes), or "Found and chosen"). It stays pending ("0 Diagnosis") until the data it needs is in.
+    chosen", "Chosen but never followed up" (no answer, or an unanswered after-hours test), "Found and chosen, but slow
+    to answer" (6 to 60 minutes), "Chosen but slow to follow up" (over 60 minutes), or "Found and chosen"). "Never followed up" is only
+    for no answer (the main test or the after-hours test). It stays pending ("0 Diagnosis") until the data it needs is in.
 
 ## getbookedoutsolutions.com on Cloudflare Pages (Nov 16)
 
@@ -144,7 +147,7 @@ worker. Tests: `node workers/test-freereport-fill.mjs`.
 | competitor | the same task | the public Google listing of the top 3 shop above him (photos, replies, posts, website, hours) | Not built. |
 | listings | the same task | public searches of Google, Yelp, BBB, Facebook, Nextdoor and the local chamber directory | Not built. |
 | spot | the same task | the list of zone locks we have sold (one shop per trade per zone) | Not built, and there is no zone lock list in this repo yet: one is needed before deploy (until a lock is sold, every zone is open). Not used for "Something else". |
-| speed | a separate answer speed job, AFTER GO LIVE only | one test call, text or email to the shop | NOT built on purpose: it contacts a real business. The fill door refuses a real shop's tested speed result unless `--after-go-live` is given. Before GO LIVE the job can only send `{"tested":false,"reason":"..."}`, which shows on the page, so no real report should be checked before this is settled. |
+| speed | a separate answer speed job, AFTER GO LIVE only | one test call, text or email to the shop | NOT built on purpose: it contacts a real business. Two locks: the fill door refuses any real-shop speed data that is not `tested:false` unless `--after-go-live` is given, and the worker itself refuses a real-shop tested result unless `SPEED_TEST_LIVE` = `on`. Before GO LIVE the job can only send `{"tested":false,"reason":"..."}`, which shows on the page, so no real report should be checked before this is settled. |
 
 After the deploy that brings these sections (one time): `POST /api/free-report/rerender {"k":"..."}` renders every open report
 with the new code. Every report built before it goes back to "fill pending sections first" and loses any old check marks. The test

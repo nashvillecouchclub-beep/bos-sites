@@ -73,6 +73,9 @@ await test('The answer speed result for a REAL shop is refused before GO LIVE; a
   assert.deepEqual(r.problems, []);
   r = prepareFills(item, { speed: { tested: false, reason: 'not tested before GO LIVE' } });
   assert.deepEqual(r.problems, [], 'an untested note needs no contact, so it is fine');
+  // no tested key, or tested:"yes", is treated as a real contact and refused too
+  for (const d of [{ channel: 'call', when: 'Mon', minutes: 3 }, { ...DATA.speed, tested: 'yes' }])
+    assert.match(prepareFills(item, { speed: d }).problems[0], /not before GO LIVE/, JSON.stringify(d));
   r = prepareFills({ ...item, test: true }, { speed: DATA.speed });
   assert.deepEqual(r.problems, []);
   r = prepareFills({ ...item, trade: 'Something else' }, { spot: DATA.spot });

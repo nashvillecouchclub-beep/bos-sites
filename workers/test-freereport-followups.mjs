@@ -30,7 +30,7 @@ const FILLS = {
 };
 // The sections added Nov 20 (item 215). A fast answer and a big review count, so the fixes the sequence quotes do not change.
 const NEW = {
-  speed: { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: 3, after_hours: { tested: true, answered: true, when: 'Mon Nov 16, 7:40 pm' } },
+  speed: { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: 3, after_hours: { tested: true, answered: true, when: 'Mon Nov 16, 7:40 pm', channel: 'call' } },
   known_for: { scanned: 5, reviews: ['On time and fair price', 'Showed up on time, fair price', 'On time again, clean work', 'Fair price and clean', 'Clean and on time'].map((text) => ({ text, rating: 5 })) },
   competitor: { name: 'Fake Air One', theirs: { photos: 80 }, yours: { photos: 12 } },
   listings: { sites: { google: { found: true }, yelp: { found: false }, bbb: { found: true }, facebook: { found: true }, nextdoor: { found: false }, chamber: { found: false } } },
@@ -59,7 +59,7 @@ const post = (b) => new Request('https://x/api/free-report', { method: 'POST', b
 // A report sent Tue Nov 17 2026 at 11:00 am Central, through the real flow.
 async function sent(extra = {}, shop = SHOP, fills = FILLS) {
   const f = gfetch();
-  const env = { KV: kv(), STATUS_KEY: KEY, LIVE: 'on', ...GMAIL, ...extra };
+  const env = { KV: kv(), STATUS_KEY: KEY, LIVE: 'on', SPEED_TEST_LIVE: 'on', ...GMAIL, ...extra };
   const j = await (await T.submit(post(shop), env, at('2026-11-17T10:30:00-06:00'))).json();
   await T.tick(env, at('2026-11-17T10:45:00-06:00'), f);
   const all = { ...fills, ai: { google_ai: { named: false }, ...fills.ai }, ...Object.fromEntries(Object.entries(NEW).filter(([k]) => !(k in fills))) };

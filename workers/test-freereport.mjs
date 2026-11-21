@@ -52,7 +52,7 @@ const FIX = {
 };
 // The sections added Nov 20 (item 215, item 211, the Nov 19 diagnosis line). Fake TEST data only.
 const NEW = {
-  speed: { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: null, waited_hours: 48, after_hours: { tested: true, answered: false, when: 'Mon Nov 16, 7:40 pm' } },
+  speed: { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: null, waited_hours: 48, after_hours: { tested: true, answered: false, when: 'Mon Nov 16, 7:40 pm', channel: 'call' } },
   known_for: { scanned: 7, reviews: ['On time and a fair price.', 'Showed up on time, fair price, clean work.', 'Fair price, on time again.', 'They were on time and clean.', 'Clean work and a fair price.', 'Great service'].map((text) => ({ text, rating: 5 }))
     .concat([{ text: 'Late and rude, not on time, not a fair price, not clean.', rating: 1 }]) },
   competitor: { name: 'Fake Air One', theirs: { photos: 80, reply_pct: 90, posts_90d: 6, website: true, hours: true }, yours: { photos: 12, reply_pct: 10, posts_90d: 0, website: true, hours: true } },
@@ -318,7 +318,7 @@ function sendFetch(opts = {}) {
 const GMAIL = { SEND_ROUTE: 'gmail', GMAIL_CLIENT_ID: 'id', GMAIL_CLIENT_SECRET: 'sec', GMAIL_REFRESH_TOKEN: 'ref' };
 // a built, complete report for a non-test shop
 async function ready(extra = {}, shop = REAL) {
-  const env = { KV: kv(), STATUS_KEY: KEY, ...extra };
+  const env = { KV: kv(), STATUS_KEY: KEY, SPEED_TEST_LIVE: 'on', ...extra };
   const j = await (await T.submit(post(shop), env, at('2026-11-17T10:30:00-06:00'))).json();
   await T.tick(env, at('2026-11-17T10:45:00-06:00'), sendFetch());
   for (const [section, data] of Object.entries(FILLS)) await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section, data });
@@ -475,9 +475,15 @@ await test('Diagnosis line: "not found" (no profile / not in first 20), "found b
   assert.equal(r.diagnosis, 'chosen but never followed up');
   assert.match(top(r.html), /Chosen but never followed up\. You are number 2 for &quot;hvac Smyrna&quot;, but our test call got no answer in 48 hours\./);
   r = rr({ google: g2, speed: { tested: true, channel: 'call', when: 'Mon', minutes: 120 } });
-  assert.match(top(r.html), /our test call took about 2 hours to get an answer/);
-  r = rr({ google: g2, speed: { tested: true, channel: 'text', when: 'Mon', minutes: 4, after_hours: { tested: true, answered: false, when: 'Mon 8 pm' } } });
-  assert.match(top(r.html), /but our after-hours test call was not answered/);
+  assert.equal(r.diagnosis, 'chosen but slow to follow up');
+  assert.match(top(r.html), /Chosen but slow to follow up\. You are number 2 for &quot;hvac Smyrna&quot;, but our test call took 120 minutes|our test call took about 2 hours to get an answer/);
+  // under 120 minutes the diagnosis and the speed section use the same words
+  r = rr({ google: g2, speed: { tested: true, channel: 'call', when: 'Mon', minutes: 90 } });
+  assert.match(top(r.html), /Chosen but slow to follow up\. .* our test call took 90 minutes to get an answer\./);
+  assert.match(visible(r.html), /You answered in 90 minutes\./);
+  assert.doesNotMatch(visible(r.html), /never followed up/, 'an answer, even a late one, is not "never followed up"');
+  r = rr({ google: g2, speed: { tested: true, channel: 'text', when: 'Mon', minutes: 4, after_hours: { tested: true, answered: false, when: 'Mon 8 pm', channel: 'call' } } });
+  assert.match(top(r.html), /Chosen but never followed up\. You are number 2 for &quot;hvac Smyrna&quot;, but our after-hours test call got no answer\./);
   r = rr({ google: g2, speed: { tested: true, channel: 'call', when: 'Mon', minutes: 4 } });
   assert.equal(r.diagnosis, 'chosen'); assert.match(top(r.html), /Found and chosen\. You are number 2 .* in 4 minutes/);
   r = rr({ google: g2, speed: { tested: true, channel: 'call', when: 'Mon', minutes: 30 } });
@@ -522,12 +528,12 @@ await test('Answer speed: booking-rate estimate is labeled, sourced, and picked 
 await test('After-hours estimate: labeled, sourced, HVAC only; a count only when the owner told us his calls', () => {
   let txt = visible(rr({ speed: NEW.speed }).html).replace(/\s+/g, ' ');
   assert.match(txt, /After-hours calls \(estimate\): In 2025, about 9\.8 to 14\.1 of every 100 calls to home heating and air shops came outside business hours/);
-  assert.match(txt, /Our after-hours call was not answered, so some of those calls may be going unanswered now\./);
+  assert.match(txt, /Our after-hours test call got no answer, so some of those calls may be going unanswered now\./);
   assert.match(txt, /ServiceTitan, .*June 3 2026.*not nationally representative/);
   assert.doesNotMatch(txt, /calls a month after hours/);
   assert.doesNotMatch(txt, /Missed/);
   for (const answered of [true, undefined]) {
-    const t2 = visible(rr({ speed: { ...NEW.speed, after_hours: answered === undefined ? undefined : { tested: true, answered, when: 'Mon 8 pm' } } }).html);
+    const t2 = visible(rr({ speed: { ...NEW.speed, after_hours: answered === undefined ? undefined : { tested: true, answered, when: 'Mon 8 pm', channel: 'call' } } }).html);
     assert.doesNotMatch(t2, /may be going unanswered/, 'only when the after-hours call was not answered');
   }
   txt = visible(rr({ speed: { ...NEW.speed, leads_per_month: 200, leads_source: 'owner' } }).html).replace(/\s+/g, ' ');
@@ -552,10 +558,15 @@ await test('What you are known for: words repeated across his reviews, counted o
   assert.match(txt, /That is what your happy customers already say you are known for/);
   assert.doesNotMatch(txt, /"late"|"rude"/, 'the 1 star review is never counted');
   // complaint words and turned-around words never surface, even in good reviews
-  const mixed = ['Not happy at first but fixed it, on time', 'Never late, on time', 'Was not rude at all, on time and friendly', 'Friendly and on time', 'Friendly crew', 'Late once but friendly'];
+  const mixed = ['Not happy at first but fixed it, on time', 'Never late, on time', 'Was not rude at all, on time and friendly', 'Friendly and on time', 'Friendly crew', 'Late once but friendly', 'On time, friendly'];
   const k2 = T.knownFor(mixed).map((x) => x.word);
   assert.ok(k2.includes('on time') && k2.includes('friendly'), k2.join());
   for (const bad of ['happy', 'late', 'rude', 'not', 'never']) assert.ok(!k2.some((w) => w.split(' ').includes(bad)), bad + ' in ' + k2.join());
+  // "the price was high": the whole complaint sentence is dropped, so "price" never shows as a good word
+  const priced = ['The price was high but they were on time', 'Price was high. On time though', 'Costly, but on time', 'They charged me twice for the price of the part', 'On time and fair price', 'Clean and on time'];
+  const k3 = T.knownFor(priced).map((x) => x.word);
+  assert.ok(k3.includes('on time'), k3.join());
+  assert.ok(!k3.some((w) => /price|high|charged|twice|costly/.test(w)), k3.join());
   // few words: points to the review fix only when the review fix is really in the three fixes
   const fewG = { ...G7, review_count: 8, top3: [] };
   const few = visible(rr({ google: fewG, known_for: { scanned: 8, reviews: [{ text: 'Good', rating: 5 }, { text: 'Fine job', rating: 4 }, { text: 'Bad', rating: 2 }] } }).html).replace(/\s+/g, ' ');
@@ -686,7 +697,7 @@ await test('Full report with every new section: complete, the gentle growth line
 
 await test('Pending new sections stop the checkers: a report missing any one of them cannot pass', async () => {
   for (const missing of ['speed', 'known_for', 'competitor', 'listings', 'spot']) {
-    const env = { KV: kv(), STATUS_KEY: KEY };
+    const env = { KV: kv(), STATUS_KEY: KEY, SPEED_TEST_LIVE: 'on' };
     const j = await (await T.submit(post(REAL), env, at('2026-11-17T10:30:00-06:00'))).json();
     await T.tick(env, at('2026-11-17T10:45:00-06:00'), sendFetch());
     for (const [section, data] of Object.entries(FILLS)) if (section !== missing) await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section, data });
@@ -708,7 +719,7 @@ await test('Old-shape record (built by older code, stale complete + hash): check
   const OLD = { google: FILLS.google, reviews: FILLS.reviews, ai: { question: 'Q?', chatgpt: { named: false }, gemini: { named: true } }, booking: FILLS.booking, category: FILLS.category };
   const make = async (status, checks) => {
     const f = sendFetch();
-    const env = { KV: kv(), STATUS_KEY: KEY, ...GMAIL, LIVE: 'on', _f: f };
+    const env = { KV: kv(), STATUS_KEY: KEY, SPEED_TEST_LIVE: 'on', ...GMAIL, LIVE: 'on', _f: f };
     const j = await (await T.submit(post(REAL), env, at('2026-11-17T10:30:00-06:00'))).json();
     const r = JSON.parse(env.KV.m.get('req:' + j.id));
     Object.assign(r, { status, sections: OLD, complete: true, pending: [], hash: 'f'.repeat(32), checks: checks || {} });
@@ -738,6 +749,83 @@ await test('Old-shape record (built by older code, stale complete + hash): check
   assert.equal((await (await mark(b.env, b.id, 2, 'checker-b', 'pass', h)).json()).sent, true);
 });
 
+await test('Three fixes always show three: fast, slow, no answer, after-hours unanswered, not tested; after-hours gets its own fix', () => {
+  const strong = { google: { ...G7, review_count: 400, rank_for_keyword: 1 }, reviews: { ...FIX.reviews, owner_reply_on_newest: true }, category: { main_category: 'HVAC contractor', match: true } };
+  const cases = [
+    { tested: true, channel: 'call', when: 'Mon', minutes: 2 },
+    { tested: true, channel: 'call', when: 'Mon', minutes: 2, after_hours: { tested: true, answered: true, when: 'Mon 8 pm', channel: 'text' } },
+    { tested: true, channel: 'call', when: 'Mon', minutes: 2, after_hours: { tested: true, answered: false, when: 'Mon 8 pm', channel: 'call' } },
+    { tested: true, channel: 'call', when: 'Mon', minutes: 30 },
+    { tested: true, channel: 'call', when: 'Mon', minutes: null, waited_hours: 48 },
+    { tested: false, reason: 'no phone listed' }, undefined];
+  for (const sp of cases) for (const sec of [strong, {}, { google: { has_google_profile: false } }]) {
+    const fx = T.pickFixes({ ...base, sections: { ...sec, ...(sp ? { speed: sp } : {}) } });
+    assert.equal(fx.length, 3, JSON.stringify(sp) + ' -> ' + fx.join(' | '));
+    assert.equal(new Set(fx).size, 3, 'no fix twice');
+    const ahNo = sp && sp.after_hours && sp.after_hours.answered === false;
+    assert.equal(fx.some((x) => /after-hours call reaches a person/.test(x)), !!ahNo, 'after-hours fix exactly when that call got no answer: ' + fx.join(' | '));
+    if (sp && sp.minutes != null && sp.minutes <= 5) assert.ok(!fx.some((x) => /within 5 minutes/.test(x)), fx.join(' | '));
+  }
+});
+
+await test('Speed gate: tested must be a real true/false; a real shop tested result is refused by the worker unless SPEED_TEST_LIVE is on', async () => {
+  const sp = { channel: 'call', when: 'Mon', minutes: 3 };
+  assert.match(T.fillProblem({ sections: {} }, 'speed', sp), /tested must be true or false/, 'no tested key');
+  assert.match(T.fillProblem({ sections: {} }, 'speed', { ...sp, tested: 'yes' }), /tested must be true or false/);
+  assert.match(T.fillProblem({ sections: {} }, 'speed', { ...sp, tested: true, channel: 'constructor' }), /channel/, 'no inherited keys as channels');
+  assert.match(T.fillProblem({ sections: {} }, 'speed', { ...sp, tested: true, after_hours: { tested: true, answered: false, when: 'Mon 8 pm' } }), /after_hours needs .*channel/);
+  for (const [flag, want] of [[undefined, 403], ['off', 403], ['on', 200]]) {
+    const env = { KV: kv(), STATUS_KEY: KEY, ...(flag ? { SPEED_TEST_LIVE: flag } : {}) };
+    const j = await (await T.submit(post(REAL), env, at('2026-11-17T10:30:00-06:00'))).json();
+    await T.tick(env, at('2026-11-17T10:45:00-06:00'), sendFetch());
+    const r = await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section: 'speed', data: { ...sp, tested: true } });
+    assert.equal(r.status, want, String(flag));
+    if (want === 403) assert.equal(JSON.parse(env.KV.m.get('req:' + j.id)).sections.speed, undefined);
+    // an explicit "not tested" note never contacts anyone, so it is always allowed
+    assert.equal((await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section: 'speed', data: { tested: false, reason: 'not before GO LIVE' } })).status, 200);
+  }
+  // fake TEST shops are fine without the flag (tests only)
+  const env = { KV: kv(), STATUS_KEY: KEY };
+  const j = await (await T.submit(post(SHOP), env, at('2026-11-17T10:30:00-06:00'))).json();
+  await T.tick(env, at('2026-11-17T10:45:00-06:00'), sendFetch());
+  assert.equal((await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section: 'speed', data: { ...sp, tested: true } })).status, 200);
+});
+
+await test('After-hours line uses the real channel; inherited names never pass as channels or engines', () => {
+  let txt = visible(rr({ speed: { ...NEW.speed, after_hours: { tested: true, answered: true, when: 'Mon 8 pm', channel: 'text' } } }).html).replace(/\s+/g, ' ');
+  assert.match(txt, /We also sent one test text after hours on Mon 8 pm\. We got an answer\./);
+  assert.doesNotMatch(txt, /We also called/);
+  txt = visible(rr({ speed: { ...NEW.speed, after_hours: { tested: true, answered: false, when: 'Mon 8 pm', channel: 'email' } } }).html).replace(/\s+/g, ' ');
+  assert.match(txt, /We also sent one test email after hours on Mon 8 pm\. We got no answer\./);
+  assert.match(txt, /Our after-hours test email got no answer/);
+  assert.match(T.fillProblem({ sections: {} }, 'ai', { chatgpt: { named: true }, gemini: { named: true }, google_ai: { named: true }, screenshots: [{ engine: 'constructor', url: 'https://getbookedoutsolutions.com/a.png' }] }), /screenshots/);
+});
+
+await test('trySend backstop: a report that is not complete is never sent, even with status checked and two marks', async () => {
+  const f = sendFetch();
+  const rec = { id: 'fr-20261117-abc123', status: 'checked', complete: false, pending: ['6 Answer speed'], test: false, email: 'owner@fakeshop-test.com', token: 'a'.repeat(48),
+    checks: { 1: { agent: 'a', result: 'pass', hash: 'h' }, 2: { agent: 'b', result: 'pass', hash: 'h' } }, hash: 'h' };
+  const r = await T.trySend({ KV: kv(), LIVE: 'on', ...GMAIL }, rec, new Date(), f);
+  assert.equal(r.changed, false); assert.equal(f.calls.length, 0); assert.equal(rec.status, 'checked');
+});
+
+await test('Re-render pages through every open record (KV list cursor)', async () => {
+  const env = { KV: kv(), STATUS_KEY: KEY };
+  const ids = [];
+  for (let i = 0; i < 5; i++) {
+    const j = await (await T.submit(post({ ...SHOP, email: `test${i}@example.com` }), env, at('2026-11-17T10:30:00-06:00'))).json();
+    ids.push(j.id);
+  }
+  await T.tick(env, at('2026-11-17T10:45:00-06:00'), sendFetch());
+  for (const id of ids) { const r = JSON.parse(env.KV.m.get('req:' + id)); r.hash = 'e'.repeat(32); env.KV.m.set('req:' + id, JSON.stringify(r)); }
+  // a KV that hands out 2 keys per page
+  const list = env.KV.list.bind(env.KV);
+  env.KV.list = async ({ prefix, cursor }) => { const all = (await list({ prefix })).keys; const at0 = +(cursor || 0); const keys = all.slice(at0, at0 + 2);
+    return at0 + 2 < all.length ? { keys, list_complete: false, cursor: String(at0 + 2) } : { keys, list_complete: true }; };
+  const j = await (await call(env, '/api/free-report/rerender', { k: KEY })).json();
+  assert.equal(j.checked, 5); assert.equal(j.changed, 5);
+});
+
 await test('E2E mirror of fr-20261120-vbukvz: fill all, checker 1 + checker 2 pass; LIVE off sends nothing; LIVE on sends once; TEST never', async () => {
   // the exact fake data used on the live worker Nov 20 (plus the new sections)
   const E2E = { google: { has_google_profile: true, rating: 4.3, review_count: 27, rank_for_keyword: 9, keyword: 'hvac Smyrna',
@@ -749,7 +837,7 @@ await test('E2E mirror of fr-20261120-vbukvz: fill all, checker 1 + checker 2 pa
     ...NEW, competitor: { name: 'Fake Air One (TEST)', theirs: { photos: 80 }, yours: { photos: 12 } } };
   for (const [shop, live, want] of [[{ ...SHOP, business_name: 'E2E Heating (FAKE)', email: 'e2e-nov20@example.com' }, 'on', 0], [REAL, 'off', 0], [REAL, 'on', 2]]) {
     const f = sendFetch();
-    const env = { KV: kv(), STATUS_KEY: KEY, ...GMAIL, LIVE: live, _f: f };
+    const env = { KV: kv(), STATUS_KEY: KEY, SPEED_TEST_LIVE: 'on', ...GMAIL, LIVE: live, _f: f };
     const j = await (await T.submit(post(shop), env, at('2026-11-20T14:38:00-06:00'))).json();
     await T.tick(env, at('2026-11-20T14:45:00-06:00'), f);
     for (const [section, data] of Object.entries(E2E)) assert.equal((await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section, data })).status, 200, section);

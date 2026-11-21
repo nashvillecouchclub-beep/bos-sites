@@ -40,6 +40,8 @@
 //   LOOKUP_URL, LOOKUP_KEY   optional; the lookup worker. Without them the Google parts say "pending check".
 //   STATUS_KEY               needed for status, review, check, mark-sent and fill.
 //   LIVE                     "off" by default. While off, nothing is ever sent to a business owner.
+//   SPEED_TEST_LIVE          "off" by default. While off, a tested answer speed result for a real shop is refused (403):
+//                            that test contacts a real business, so it waits until after GO LIVE.
 //   SEND_ROUTE               "gmail" (picked, Nov 16 night), "cloudflare" or "resend" (the backups). See sendMail().
 //   SEND_FROM                default "Rickey Hallor <rickey@getbookedoutsolutions.com>"
 //   GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN   for "gmail" (Gmail API on our own Workspace mailbox)
@@ -175,6 +177,7 @@ function chicagoText(date) {
 // ---------- the LIVE guard and the send to the owner ----------
 // Before GO LIVE (LIVE is not "on") the worker never emails or texts a business owner.
 function fuOn(env) { return String((env && env.FOLLOWUPS) || 'off').trim().toLowerCase() === 'on'; }
+function speedLive(env) { return String((env && env.SPEED_TEST_LIVE) || 'off').trim().toLowerCase() === 'on'; }
 function isLive(env) { return String((env && env.LIVE) || 'off').trim().toLowerCase() === 'on'; }
 
 const GMAIL_TOKEN = 'https://oauth2.googleapis.com/token';
@@ -376,6 +379,7 @@ function budgetLine(revenue) {
   return `Shops your size spend 6 to 8% of revenue to grow; for you that's ${x}. Core is $997.`;
 }
 
+const AFTER_HOURS_FIX = 'Make sure every after-hours call reaches a person or gets a call back first thing the next morning.';
 function pickFixes(rec) {
   const s = rec.sections || {}, g = s.google, rv = s.reviews, bk = s.booking, ct = s.category, ai = s.ai, out = [];
   if (g && !g.has_google_profile) out.push('Set up your free Google Business Profile with your real address or service area, hours and phone number. Without it, you do not show on the Google map.');
@@ -390,11 +394,14 @@ function pickFixes(rec) {
   if (ct && ct.match === false) out.push(`Change your Google main category to the one that fits ${plain(ct.big_job || 'the big-ticket job you want most')}, so Google shows you for that work.`);
   if (bk && Array.isArray(bk.fixes) && bk.fixes[0]) out.push(plain(bk.fixes[0]));
   if (slowAnswer(s.speed) && out.length < 3) out.push('Call or text back every new lead within 5 minutes, even after hours.');
+  const ahNo = s.speed && s.speed.tested === true && s.speed.after_hours && s.speed.after_hours.tested === true && s.speed.after_hours.answered === false;
+  if (ahNo && out.length < 3) out.push(AFTER_HOURS_FIX);
   if (ai && ai.chatgpt && ai.chatgpt.named === false) out.push('Put your town, your main services and your best reviews in plain words on your website, so ChatGPT and Gemini have something to say about you.');
   const base = [
     'Put your phone number and a clear "Get a quote" button at the top of every page of your website.',
     'Call or text back every new lead within 5 minutes, even after hours.',
     'Follow up on every quote you send: a short note 2 days later, then again a week later.',
+    'Keep your hours, phone number and service area the same on your website and your Google profile, so no customer calls a wrong number.',
   ];
   const fast = s.speed && s.speed.tested !== false && s.speed.minutes != null && +s.speed.minutes <= 5;
   for (const b of base) if (out.length < 3 && !out.includes(b) && !(fast && /within 5 minutes/.test(b))) out.push(b);
@@ -417,7 +424,7 @@ const AFTER_HOURS = { hvac: { low: 9.8, high: 14.1, src: 'st', who: 'home heatin
 // True only when the three fixes on the page really include the Google review fix.
 function reviewFixIn(rec) { return pickFixes(rec).some((x) => /^Ask every happy customer for a Google review/.test(x)); }
 function slowAnswer(sp) { return !!(sp && sp.tested !== false && (sp.minutes == null || +sp.minutes > 5)); }
-// Answer speed -> the booking-rate estimate (from outside research, never from his own numbers).
+// Answer speed -> what outside research says about it (never his own numbers, never a booking rate).
 function speedEstimate(sp) {
   if (!sp || sp.tested === false) return null;
   const m = sp.minutes == null ? null : +sp.minutes;
@@ -453,16 +460,24 @@ function diagnose(rec) {
   if (r > 3) return { kind: 'found but not chosen', line: `Found but not chosen. You show at number ${r} for "${plain(kw)}", below the top 3${avg != null && g.review_count != null && avg > g.review_count ? `, and they average ${avg} reviews to your ${g.review_count}` : ''}.` };
   if (!sp) return null;
   if (sp.tested === false) return { kind: 'chosen', line: `Found and chosen. You are number ${r} for "${plain(kw)}". We could not test how fast you answer, so we cannot say more than that.` };
-  const ah = sp.after_hours && sp.after_hours.tested && sp.after_hours.answered === false;
-  if (sp.minutes == null || +sp.minutes > 60 || ah) {
-    const why = sp.minutes == null ? `our test ${CHANNEL[sp.channel] || 'request'} got no answer in ${+sp.waited_hours || 24} hours` : +sp.minutes > 60 ? `our test ${CHANNEL[sp.channel] || 'request'} took ${+sp.minutes >= 1440 ? 'a day or more' : `about ${Math.round(+sp.minutes / 60)} ${Math.round(+sp.minutes / 60) === 1 ? 'hour' : 'hours'}`} to get an answer` : 'our after-hours test call was not answered';
-    return { kind: 'chosen but never followed up', line: `Chosen but never followed up. You are number ${r} for "${plain(kw)}", but ${why}.` };
-  }
-  if (+sp.minutes > 5) return { kind: 'chosen but slow to answer', line: `Found and chosen, but slow to answer. You are number ${r} for "${plain(kw)}", and our test ${CHANNEL[sp.channel] || 'request'} took ${+sp.minutes} minutes to get an answer.` };
-  return { kind: 'chosen', line: `Found and chosen. You are number ${r} for "${plain(kw)}", and you answered our test ${CHANNEL[sp.channel] || 'request'} in ${+sp.minutes} ${+sp.minutes === 1 ? 'minute' : 'minutes'}. The fixes below are about keeping it that way.` };
+  const ch = own(CHANNEL, sp.channel) || 'request';
+  const ahNo = sp.after_hours && sp.after_hours.tested === true && sp.after_hours.answered === false;
+  const ahCh = sp.after_hours ? own(CHANNEL, sp.after_hours.channel) || 'request' : '';
+  // "never followed up" only when there was no answer at all (the main test, or the after-hours test)
+  if (sp.minutes == null) return { kind: 'chosen but never followed up', line: `Chosen but never followed up. You are number ${r} for "${plain(kw)}", but our test ${ch} got no answer in ${+sp.waited_hours || 24} hours.` };
+  const m = +sp.minutes;
+  if (m > 60) return { kind: 'chosen but slow to follow up', line: `Chosen but slow to follow up. You are number ${r} for "${plain(kw)}", but our test ${ch} took ${waitText(m)} to get an answer.` };
+  if (ahNo) return { kind: 'chosen but never followed up', line: `Chosen but never followed up. You are number ${r} for "${plain(kw)}", but our after-hours test ${ahCh} got no answer.` };
+  if (m > 5) return { kind: 'chosen but slow to answer', line: `Found and chosen, but slow to answer. You are number ${r} for "${plain(kw)}", and our test ${ch} took ${waitText(m)} to get an answer.` };
+  return { kind: 'chosen', line: `Found and chosen. You are number ${r} for "${plain(kw)}", and you answered our test ${ch} in ${waitText(m)}. The fixes below are about keeping it that way.` };
 }
 const CHANNEL = { call: 'call', text: 'text', email: 'email' };
+// Own keys only, so a name like "constructor" or "__proto__" is never taken for a channel or an engine.
+const own = (o, k) => (typeof k === 'string' && Object.hasOwn(o, k) ? o[k] : undefined);
+// How long an answer took, in the same words everywhere on the page (speed section and diagnosis line).
+function waitText(m) { return m < 120 ? `${m} ${m === 1 ? 'minute' : 'minutes'}` : m < 1440 ? `about ${Math.round(m / 60)} hours` : 'a day or more'; }
 const TESTED = { call: 'We made one test call to your business', text: 'We sent one test text to your business', email: 'We sent one test email to your business' };
+const AH_TESTED = { call: 'We also made one test call after hours', text: 'We also sent one test text after hours', email: 'We also sent one test email after hours' };
 const AI_NAME = { chatgpt: 'ChatGPT', gemini: 'Gemini', google_ai: 'Google AI answer' };
 // Word for word from sites/getbookedoutsolutions.com/terms.html (and the trade terms pages). Do not reword.
 const TERMS_GUARANTEE = 'We guarantee our part of every piece: the writing, the sending, the posting, the submitting. Not the printer, the mail, Google or your customers. We never promise jobs, revenue or a spot on Google. If we miss any piece of your package, your next month is free.';
@@ -476,11 +491,15 @@ const STOP = new Set(('a an and are as at be been but by can did do for from had
 const NEGATE = new Set('not no never nor without hardly barely wasnt wasn\'t didnt didn\'t isnt isn\'t wont won\'t dont don\'t couldnt couldn\'t wouldnt wouldn\'t cant can\'t arent aren\'t werent weren\'t'.split(' '));
 const NEGATIVE = new Set(('late rude slow expensive overpriced pricey dirty mess messy bad worst terrible awful horrible poor unprofessional rip scam ' +
   'waited waiting wait cancel cancelled canceled broke broken problem problems issue issues complaint complain disappointed disappointing ' +
-  'ignored unhappy angry careless lazy damage damaged leak leaking leaked wrong mistake refund lied liar rushed sloppy unreliable noshow').split(' '));
+  'ignored unhappy angry careless lazy damage damaged leak leaking leaked wrong mistake refund lied liar rushed sloppy unreliable noshow ' +
+  'high pricey costly expensive charged overcharged overcharge twice behind delay delayed delays waited hour hours forever finally ' +
+  'unanswered voicemail ghosted missed miss dirty mud stain stained scratch scratched hidden fee fees upsell upsold pushy').split(' '));
 function knownFor(texts, extraStop = []) {
   const stop = new Set([...STOP, ...extraStop]);
   const df = new Map();
-  for (const raw of texts) {
+  for (const raw0 of texts) {
+    // drop every sentence (or clause after "but") that has a complaint word in it: "The price was high but they were on time"
+    const raw = plain(raw0).split(/[.!?;\n]+|\bbut\b|\bhowever\b|\bthough\b/i).filter((part) => !part.toLowerCase().replace(/\u2019/g, "'").replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).some((w) => NEGATIVE.has(w.replace(/'s$/, '')))).join('. ');
     const words = plain(raw).toLowerCase().replace(/\u2019/g, "'").replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).map((w) => w.replace(/^'+|'+$/g, '').replace(/'s$/, '')).filter(Boolean);
     // a word is "turned around" when one of the 3 words before it negates it
     const neg = words.map((_, i) => words.slice(Math.max(0, i - 3), i).some((x) => NEGATE.has(x)));
@@ -578,12 +597,13 @@ function fillProblem(rec, section, d) {
       return 'screenshots: up to 3 of {engine: chatgpt|gemini|google_ai, url: https://getbookedoutsolutions.com/....png}';
   }
   if (section === 'speed') {
+    if (typeof d.tested !== 'boolean') return 'speed.tested must be true or false';
     if (d.tested === false) return str(d.reason, 300) ? '' : 'speed with tested:false needs a reason';
-    if (!CHANNEL[d.channel]) return 'speed.channel must be call, text or email (we never send a form)';
+    if (!own(CHANNEL, d.channel)) return 'speed.channel must be call, text or email (we never send a form)';
     if (!str(d.when, 80)) return 'speed.when (when we tested, in words) is needed';
     if (d.minutes !== null && !num(d.minutes, 0, 100000)) return 'speed.minutes must be a number, or null for no answer';
     if (d.minutes === null && !num(d.waited_hours, 1, 1000)) return 'speed.waited_hours is needed when there was no answer';
-    if (d.after_hours != null && (typeof d.after_hours !== 'object' || !bool(d.after_hours.tested) || (d.after_hours.tested && (!bool(d.after_hours.answered) || !str(d.after_hours.when, 80))))) return 'speed.after_hours needs {tested, answered, when}';
+    if (d.after_hours != null && (typeof d.after_hours !== 'object' || !bool(d.after_hours.tested) || (d.after_hours.tested && (!bool(d.after_hours.answered) || !str(d.after_hours.when, 80) || !own(CHANNEL, d.after_hours.channel))))) return 'speed.after_hours needs {tested, answered, when, channel: call|text|email}';
     if (d.leads_per_month != null && (!num(d.leads_per_month, 1, 100000) || d.leads_source !== 'owner')) return 'speed.leads_per_month is only allowed when the owner told us (leads_source: "owner")';
   }
   if (section === 'known_for') {
@@ -680,7 +700,7 @@ function renderReport(rec) {
     b3 = (ai.question ? `<p>We asked each one: "${t(ai.question)}"</p>` : '') + `<ul class="plainlist">${line('ChatGPT', ai.chatgpt)}${line('Gemini', ai.gemini)}${ai.google_ai ? line('Google AI answer', ai.google_ai) : ''}</ul>`;
     if (!ai.google_ai) { b3 += PENDING; pending.push('3 Google AI answer'); }
     const shots = Array.isArray(ai.screenshots) ? ai.screenshots.filter((x) => x && shotOk(x.url)).slice(0, 3) : [];
-    if (shots.length) b3 += '<h3>What they said (screenshots)</h3><div class="shots">' + shots.map((x) => `<figure><img src="${esc(x.url)}" alt="${esc(AI_NAME[x.engine] || 'AI')} answer" loading="lazy"><figcaption>${esc(AI_NAME[x.engine] || '')}</figcaption></figure>`).join('') + '</div>';
+    if (shots.length) b3 += '<h3>What they said (screenshots)</h3><div class="shots">' + shots.map((x) => `<figure><img src="${esc(x.url)}" alt="${esc(own(AI_NAME, x.engine) || 'AI')} answer" loading="lazy"><figcaption>${esc(own(AI_NAME, x.engine) || '')}</figcaption></figure>`).join('') + '</div>';
   } else { b3 = PENDING; pending.push('3 ChatGPT and Gemini test'); }
   sec(`Who ChatGPT, Gemini and Google say is best in ${townState(rec.town).town}`, '<p class="sub">More people now ask ChatGPT, Gemini or Google\'s AI answer who to call. We ask each one the question your best customer would ask, and check if you come up.</p>' + b3);
 
@@ -701,25 +721,24 @@ function renderReport(rec) {
   } else { b5 = PENDING; pending.push('5 Main category'); }
   sec('Your Google main category and the big job you want', b5);
 
-  // 6 answer speed: the booking-rate estimate and the after-hours estimate
+  // 6 answer speed: what research says about answer speed, and the after-hours estimate
   let b6 = '';
   const sp = s.speed;
   if (sp && sp.tested === false) b6 = `<p>We did not run this test for you: ${t(sp.reason)}</p>`;
   else if (sp) {
     const m = sp.minutes == null ? null : +sp.minutes;
-    b6 = `<p>${TESTED[sp.channel]} on ${t(sp.when)}. `
+    b6 = `<p>${own(TESTED, sp.channel)} on ${t(sp.when)}. `
       + (m == null ? `We waited ${t(+sp.waited_hours)} hours and got no answer.</p>`
-        : m < 120 ? `You answered in ${t(m)} ${m === 1 ? 'minute' : 'minutes'}.</p>`
-          : m < 1440 ? `You answered in about ${Math.round(m / 60)} hours.</p>` : `The answer took a day or more.</p>`);
+        : m < 1440 ? `You answered in ${waitText(m)}.</p>` : `The answer took a day or more.</p>`);
     const e = speedEstimate(sp);
     if (e) b6 += `<p class="est"><b>What research says about answer speed (outside research, not your numbers):</b> ${esc(e.text)}</p><p class="src">Source: ${esc(SOURCES[e.src])}.</p>`;
     const ah = sp.after_hours;
-    if (ah && ah.tested) b6 += `<p>We also called after hours, on ${t(ah.when)}. ${ah.answered ? 'A person answered.' : 'Nobody answered.'}</p>`;
+    if (ah && ah.tested) b6 += `<p>${own(AH_TESTED, ah.channel)} on ${t(ah.when)}. ${ah.answered ? 'We got an answer.' : 'We got no answer.'}</p>`;
     const share = AFTER_HOURS[trade.slug];
     if (share) {
       let x = `In 2025, about ${pct(share.low)} to ${pct(share.high)} of every 100 calls to ${share.who} came outside business hours, depending on the month.`;
       if (sp.leads_per_month) x += ` You told us you get about ${t(+sp.leads_per_month)} calls a month, so that is roughly ${Math.round(+sp.leads_per_month * share.low / 100)} to ${Math.round(+sp.leads_per_month * share.high / 100)} calls a month after hours.`;
-      if (ah && ah.tested && ah.answered === false) x += ' Our after-hours call was not answered, so some of those calls may be going unanswered now.';
+      if (ah && ah.tested && ah.answered === false) x += ` Our after-hours test ${own(CHANNEL, ah.channel)} got no answer, so some of those calls may be going unanswered now.`;
       b6 += `<p class="est"><b>After-hours calls (estimate):</b> ${esc(x)}</p><p class="src">Source: ${esc(SOURCES[share.src])}.</p>`;
     } else b6 += '<p class="sub">We do not have a trusted outside number for after-hours calls in your trade, so we give no after-hours estimate.</p>';
   } else { b6 = PENDING; pending.push('6 Answer speed'); }
@@ -965,6 +984,7 @@ async function tick(env, now = new Date(), f) {
 // Sends a report that has two pass marks. Blocked sends (LIVE off) are only noted, once; real failures go on the
 // watch list so the agents fix them. Returns {changed, log}.
 async function trySend(env, rec, now, f) {
+  if (!rec.complete || (rec.pending || []).length) return { changed: false, log: '' }; // backstop: never send an incomplete report
   const r = await deliverToOwner(env, rec, f);
   if (r.sent) {
     rec.status = 'sent'; rec.sent = now.toISOString(); rec.sent_by = 'auto'; rec.send_route = r.route; rec.send_id = r.id || '';
@@ -1173,6 +1193,9 @@ async function fill(req, env) {
   if (!rec) return json({ ok: false, error: 'not found' }, 404);
   const why = fillProblem(rec, b.section, b.data);
   if (why) return json({ ok: false, error: 'bad fill: ' + why }, 400);
+  // A tested answer speed result means someone contacted a real business. Refused for real requests until SPEED_TEST_LIVE is on.
+  if (b.section === 'speed' && b.data.tested !== false && !rec.test && !speedLive(env))
+    return json({ ok: false, error: 'speed test results for a real shop are refused until SPEED_TEST_LIVE is on (after GO LIVE)' }, 403);
   rec.sections[b.section] = b.data;
   const r = await saveReport(env, rec);
   await putJ(env, 'req:' + rec.id, rec, KEEP);
@@ -1185,7 +1208,14 @@ async function rerender(req, env) {
   let b; try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
   if (!keyOk(env, b && b.k)) return json({ ok: false, error: 'no' }, 403);
   const out = { ok: true, checked: 0, changed: 0, marks_cleared: 0, items: [] };
-  for (const k of (await env.KV.list({ prefix: 'open:' })).keys) {
+  let keys = [], cursor;
+  for (let i = 0; i < 50; i++) {
+    const page = await env.KV.list({ prefix: 'open:', cursor });
+    keys = keys.concat(page.keys || []);
+    if (page.list_complete !== false || !page.cursor) break;
+    cursor = page.cursor;
+  }
+  for (const k of keys) {
     const rec = await getJ(env, 'req:' + k.name.slice(5));
     if (!rec || rec.status === 'sent' || rec.status === 'new') continue;
     out.checked++;

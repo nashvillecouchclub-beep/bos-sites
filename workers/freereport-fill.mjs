@@ -25,7 +25,8 @@ export function prepareFills(item, data, opts = {}) {
     const d = data[section];
     if (!d || typeof d !== 'object') { problems.push(`${section}: data must be an object`); continue; }
     if (section === 'spot' && item.trade === 'Something else') { problems.push('spot: not used for "Something else" (no zone locks for that trade)'); continue; }
-    if (section === 'speed' && d.tested === true && !item.test && !opts.afterGoLive)
+    // anything but an explicit tested:false is treated as a real contact (the worker also refuses it unless SPEED_TEST_LIVE is on)
+    if (section === 'speed' && d.tested !== false && !item.test && !opts.afterGoLive)
       { problems.push('speed: a tested result for a real shop means we contacted it; not before GO LIVE (use --after-go-live once live)'); continue; }
     const why = T.fillProblem(rec, section, d);
     if (why) { problems.push(`${section}: ${why}`); continue; }
