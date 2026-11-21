@@ -28,6 +28,14 @@ const FILLS = {
   booking: { score: 6, fixes: ['Put your phone number as a tap-to-call button at the top of the home page.', 'Make the quote button bigger.'] },
   category: { main_category: 'HVAC contractor', big_job: 'new systems', match: true },
 };
+// The sections added Nov 20 (item 215). A fast answer and a big review count, so the fixes the sequence quotes do not change.
+const NEW = {
+  speed: { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: 3, after_hours: { tested: true, answered: true, when: 'Mon Nov 16, 7:40 pm' } },
+  known_for: { texts: ['On time and fair price', 'Showed up on time, fair price', 'On time again, clean work', 'Fair price and clean', 'Clean and on time'] },
+  competitor: { name: 'Fake Air One', theirs: { photos: 80 }, yours: { photos: 12 } },
+  listings: { sites: { google: { found: true }, yelp: { found: false }, bbb: { found: true }, facebook: { found: true }, nextdoor: { found: false }, chamber: { found: false } } },
+  spot: { zone: 'Smyrna', open: true },
+};
 const GMAIL = { SEND_ROUTE: 'gmail', GMAIL_CLIENT_ID: 'id', GMAIL_CLIENT_SECRET: 'sec', GMAIL_REFRESH_TOKEN: 'ref' };
 // Fake Google: token, send (returns a thread id), thread read (ours only, or with a reply, or refused).
 function gfetch(o = {}) {
@@ -54,8 +62,10 @@ async function sent(extra = {}, shop = SHOP, fills = FILLS) {
   const env = { KV: kv(), STATUS_KEY: KEY, LIVE: 'on', ...GMAIL, ...extra };
   const j = await (await T.submit(post(shop), env, at('2026-11-17T10:30:00-06:00'))).json();
   await T.tick(env, at('2026-11-17T10:45:00-06:00'), f);
-  for (const [section, data] of Object.entries(fills)) await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section, data });
+  const all = { ...fills, ai: { google_ai: { named: false }, ...fills.ai }, ...NEW };
+  for (const [section, data] of Object.entries(all)) await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section, data });
   const rec = () => JSON.parse(env.KV.m.get('req:' + j.id));
+  assert.equal(rec().complete, true, 'report complete before the checks: ' + rec().pending.join(', '));
   const h = rec().hash;
   const mark = (c, a) => T.check(new Request('https://x/', { method: 'POST', body: JSON.stringify({ id: j.id, k: KEY, checker: c, agent: a, result: 'pass', hash: h }) }), env, at('2026-11-17T11:00:00-06:00'), f);
   await mark(1, 'checker-a'); await mark(2, 'checker-b');

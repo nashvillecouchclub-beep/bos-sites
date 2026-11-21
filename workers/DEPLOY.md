@@ -47,6 +47,28 @@ Endpoints for later jobs (all need `k` = STATUS_KEY):
   - ai: `{"question":"...","chatgpt":{"named":true,"correct":true,"note":""},"gemini":{...}}`
   - booking: `{"score":7,"fixes":["...","...","..."]}`
   - category: `{"main_category":"...","big_job":"...","match":false,"note":""}`
+  - Nov 20 additions (item 215, item 211, Nov 19 diagnosis). Section names: `speed|known_for|competitor|listings|spot`, and `ai` grew.
+    A fill that breaks these shapes is refused with 400 and changes nothing. Every one of them is required: the report stays
+    "fill pending sections first" (checkers get 409 on a pass) until each is in.
+  - ai (now 3 answers): add `"google_ai":{"named":false,"correct":true,"note":""}`. Optional on each engine: `"top":["names it gave", ...]` (up to 5).
+    Optional `"screenshots":[{"engine":"chatgpt|gemini|google_ai","url":"https://getbookedoutsolutions.com/....png"}]` (up to 3,
+    our own domain only; hosting for these is not built yet, so leave it out until it is). Without google_ai the AI part stays pending.
+  - speed: `{"tested":true,"channel":"call|text|email","when":"Mon Nov 16, 2:10 pm","minutes":42,"after_hours":{"tested":true,"answered":false,"when":"Mon Nov 16, 7:40 pm"}}`
+    `minutes:null` means no answer and then `waited_hours` is needed. Never `form` (the report says we never send his form).
+    `leads_per_month` only with `"leads_source":"owner"` (he told us). Can't test: `{"tested":false,"reason":"..."}`.
+    The page shows the booking-rate estimate (HBR 2011 or the 2007 lead response study, picked by his answer time) and, for heating
+    and air only, the after-hours estimate (ServiceTitan June 3 2026: 9.8 to 14.1 of every 100 calls). Both are labeled estimates with the source.
+  - known_for: `{"texts":["review text", ...]}` (his Google review texts, up to 300). The worker counts the repeated words itself
+    (once per review, 3 or more reviews, his own business name left out). Under 5 texts, or under 20 Google reviews and nothing repeats,
+    it points to the review fix. No Google profile: not needed.
+  - competitor: `{"name":"<exactly one of the google top3 names, above him>","theirs":{"photos":80,"reply_pct":90,"posts_90d":6,"website":true,"hours":true},"yours":{...same keys}}`
+    Stars and review counts always come from the google section. Not needed when he is number 1, has no profile, or Google gave no top 3.
+  - listings: `{"sites":{"google":{"found":true,"complete":true},"yelp":{"found":false},"bbb":{"found":true,"complete":false,"fix":"one simple fix"},"facebook":{...},"nextdoor":{...},"chamber":{...}}}`
+    All six needed. Not found gets the standard free fix; found but not complete needs its own `fix`.
+  - spot: `{"zone":"Smyrna","open":true}` (is his trade's zone lock still free?). The named guarantee ("The <business> Quote Promise")
+    uses the site's own guaranteed clock (first note on a forwarded quote within 2 business days) and the terms' limits.
+  - The one-line diagnosis at the top is not filled: the worker works it out from google, ai and speed ("Not found", "Found but not
+    chosen", "Chosen but never followed up", or "Found and chosen"). It stays pending ("0 Diagnosis") until the data it needs is in.
 
 ## getbookedoutsolutions.com on Cloudflare Pages (Nov 16)
 

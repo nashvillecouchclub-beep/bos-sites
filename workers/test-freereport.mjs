@@ -49,6 +49,16 @@ const FIX = {
     top3: [{ name: 'Fake Air One', rating: 4.8, review_count: 310 }, { name: 'Fake Air Two', rating: 4.7, review_count: 190 }, { name: 'Fake Air Three', rating: 4.9, review_count: 140 }] },
   reviews: { newest_review: { rating: 5, text: 'Great work \u2014 fast and fair \u{1F600}', date: 'Nov 10 2026' }, owner_reply_on_newest: false },
 };
+// The sections added Nov 20 (item 215, item 211, the Nov 19 diagnosis line). Fake TEST data only.
+const NEW = {
+  speed: { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: null, waited_hours: 48, after_hours: { tested: true, answered: false, when: 'Mon Nov 16, 7:40 pm' } },
+  known_for: { texts: ['On time and a fair price.', 'Showed up on time, fair price, clean work.', 'Fair price, on time again.', 'They were on time and clean.', 'Clean work and a fair price.', 'Great service'] },
+  competitor: { name: 'Fake Air One', theirs: { photos: 80, reply_pct: 90, posts_90d: 6, website: true, hours: true }, yours: { photos: 12, reply_pct: 10, posts_90d: 0, website: true, hours: true } },
+  listings: { sites: { google: { found: true, complete: true }, yelp: { found: false }, bbb: { found: true, complete: false, fix: 'Fix the old phone number on your BBB page.' },
+    facebook: { found: true }, nextdoor: { found: false }, chamber: { found: true } } },
+  spot: { zone: 'Smyrna', open: true },
+};
+const AI_FULL = (ai) => ({ ...ai, google_ai: { named: false } });
 // Visible text only (tags, styles and attributes removed)
 const visible = (html) => html.replace(/<style[\s\S]*?<\/style>/g, '').replace(/<[^>]+>/g, ' ');
 const DASH = /[\u2012-\u2015]/, EMOJI = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}]/u;
@@ -186,7 +196,8 @@ const base = { id: 'fr-20261117-abc123', token: 'a'.repeat(48), first_name: 'Tes
 await test('Report without lookup data: Google parts pending, not complete', () => {
   const r = T.renderReport(base);
   assert.equal(r.complete, false);
-  assert.deepEqual(r.pending, ['1 Google', '2 Newest review', '3 ChatGPT and Gemini test', '4 Booking test', '5 Main category']);
+  assert.deepEqual(r.pending, ['0 Diagnosis', '1 Google', '2 Newest review', '3 ChatGPT and Gemini test', '4 Booking test', '5 Main category',
+    '6 Answer speed', '7 What you are known for', '8 Competitor gap', '9 Listing check', 'Spot and guarantee']);
   assert.match(r.html, /Your free report for Test Shop Heating and Air \(FAKE\)/);
   assert.match(r.html, /Start your free 30 days/);
   assert.match(r.html, /price-hvac\.html/);
@@ -197,7 +208,7 @@ await test('Report without lookup data: Google parts pending, not complete', () 
 await test('Report with lookup data (fixture): stars, rank, top 3, gap, newest review', () => {
   const g = { ...FIX.google, keyword: 'hvac Smyrna' };
   const r = T.renderReport({ ...base, sections: { google: g, reviews: FIX.reviews } });
-  assert.deepEqual(r.pending, ['3 ChatGPT and Gemini test', '4 Booking test', '5 Main category']);
+  assert.deepEqual(r.pending, ['3 ChatGPT and Gemini test', '4 Booking test', '5 Main category', '6 Answer speed', '7 What you are known for', '8 Competitor gap', '9 Listing check', 'Spot and guarantee']);
   for (const s of ['4.4 out of 5', 'Number 7', 'Fake Air One', '310 reviews', 'they average 213 reviews; you have 61', 'Not yet', 'hvac Smyrna'])
     assert.ok(r.html.includes(s.replace(/"/g, '&quot;')), 'missing: ' + s);
 });
@@ -211,9 +222,9 @@ await test('No Google profile: the no-listing line, never a rank line', () => {
 await test('Complete report when every section is filled; other trades link to the free report page', () => {
   const r = T.renderReport({ ...base, trade: 'Electrical', sections: {
     google: { ...FIX.google, keyword: 'electrician Smyrna' }, reviews: FIX.reviews,
-    ai: { question: 'Who is the best electrician in Smyrna?', chatgpt: { named: false }, gemini: { named: true, correct: false } },
+    ai: AI_FULL({ question: 'Who is the best electrician in Smyrna?', chatgpt: { named: false }, gemini: { named: true, correct: false } }),
     booking: { score: 6, fixes: ['Put the phone number at the top.', 'Make the quote button bigger.', 'Cut the form to 4 fields.'] },
-    category: { main_category: 'Electrician', big_job: 'panel upgrades', match: true } } });
+    category: { main_category: 'Electrician', big_job: 'panel upgrades', match: true }, ...NEW } });
   assert.equal(r.complete, true);
   assert.match(r.html, /price-electrical\.html/);
   assert.match(r.html, /6<\/b> out of 10/);
@@ -244,7 +255,8 @@ await test('No long dashes or emojis in any rendered visitor text (even from rev
   for (const v of variants) {
     const txt = visible(T.renderReport(v).html);
     assert.doesNotMatch(txt, DASH); assert.doesNotMatch(txt, EMOJI);
-    assert.doesNotMatch(txt.split('\n')[0], /\bAI\b/);
+    const top = T.renderReport(v).html.split('<section')[0];
+    assert.doesNotMatch(visible(top), /\bAI\b/, 'the top of the page never leads with AI');
   }
   assert.doesNotMatch(T.renderReport(base).html.match(/<h1>.*?<\/h1>/)[0], /\bAI\b/);
 });
@@ -282,9 +294,10 @@ const KEY = 'k'.repeat(32);
 const REAL = { ...SHOP, email: 'owner@fakeshop-test.com', business_name: 'Test Shop Heating and Air' }; // not a TEST marker, so it can "send" in tests
 const FILLS = {
   google: { ...FIX.google, keyword: 'hvac Smyrna' }, reviews: FIX.reviews,
-  ai: { question: 'Who is the best heating and air company in Smyrna?', chatgpt: { named: false }, gemini: { named: true, correct: true } },
+  ai: { question: 'Who is the best heating and air company in Smyrna?', chatgpt: { named: false }, gemini: { named: true, correct: true }, google_ai: { named: false } },
   booking: { score: 6, fixes: ['Put the phone number at the top.', 'Make the quote button bigger.', 'Cut the form to 4 fields.'] },
   category: { main_category: 'HVAC contractor', big_job: 'new systems', match: true },
+  ...NEW,
 };
 const call = (env, path, body) => W.fetch(new Request('https://x' + path, body ? { method: 'POST', body: JSON.stringify(body) } : {}), env, {});
 // a full fake that also answers the Gmail token and send calls and the Resend call
@@ -439,6 +452,227 @@ await test('Send routes: Resend works, a route with no settings fails softly, an
   assert.equal((await T.sendMail({ LIVE: 'on', SEND_ROUTE: 'smtp' }, m, f)).error, 'unknown SEND_ROUTE');
   const off = await T.sendMail({ SEND_ROUTE: 'resend', RESEND_KEY: 'x' }, m, f);
   assert.equal(off.ok, false, 'with LIVE off even a direct sendMail call is blocked'); assert.match(off.error, /blocked outbound/);
+});
+
+// ---------- Nov 20 additions: item 215, item 211, the one-line diagnosis ----------
+const G7 = { ...FIX.google, keyword: 'hvac Smyrna' }; // rank 7, 61 reviews, top 3 average 213
+const FULL = { google: G7, reviews: FIX.reviews, ai: FILLS.ai, booking: FILLS.booking, category: FILLS.category, ...NEW };
+const rr = (sections, extra = {}) => T.renderReport({ ...base, ...extra, sections });
+const top = (html) => visible(html.split('<section')[0]).replace(/\s+/g, ' ');
+
+await test('Diagnosis line: "not found" (no profile / not in first 20), "found but not chosen", "chosen but never followed up", backed by the data', () => {
+  let r = rr({ google: { has_google_profile: false } });
+  assert.match(top(r.html), /In one line: Not found\. We could not find a Google Business Profile for Test Shop Heating and Air \(FAKE\) in Smyrna TN/);
+  r = rr({ google: { ...G7, rank_for_keyword: null }, ai: { chatgpt: { named: false }, gemini: { named: false } } });
+  assert.match(top(r.html), /Not found\. You are not in the first 20 Google results for &quot;hvac Smyrna&quot;, and ChatGPT and Gemini did not name you either\./);
+  r = rr({ google: G7 });
+  assert.equal(r.diagnosis, 'found but not chosen');
+  assert.match(top(r.html), /Found but not chosen\. You show at number 7 for &quot;hvac Smyrna&quot;, below the top 3, and they average 213 reviews to your 61\./);
+  const g2 = { ...G7, rank_for_keyword: 2 };
+  r = rr({ google: g2, speed: NEW.speed });
+  assert.equal(r.diagnosis, 'chosen but never followed up');
+  assert.match(top(r.html), /Chosen but never followed up\. You are number 2 for &quot;hvac Smyrna&quot;, but our test call got no answer in 48 hours\./);
+  r = rr({ google: g2, speed: { tested: true, channel: 'call', when: 'Mon', minutes: 120 } });
+  assert.match(top(r.html), /our test call took about 2 hours to get an answer/);
+  r = rr({ google: g2, speed: { tested: true, channel: 'text', when: 'Mon', minutes: 4, after_hours: { tested: true, answered: false, when: 'Mon 8 pm' } } });
+  assert.match(top(r.html), /but our after-hours test call was not answered/);
+  r = rr({ google: g2, speed: { tested: true, channel: 'call', when: 'Mon', minutes: 4 } });
+  assert.equal(r.diagnosis, 'chosen'); assert.match(top(r.html), /Found and chosen\. You are number 2 .* in 4 minutes/);
+  r = rr({ google: g2 });
+  assert.equal(r.pending[0], '0 Diagnosis', 'top 3 shop with no speed test yet: the diagnosis waits, never guessed');
+  assert.doesNotMatch(top(r.html), /In one line/);
+  assert.equal(rr({}).pending[0], '0 Diagnosis');
+});
+
+await test('Answer speed: booking-rate estimate is labeled, sourced, and picked by the real answer time', () => {
+  const cases = [[3, /fastest group/, /Lead Response Management Study/], [20, /about 21 times between a 5 minute answer and a 30 minute answer/, /Lead Response Management Study/],
+    [180, /A Harvard Business Review study found .* nearly 7 times as likely/, /Harvard Business Review, March 2011/],
+    [2000, /more than 60 times as likely .* 24 hours or longer/, /Harvard Business Review/],
+    [null, /A Harvard Business Review study found .* more than 60 times as likely .* 24 hours or longer/, /2,241 U\.S\. companies/]];
+  for (const [m, want, src] of cases) {
+    const sp = m == null ? { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: null, waited_hours: 48 } : { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: m };
+    const txt = visible(rr({ google: G7, speed: sp }).html).replace(/\s+/g, ' ');
+    assert.match(txt, /Booking-rate estimate \(from outside research, not your own numbers\):/);
+    assert.match(txt, want, String(m)); assert.match(txt, src, String(m));
+    assert.match(txt, m == null ? /We made one test call to your business on Mon Nov 16, 2:10 pm\. We waited 48 hours and got no answer/
+      : m === 180 ? /You answered in about 3 hours\./ : m === 2000 ? /The answer took a day or more\./ : new RegExp(`You answered in ${m} minutes`));
+  }
+  assert.match(visible(rr({ speed: { tested: false, reason: 'the shop has no phone number listed anywhere' } }).html), /We did not run this test for you: the shop has no phone number listed anywhere/);
+});
+
+await test('After-hours estimate: labeled, sourced, HVAC only; a count only when the owner told us his calls', () => {
+  let txt = visible(rr({ speed: NEW.speed }).html).replace(/\s+/g, ' ');
+  assert.match(txt, /Missed after-hours calls \(estimate\): In 2025, about 9\.8 to 14\.1 of every 100 calls to home heating and air shops came outside business hours/);
+  assert.match(txt, /Our after-hours call was not answered, so some of those calls may be going unanswered now\./);
+  assert.match(txt, /ServiceTitan, .*June 3 2026.*not nationally representative/);
+  assert.doesNotMatch(txt, /calls a month after hours/);
+  txt = visible(rr({ speed: { ...NEW.speed, leads_per_month: 200, leads_source: 'owner' } }).html).replace(/\s+/g, ' ');
+  assert.match(txt, /You told us you get about 200 calls a month, so that is roughly 20 to 28 calls a month after hours\./);
+  txt = visible(rr({ speed: NEW.speed }, { trade: 'Plumbing' }).html).replace(/\s+/g, ' ');
+  assert.match(txt, /We do not have a trusted outside number for after-hours calls in your trade/);
+  assert.doesNotMatch(txt, /9\.8|14\.1|ServiceTitan/);
+  assert.match(T.fillProblem({ sections: {} }, 'speed', { ...NEW.speed, leads_per_month: 200 }), /only allowed when the owner told us/);
+  assert.match(T.fillProblem({ sections: {} }, 'speed', { tested: true, channel: 'form', when: 'Mon', minutes: 3 }), /never send a form/);
+  assert.match(T.fillProblem({ sections: {} }, 'speed', { tested: true, channel: 'call', when: 'Mon', minutes: null }), /waited_hours/);
+  assert.equal(T.fillProblem({ sections: {} }, 'speed', NEW.speed), '');
+});
+
+await test('What you are known for: words repeated across his reviews, counted once per review, his own name left out', () => {
+  const k = T.knownFor(NEW.known_for.texts);
+  assert.deepEqual(k.map((x) => x.word).sort(), ['clean', 'fair price', 'on time']);
+  assert.equal(k.find((x) => x.word === 'fair price').count, 4); assert.equal(k.find((x) => x.word === 'on time').count, 4);
+  assert.equal(T.knownFor(['Smyrna Air was on time', 'smyrna air on time', 'Smyrna Air, on time'], ['smyrna', 'air']).map((x) => x.word).join(), 'on time');
+  assert.equal(T.knownFor(['on time on time on time', 'great', 'good']).length, 0, 'one review saying it 3 times is not a pattern');
+  const txt = visible(rr({ google: G7, known_for: NEW.known_for }).html).replace(/\s+/g, ' ');
+  assert.match(txt, /We read 6 of your Google reviews\. These words came up again and again: "fair price" in 4 reviews/);
+  assert.match(txt, /That is what your customers already say you are known for/);
+  const few = visible(rr({ google: G7, known_for: { texts: ['Good', 'Fine job'] } }).html);
+  assert.match(few, /not enough Google reviews with words in them yet \(we found 2\).*The review fix below is the place to start/s);
+  assert.match(T.fillProblem({ sections: {} }, 'known_for', { texts: 'x' }), /list of up to 300/);
+});
+
+await test('Item 211: few Google reviews -> the report points to the review fix, and the review fix is in the three fixes', () => {
+  const g = { ...G7, review_count: 8, top3: [{ name: 'Fake Air One', rating: 4.8, review_count: 6 }, { name: 'Fake Air Two', rating: 4.7, review_count: 5 }, { name: 'Fake Air Three', rating: 4.9, review_count: 4 }] };
+  const sec = { google: g, reviews: { ...FIX.reviews, owner_reply_on_newest: true } };
+  const fx = T.pickFixes({ ...base, sections: sec });
+  assert.match(fx[0], /^Ask every happy customer for a Google review the day the job is done\. You have 8 Google reviews so far/);
+  assert.match(visible(rr(sec).html).replace(/\s+/g, ' '), /Few reviews so far\. With 8 Google reviews, a new customer has little to go on\. The review fix below is the place to start\./);
+  assert.doesNotMatch(visible(rr({ google: G7 }).html), /Few reviews so far/, '61 reviews is not few');
+  const one = T.pickFixes({ ...base, sections: { google: { ...g, review_count: 1, top3: [] } } });
+  assert.match(one[0], /You have 1 Google review so far/);
+  assert.equal(T.pickFixes({ ...base, sections: { google: { ...G7, review_count: 8 } } }).filter((x) => /Google review the day/.test(x)).length, 1, 'never twice');
+});
+
+await test('Competitor gap: only a top 3 shop that outranks him, side by side, the 3 biggest gaps in order', () => {
+  const rec = { ...base, sections: { google: G7 } };
+  assert.match(T.fillProblem(rec, 'competitor', { name: 'Someone Else Air' }), /one of the top 3 names/);
+  assert.match(T.fillProblem({ sections: {} }, 'competitor', { name: 'Fake Air One' }), /fill google/);
+  assert.match(T.fillProblem({ sections: { google: { ...G7, rank_for_keyword: 2 } } }, 'competitor', { name: 'Fake Air Two' }), /does not outrank him/);
+  assert.match(T.fillProblem(rec, 'competitor', { name: 'Fake Air One', theirs: { review_count: 999 } }), /not allowed/);
+  assert.match(T.fillProblem(rec, 'competitor', { name: 'Fake Air One', theirs: { reply_pct: 140 } }), /bad value/);
+  assert.equal(T.fillProblem(rec, 'competitor', NEW.competitor), '');
+  const v = T.competitorView({ ...base, sections: { google: G7, competitor: NEW.competitor } });
+  assert.equal(v.name, 'Fake Air One'); assert.equal(v.pos, 1);
+  // biggest first: posts 6 vs 0 (100% behind), photos 80 vs 12 (85%), reviews 310 vs 61 (80%); replies 90% vs 10% (0.8) is fourth
+  assert.deepEqual(v.gaps, ['They made 6 Google posts in the last 90 days; you made 0.', 'They show 80 photos on Google; you show 12.', 'They have 310 Google reviews; you have 61.']);
+  const txt = visible(rr({ google: G7, competitor: NEW.competitor }).html).replace(/\s+/g, ' ');
+  assert.match(txt, /The top shop that shows above you is Fake Air One \(number 1 in the top 3\)/);
+  assert.match(txt, /Google reviews 310 61/); assert.match(txt, /Stars 4\.8 out of 5 4\.4 out of 5/);
+  assert.match(txt, /The 3 biggest gaps/);
+  assert.match(visible(rr({ google: { ...G7, rank_for_keyword: 1 } }).html), /You are number 1 for this search, so no shop outranks you here/);
+  assert.ok(!rr({ google: { ...G7, rank_for_keyword: 1 } }).pending.includes('8 Competitor gap'));
+  assert.ok(!rr({ google: { has_google_profile: false } }).pending.includes('8 Competitor gap'));
+  assert.ok(rr({ google: G7 }).pending.includes('8 Competitor gap'));
+  const moved = rr({ google: { ...G7, top3: G7.top3.slice(1) }, competitor: NEW.competitor });
+  assert.ok(moved.pending.includes('8 Competitor gap'), 'google filled again with a new top 3: the old competitor pick waits for a new fill');
+  assert.ok(rr({ google: { ...G7, rank_for_keyword: 1 }, competitor: NEW.competitor }).pending.every((x) => x !== '8 Competitor gap'));
+});
+
+await test('Listing check: all six places, one simple fix per weak one, a missing fix is refused', () => {
+  assert.match(T.fillProblem({ sections: {} }, 'listings', { sites: { google: { found: true } } }), /listings\.sites\.yelp/);
+  assert.match(T.fillProblem({ sections: {} }, 'listings', { sites: { ...NEW.listings.sites, bbb: { found: true, complete: false } } }), /bbb\.fix/);
+  assert.equal(T.fillProblem({ sections: {} }, 'listings', NEW.listings), '');
+  const txt = visible(rr({ listings: NEW.listings }).html).replace(/\s+/g, ' ');
+  for (const x of ['Google Found', 'Yelp Not found', 'BBB Found, needs work', 'Facebook Found', 'Nextdoor Not found', 'Local chamber of commerce Found']) assert.ok(txt.includes(x), x);
+  assert.match(txt, /Yelp: Claim your free Yelp business page/); assert.match(txt, /BBB: Fix the old phone number on your BBB page\./);
+  assert.match(txt, /Nextdoor: Claim your free Nextdoor business page/);
+  assert.doesNotMatch(txt, /Facebook: /, 'no fix for a place in good shape');
+});
+
+await test('Open spot and the named guarantee: written for this shop, true to the site terms, no promise of jobs', () => {
+  let txt = visible(rr({ spot: NEW.spot }).html).replace(/\s+/g, ' ');
+  assert.match(txt, /Your spot is open\. We lock each zone to one heating and air shop\. The Smyrna zone is open for your trade right now\./);
+  assert.match(txt, /The Test Shop Heating and Air \(FAKE\) Quote Promise\. Once your first paid month starts, every new quote you forward gets its first follow-up note within 2 business days\./);
+  assert.match(txt, /We never promise jobs, revenue or a spot on Google\. No guarantees apply during the free 30 days/);
+  txt = visible(rr({ spot: { zone: 'Smyrna', open: false } }).html);
+  assert.doesNotMatch(txt, /Your spot is open/); assert.match(txt, /Quote Promise/);
+  assert.ok(rr({}).pending.includes('Spot and guarantee'));
+  assert.match(T.fillProblem({ sections: {} }, 'spot', { zone: 'Smyrna' }), /open/);
+});
+
+await test('AI answer check: ChatGPT, Gemini and Google AI, who each named, screenshots only from our own site', () => {
+  const ai = { question: 'Who is the best heating and air company in Smyrna, TN?', chatgpt: { named: false, top: ['Fake Air One', 'Fake Air Two'] }, gemini: { named: true }, google_ai: { named: false, top: ['Fake Air Three'] },
+    screenshots: [{ engine: 'chatgpt', url: 'https://getbookedoutsolutions.com/r-img/test-chatgpt.png' }] };
+  assert.equal(T.fillProblem({ sections: {} }, 'ai', ai), '');
+  assert.match(T.fillProblem({ sections: {} }, 'ai', { ...ai, screenshots: [{ engine: 'chatgpt', url: 'https://evil.example/x.png' }] }), /screenshots/);
+  assert.match(T.fillProblem({ sections: {} }, 'ai', { ...ai, google_ai: { note: 'x' } }), /google_ai/);
+  const r = rr({ ai });
+  const txt = visible(r.html).replace(/\s+/g, ' ');
+  assert.match(txt, /Who ChatGPT, Gemini and Google say is best in Smyrna/);
+  assert.match(txt, /ChatGPT: you were not on the list\. It named: Fake Air One, Fake Air Two\./);
+  assert.match(txt, /Google AI answer: you were not on the list\. It named: Fake Air Three\./);
+  assert.match(r.html, /<img src="https:\/\/getbookedoutsolutions\.com\/r-img\/test-chatgpt\.png"/);
+  assert.ok(!r.pending.some((x) => x.startsWith('3 ')));
+  const old = rr({ ai: { chatgpt: { named: false }, gemini: { named: true } } });
+  assert.ok(old.pending.includes('3 Google AI answer'), 'an AI check without Google AI stays pending');
+  assert.doesNotMatch(rr({ ai: { ...ai, screenshots: [{ engine: 'chatgpt', url: 'https://evil.example/x.png' }] } }).html, /evil\.example/);
+});
+
+await test('Full report with every new section: complete, the gentle growth line, no dashes, emojis or promises anywhere', () => {
+  const r = rr(FULL, { revenue: '$500K to $1M' });
+  assert.equal(r.complete, true, r.pending.join(', '));
+  const txt = visible(r.html).replace(/\s+/g, ' ');
+  assert.match(txt, /Is your growth making you money\? Some shops get busier and keep less\./);
+  assert.doesNotMatch(txt, DASH); assert.doesNotMatch(txt, EMOJI);
+  assert.doesNotMatch(txt, /you will rank|guaranteed? (more )?(jobs|calls|leads|revenue)|more jobs guaranteed|we promise (you )?(jobs|calls)|double your/i);
+  assert.doesNotMatch(txt, /\bClaude\b|\bagents?\b|free look|free check/i);
+  for (const x of ['Shops your size spend 6 to 8% of revenue to grow;', 'Start your free 30 days', 'Built from your real Google listing and a few quick checks. It is yours to keep.']) assert.ok(txt.includes(x.replace(/'/g, '&#39;')), x);
+  // every estimate on the page is labeled as one and carries a source line
+  const ests = (r.html.match(/<p class="est"><b>[^<]*<\/b>/g) || []).map((x) => x.replace(/<[^>]+>/g, ''));
+  assert.ok(ests.length >= 2);
+  for (const e of ests.filter((x) => !/Quote Promise/.test(x))) assert.match(e, /estimate/i, e);
+  assert.equal((r.html.match(/class="src">Source:/g) || []).length, ests.filter((x) => /estimate/i.test(x)).length);
+});
+
+await test('Pending new sections stop the checkers: a report missing any one of them cannot pass', async () => {
+  for (const missing of ['speed', 'known_for', 'competitor', 'listings', 'spot']) {
+    const env = { KV: kv(), STATUS_KEY: KEY };
+    const j = await (await T.submit(post(REAL), env, at('2026-11-17T10:30:00-06:00'))).json();
+    await T.tick(env, at('2026-11-17T10:45:00-06:00'), sendFetch());
+    for (const [section, data] of Object.entries(FILLS)) if (section !== missing) await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section, data });
+    const rec = JSON.parse(env.KV.m.get('req:' + j.id));
+    assert.equal(rec.complete, false, missing);
+    const rv = await (await call(env, '/api/free-report/review?k=' + KEY)).json();
+    assert.equal(rv.waiting[0].needs, 'fill pending sections first', missing);
+    assert.equal((await mark(env, j.id, 1, 'checker-a', 'pass', rec.hash)).status, 409, missing);
+  }
+  // a bad fill is refused and changes nothing
+  const { env, id, rec } = await ready();
+  const h = rec().hash;
+  const bad = await call(env, '/api/free-report/fill', { id, k: KEY, section: 'competitor', data: { name: 'Not In Top Three' } });
+  assert.equal(bad.status, 400); assert.match((await bad.json()).error, /top 3/);
+  assert.equal(rec().hash, h);
+});
+
+await test('E2E mirror of fr-20261120-vbukvz: fill all, checker 1 + checker 2 pass; LIVE off sends nothing; LIVE on sends once; TEST never', async () => {
+  // the exact fake data used on the live worker Nov 20 (plus the new sections)
+  const E2E = { google: { has_google_profile: true, rating: 4.3, review_count: 27, rank_for_keyword: 9, keyword: 'hvac Smyrna',
+      top3: [{ name: 'Fake Air One (TEST)', rating: 4.8, review_count: 240 }, { name: 'Fake Air Two (TEST)', rating: 4.7, review_count: 160 }, { name: 'Fake Air Three (TEST)', rating: 4.9, review_count: 101 }] },
+    reviews: { newest_review: { rating: 5, text: 'test review: quick and fair, fixed our furnace the same day', date: 'Nov 12 2026' }, owner_reply_on_newest: false },
+    ai: { question: 'Who is the best heating and air company in Smyrna, TN?', chatgpt: { named: false }, gemini: { named: true }, google_ai: { named: false } },
+    booking: { score: 6, fixes: ['Put your phone number at the top of the home page.', 'Make the Get a quote button bigger on a phone.', 'Cut the quote form to 4 fields.'] },
+    category: { main_category: 'HVAC contractor', big_job: 'new system installs', match: true },
+    ...NEW, competitor: { name: 'Fake Air One (TEST)', theirs: { photos: 80 }, yours: { photos: 12 } } };
+  for (const [shop, live, want] of [[{ ...SHOP, business_name: 'E2E Heating (FAKE)', email: 'e2e-nov20@example.com' }, 'on', 0], [REAL, 'off', 0], [REAL, 'on', 2]]) {
+    const f = sendFetch();
+    const env = { KV: kv(), STATUS_KEY: KEY, ...GMAIL, LIVE: live, _f: f };
+    const j = await (await T.submit(post(shop), env, at('2026-11-20T14:38:00-06:00'))).json();
+    await T.tick(env, at('2026-11-20T14:45:00-06:00'), f);
+    for (const [section, data] of Object.entries(E2E)) assert.equal((await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section, data })).status, 200, section);
+    const rec = () => JSON.parse(env.KV.m.get('req:' + j.id));
+    assert.equal(rec().complete, true, rec().pending.join(', '));
+    const page = visible(env.KV.m.get('rep:' + j.id)).replace(/\s+/g, ' ');
+    assert.match(page, /Found but not chosen\. You show at number 9 for &quot;hvac Smyrna&quot;, below the top 3, and they average 167 reviews to your 27\./);
+    const rv = (await (await call(env, '/api/free-report/review?k=' + KEY)).json()).waiting[0];
+    assert.equal(rv.needs, 'checker 1');
+    assert.equal((await mark(env, j.id, 1, 'checker-1-e2e', 'pass', rv.hash)).status, 200);
+    const r2 = await (await mark(env, j.id, 2, 'checker-2-e2e', 'pass', rv.hash)).json();
+    assert.equal(r2.status, want ? 'sent' : 'checked');
+    await T.tick(env, at('2026-11-20T15:00:00-06:00'), f);
+    assert.equal(f.calls.length, want, `${shop.email} LIVE=${live}`);
+    if (live === 'off') assert.match(T.sendBlock(env, rec()), /LIVE is off/);
+    if (shop.email.endsWith('@example.com')) assert.match(T.sendBlock(env, rec()), /TEST/);
+  }
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

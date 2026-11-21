@@ -28,6 +28,21 @@ Fail the report if any of these is not true:
 - The "No Google profile" wording appears only when `has_google_profile` is false. When it does, there is no rank line.
 - The 3 fixes fit what was found. For example, there is no "reply to your newest review" fix when it already has a reply.
 - The trade's price link is right (hvac, plumbing or electrical price page; free-look page for other trades).
+- Nov 20 sections (item 215, item 211, the Nov 19 diagnosis):
+  - The "In one line" diagnosis matches the data: no profile or not in the first 20 = "Not found"; number 4 or lower =
+    "Found but not chosen"; top 3 with no answer, an answer over an hour, or an unanswered after-hours call = "Chosen but never
+    followed up". Every number in it (rank, top 3 average, his reviews, hours waited) is in `sections`.
+  - The answer speed line (channel, when, minutes or hours waited, after-hours result) is in `sections.speed`. Each estimate is
+    labeled as an estimate and has its source line; the after-hours estimate shows only for heating and air, and a calls-a-month
+    number only when `leads_source` is "owner".
+  - The known-for words and counts come from `sections.known_for.texts` (each word in 3 or more reviews). A shop with few reviews
+    (under 20) is pointed to the review fix, and the review fix is in the three fixes.
+  - The competitor is in the google top 3, shows above him, and its stars and reviews match the top 3 data. The side by side
+    rows and the 3 gaps match `sections.competitor`.
+  - The six listing rows and the fix for each weak one match `sections.listings`.
+  - The spot line shows only when `sections.spot.open` is true and names the right zone and trade. The Quote Promise names his
+    business exactly as on the form.
+  - The ChatGPT, Gemini and Google AI answers match `sections.ai`; any business named there is in that engine's `top` list.
 
 ## Checker 2: wording, rules and risk (the second agent)
 Fail the report if any of these is not true:
@@ -40,7 +55,11 @@ Fail the report if any of these is not true:
 - It doesn't lead with AI, names none of our tools or how we run (no Claude, no agents, no stack), and says
   "example business" for any example.
 - Nothing is rude about the owner, his competitors or his reviewers. A competitor is only named when it is in the top 3
-  lookup data.
+  lookup data, or when ChatGPT, Gemini or Google AI named it (its `top` list in `sections.ai`).
+- Every outside number is labeled as an estimate and carries its source (Harvard Business Review 2011, the 2007 lead response
+  study, or ServiceTitan June 2026). None of them is turned into a promise. The Quote Promise says "Once your first paid month
+  starts" and the line "We never promise jobs, revenue or a spot on Google. No guarantees apply during the free 30 days" is there.
+- The "One honest question" line is gentle (a question, no number, no pitch).
 - No health, legal or personal details beyond what the owner gave. Nothing from the owner's private note
   ("What's going on?") is shown on the page.
 - It is not a fake TEST shop sent as real (the review list shows `test`), and the owner's email looks like a real
