@@ -34,6 +34,8 @@
   - resend: `RESEND_KEY` (domain verified in Resend first; read Resend's acceptable-use policy first).
 - Check after deploy: `GET /api/free-report/ping` returns `{"ok":true,"live":false}`.
 - Tests: `node workers/test-freereport.mjs` (no network, fake shop only).
+- Nov 21: `POST /api/free-report/shot {id,k,engine,png}` (AI answer screenshots, PNG up to 1 MB, kept in the same `KV`), served at
+  `GET /r/<token>/ai-<engine>.png`. No new binding, no new secret.
 
 Endpoints for later jobs (all need `k` = STATUS_KEY):
 - `GET /api/free-report/status?k=...` open requests, soonest due first, with check marks, `needs`, `watch`, `problems`
@@ -45,8 +47,52 @@ Endpoints for later jobs (all need `k` = STATUS_KEY):
 - `POST /api/free-report/mark-sent` `{"id":"fr-...","k":"..."}` (only for a report sent some other way; recorded as manual)
 - `POST /api/free-report/fill` `{"id":"fr-...","k":"...","section":"ai|booking|category|google|reviews","data":{...}}`
   - ai: `{"question":"...","chatgpt":{"named":true,"correct":true,"note":""},"gemini":{...}}`
-  - booking: `{"score":7,"fixes":["...","...","..."]}`
+  - booking: `{"score":7,"fixes":["...","...","..."]}` (checked on fill: score a number 0 to 10, fixes a list of up to 10 non-empty
+    texts. Fixes about answer time are never shown: any fix mentioning seconds, minutes or hours is dropped, since answer speed belongs
+    to the speed section; "a second button" and "business hours" / "opening hours" are fine. Blank and repeated fixes are dropped too.)
   - category: `{"main_category":"...","big_job":"...","match":false,"note":""}`
+  - Nov 20 additions (item 215, item 211, Nov 19 diagnosis). Section names: `speed|known_for|competitor|listings|spot`, and `ai` grew.
+    A fill that breaks these shapes is refused with 400 and changes nothing. Every one of them is required: the report stays
+    "fill pending sections first" (checkers get 409 on a pass) until each is in.
+  - Nov 21 (checked on fill): reviews `{newest_review:{rating 1 to 5 or null, text up to 5000, date up to 80}, owner_reply_on_newest: true|false}`;
+    category `main_category` text up to 120, `big_job` up to 120, `match` true|false, `note` up to 300; ai `question` up to 300, each engine's
+    `correct` true|false and `note` up to 300.
+  - ai (now 3 answers): add `"google_ai":{"named":false,"correct":true,"note":""}`. Optional on each engine: `"top":["names it gave", ...]` (up to 5).
+    Optional `"screenshots":[{"engine":"chatgpt|gemini|google_ai","url":"https://getbookedoutsolutions.com/r/<token>/ai-<engine>.png"}]` (up to 3;
+    host each one first with `POST /api/free-report/shot`, or the fill is refused). Without google_ai the AI part stays pending.
+  - speed: `{"tested":true,"channel":"call|text|email","when":"Mon Nov 16, 2:10 pm","minutes":42,"after_hours":{"tested":true,"answered":false,"when":"Mon Nov 16, 7:40 pm","channel":"call"}}`
+    `tested` must be a real true or false. A tested result for a real (non-TEST) request is refused by the worker (403) unless the
+    plain variable `SPEED_TEST_LIVE` = `on` (default off; turn on only after GO LIVE, once the speed test is OK'd).
+    `minutes:null` means no answer and then `waited_hours` is needed. Never `form` (the report says we never send his form).
+    `leads_per_month` only with `"leads_source":"owner"` (he told us). Can't test: `{"tested":false,"reason":"..."}`.
+    The page shows "What research says about answer speed (outside research, not your numbers)" (HBR 2011 or the 2007 lead response
+    study, picked by his answer time; these studies measure reaching and qualifying web leads, not jobs booked) and, for heating
+    and air only, "After-hours calls (estimate)" (ServiceTitan June 3 2026: 9.8 to 14.1 of every 100 calls arrive after hours).
+    Each has its source line. "May be going unanswered" shows only when the after-hours call was not answered.
+  - known_for: `{"scanned":25,"reviews":[{"text":"review text","rating":5}, ...]}` (the Google reviews we scanned, up to 300, with
+    their stars; `scanned` = how many we looked at). Only 4 and 5 star reviews are counted. The worker counts the repeated words itself
+    (once per review, 3 or more reviews, his own business name left out, complaint words and words after "not", "never" and the like
+    left out). Under 5 usable reviews it says so, and points to the review fix only when that fix is in his three fixes.
+    No Google profile: not needed.
+  - competitor: `{"name":"<exactly one of the google top3 names, above him>","theirs":{"photos":80,"reply_pct":90,"posts_90d":6,"website":true,"hours":true},"yours":{...same keys}}`
+    Stars and review counts always come from the google section. Not needed when he is number 1, has no profile, or Google gave no top 3.
+  - listings: `{"sites":{"google":{"found":true,"complete":true},"yelp":{"found":false},"bbb":{"found":true,"complete":false,"fix":"one simple fix"},"facebook":{...},"nextdoor":{...},"chamber":{...}}}`
+    All six needed. Not found gets the standard free fix; found but not complete needs its own `fix`.
+  - spot: `{"zone":"Smyrna","open":true}` (is his trade's zone lock still free?). The named guarantee ("The <business> Quote Guarantee")
+    uses the terms page word for word (quotes contacted within 2 business days; "Not the printer, the mail, Google or your customers";
+    "your next month is free"; no guarantees during a free period). "Something else" trades get no spot and no guarantee (the site
+    offers zone locks only for heating and air, plumbing and electrical), and spot is not needed for them.
+  - google (now checked on fill): `has_google_profile` must be true or false. With a profile, `rank_for_keyword` is 1 to 20 or null,
+    and null needs `rank_checked: true` (we ran the search and he was not in the first 20). Without that flag the report never says
+    "Not found" or "Not in the first 20 results"; it stays pending. The worker's own lookup sets `rank_checked` itself, and a lookup
+    answer with no yes/no on the profile is treated as a failed lookup.
+  - Re-render rule: check (before any mark) and the cron (before any send) render the report again with the current code. An old
+    record whose page changes gets a new hash, its marks are cleared and it needs both checks again. The three fixes are saved on the
+    record when it is sent (`fu.fixes`) and the follow-ups quote those.
+  - The one-line diagnosis at the top is not filled: the worker works it out from google, ai and speed ("Not found", "Found but not
+    chosen", "Chosen but never followed up" (no answer, or an unanswered after-hours test), "Found and chosen, but slow
+    to answer" (6 to 60 minutes), "Chosen but slow to follow up" (over 60 minutes), or "Found and chosen"). "Never followed up" is only
+    for no answer (the main test or the after-hours test). It stays pending ("0 Diagnosis") until the data it needs is in.
 
 ## getbookedoutsolutions.com on Cloudflare Pages (Nov 16)
 
@@ -92,3 +138,83 @@ Endpoints for later jobs (all need `k` = STATUS_KEY):
 - Deploy: the dashboard editor takes one file, so run `node workers/build-freereport-bundle.mjs` and paste
   `workers/dist/bookedout-freereport.bundle.js`. Tests: `node workers/test-freereport.mjs`, `node workers/test-freereport-followups.mjs`,
   and the same two with `BUNDLE=1` against the bundle.
+
+## Free report fill jobs (Nov 20 2026, PR 30): who fills each section
+
+Every fill goes through `workers/freereport-fill.mjs` (`STATUS_KEY=... node workers/freereport-fill.mjs <fr-id> <data.json> [--dry-run]`).
+It checks the data with the worker's own rules first, posts google first, and stops at the first refusal. It only talks to our
+worker. Tests: `node workers/test-freereport-fill.mjs`.
+
+| Section | Who fills it | Where the data comes from | Built? |
+|---|---|---|---|
+| google, reviews | the worker itself at build time (`lookup()`); until the lookup worker is set, the research file | the lookup worker at `LOOKUP_URL` | The lookup worker's code is NOT in this repo or in the Mac mini engine folder (`~/.bookedout/engine`, searched Nov 20), and `LOOKUP_URL`/`LOOKUP_KEY` are not set. What it must provide is in the "Lookup worker contract" below. Until then the runner fills google (with `rank_checked`) and reviews from the research file. |
+| ai (ChatGPT, Gemini AND google_ai) | `JOBS.ai` in `workers/freereport-jobs.mjs`, run by the runner | the research file (the live chat asks each engine the customer's question; default question "Who is the best <trade> in <town>, <ST>?") | Built (Nov 21). All three engines are needed or it waits. |
+| ai screenshots | the runner hosts them, then `JOBS.ai` lists them | PNG files named in the research file (`"screenshots":{"chatgpt":"/path.png"}`) | Built (Nov 21): `POST /api/free-report/shot` stores each PNG (1 MB max) in the existing `KV` namespace (free, no new storage) with its sha, served at `/r/<token>/ai-<engine>.png`; the fill URL is `...ai-<engine>.png?v=<first 8 of the sha>`, so a different image would change the page hash. One image per engine (the same image again is fine), and none once the report is `checked`. The worker refuses an ai fill whose screenshot URL is not the hosted one for that report. No screenshot = the part is simply left out (no "not checked" text needed). |
+| booking, category | `JOBS.booking`, `JOBS.category` | the research file (his website on a phone, never sending the form; his public Google listing) | Built (Nov 21). |
+| known_for | `JOBS.known_for` | the research file: his public Google reviews, text AND stars (`{scanned, reviews:[{text, rating}]}`) | Built (Nov 21). Not needed without a Google profile. If the lookup worker learns to return reviews with stars, move this to `lookup()`. |
+| competitor | `JOBS.competitor` | the research file: the public Google listing of the top 3 shop above him (photos, reply_pct, posts_90d, website, hours) | Built (Nov 21). `name` is optional: the job picks the highest top 3 shop above him. Stars and review counts are always taken from google. Not needed at number 1, with no profile, or with no top 3. |
+| listings | `JOBS.listings` | the research file: public searches of Google, Yelp, BBB, Facebook, Nextdoor and the local chamber directory | Built (Nov 21). The Google row can come from the google section (found only; "complete" is never guessed). All six needed. |
+| spot | `JOBS.spot` | `workers/data/zone-locks.json` via `workers/zone-locks.mjs` (never the research file) | Built (Nov 21). The list is empty, so every zone reads open. Zone = his town, read the same however it is typed (ZIP or ZIP+4, state code, full or short state name like Tenn., USA/US, "-" for a space, Mt = Mount, St = Saint, LaVergne = La Vergne), or held when it is close to a locked town of his trade (one letter off, like Smryna, or a locked town followed by more words) - never "open". Lock dates are Central (America/Chicago) days, or the lock's zone when his town is in its `towns`. A town that can't be read as a plain town name is held (no spot filled). A bad list stops the run (never a quiet "open"): real dates only, `until` not before `since`, and no two locks for the same trade and town whose dates overlap (past, current or future). Not used for "Something else". |
+| speed | `JOBS.speed` | nothing: always `{"tested":false,"reason":"we do not call, text or email your business for this report."}` | Built (Nov 21) as the "We did not run this test for you" result only. Rickey has not picked a test method, so nothing contacts a shop. Research files cannot change it. The two locks (fill door `--after-go-live`, worker `SPEED_TEST_LIVE`) stay. |
+
+### The "Free report checkers" runner (Nov 21 2026, run by hand from a live chat; no scheduled task)
+
+`STATUS_KEY=... node workers/freereport-checkers.mjs [--apply] [--only fr-...] [--research DIR] [--templates] [--verdicts FILE] [--log FILE] [--allow-send]`
+
+- Dry run by default: reads `/review`, plans every fill, runs both checks on the page the fills would make, and logs what it would post. Nothing is posted.
+- `--apply`: hosts screenshots, posts the fills through `freereport-fill.mjs` (`prepareFills` -> `fillProblem` -> `postFills`), reads the live page, runs checker 1 and checker 2 and posts both marks (two passes = status `checked`).
+- Research files: `<DIR>/<fr-id>.json` (default `~/.bookedout/freereport-research`). `--templates` writes one with only the still-needed sections for any report without one. Public pages only.
+- Checks: checker 1 (facts: the live page is exactly what the current code renders from the report's data and form answers, nothing pending, every section passes the fill rules, budget, profile wording, price link, three fixes, competitor in top 3, spot line) and checker 2 (locked wording, no long dashes or emojis, no tools named, no promises, sources on every outside number, terms lines, private note not shown, test shop flags, rank and review gap again).
+- The script checks may only post FAILS (agents `checker-<slot>-script-<run id>`). A pass is posted only from `--verdicts FILE`
+  (`{"fr-...":{"1":{"agent","result","notes","hash"},"2":{...}}}`, the live chat's two checker sub-agents), and only when BOTH slots
+  have a `pass` with a non-script agent name and `hash` equal to the report's current hash (the run logs the hash to read). Same agent
+  name in both slots = held and logged (never renamed). A fail on any slot always wins: a script fail, or a sub-agent fail on the current
+  hash (posted even when that slot already has a pass).
+- The worker enforces the same rules on `/check` (Nov 21, second review): agent names are cleaned one way everywhere (NFKC, no format or
+  zero-width characters, plain spaces and hyphens, squeezed, lower case) and stored cleaned; a PASS from any name containing "script"
+  is refused (409). Every version (hash) that ever got a fail is kept in its own KV key `fails:<id>` (last 50) and is NEVER cleared:
+  a version that failed once can never pass, even if a later fill makes the same page again; `sendBlock` refuses it too. A pass that
+  races a fail re-reads `fails:<id>` after saving and holds the report. Right before sending, `trySend` re-reads `req:<id>` and
+  `fails:<id>` fresh, runs every send rule on that copy (same hash, no fail mark, same marks as in hand), then takes the claim
+  `sendclaim:<id>` (put, read back; kept 1 hour after an unsure failure so a 5xx can't become a double email).
+- A sent report takes no more fills (409).
+- One writer at a time (item 9): every check and fill takes `lock:<id>` (put, wait 30 ms, read back; up to 8 tries, then 409
+  "busy"; 60 s expiry; deleted when done). A waiting writer leaves `lockwait:<id>`; a check that completes the second pass while
+  someone waits does not send in that request (the cron sends later, after every rule is checked again). `agents:<id>` records every
+  agent that posted (or tried to post) to each slot of each version; one agent can never hold both slots of a version: the second
+  slot is refused (409), the attempt is recorded, and that version is never sent (`trySend`, and `/review` shows "fix first").
+  Limit: KV is eventually consistent across Cloudflare locations, so this lock is best effort; the fail list, the agent record, the
+  fresh re-read and the send claim are the backstops. A Durable Object would make it exact (Workers Paid).
+- Spot: the runner recomputes the spot from the zone-lock list on every run, right before any pass; when it differs it fills it again
+  (a new version to check), and a held town fails checker 1. The worker refuses a spot whose zone is not his town (an open spot is
+  always his own town; a taken one may name the lock zone only when its `zone_towns` list his town). The list file carries a
+  `version`; every spot fill carries it as `lock_version`, and the worker refuses to send when it is below the plain variable
+  `ZONE_LOCKS_VERSION` (default 1). Raise both together on every change to the list.
+- Email: the address must be plain ASCII (`[A-Za-z0-9._%+'-]` before the @, a plain domain after). Control characters never get
+  into a saved field (one-line fields get a space; the private note keeps plain line breaks). Header values lose control and line
+  separator characters; the Subject is B-encoded in the raw message unless it is plain name characters (no colon, no "bcc"/"x-"),
+  and on every route (Gmail, Resend, Cloudflare) whenever it holds "=?". In-Reply-To is used only when it is a plain message id. The POST-only endpoints answer 405 to other methods, and
+  any unknown path under `/r/` answers 404.
+- Never sends: no mark-sent, no send route. The run stops unless `/review` gives `live` as true or false. Right before every checker 2
+  pass it reads `/ping` again and holds if LIVE is on (or unclear) unless `--allow-send`. A report whose last check failed on the same
+  version is skipped until a fill changes it.
+- Research files are used only when their `id` is this report's id (templates carry it). Every research section is checked with the
+  worker's own fill rules before it is planned. `--only` and every other option need a value that is not another option.
+  `FREEREPORT_BASE` may only be https://getbookedoutsolutions.com (both the runner and freereport-fill.mjs refuse anything else).
+- Log: every step to the screen and as JSON lines to `--log` (default `~/.bookedout/logs/freereport-checkers-<date>.jsonl`).
+- Tests: `node workers/test-freereport-checkers.mjs` (fake TEST shops, in-process worker, any real network call fails the test).
+
+### Lookup worker contract (from `lookup()` and `reviewsCall()` in bookedout-freereport.js)
+
+- One URL (`LOOKUP_URL`, called exactly as set; `allowed()` lets no other address through), `POST`, headers `content-type: application/json` and `x-lookup-key: <LOOKUP_KEY>`. Only real (non-TEST) requests call it. Any non-2xx answer is a failed lookup (`lookup_error`; sections stay pending).
+- Call 1 body: `{"business_name","town","state","keyword"}` (`keyword` = "hvac|plumber|electrician <town>", empty for "Something else"). Answer:
+  `has_google_profile` (true/false, REQUIRED; anything else = failed lookup), `rating` (1 to 5 or null), `review_count` (whole number or null),
+  `rank_for_keyword` (1 to 20, or null when he is not in the first 20; the key must be PRESENT whenever the search ran, since that is how the worker sets `rank_checked`),
+  `top3` (up to 3 `{name, rating, review_count}`), and either `newest_review` `{rating, text, date}` + `owner_reply_on_newest` (true/false), or `reviews_task_id` (string) when reviews come later.
+- Call 2 body: `{"reviews_task_id":"..."}`. Answer `{newest_review, owner_reply_on_newest}`, or no `newest_review` yet (the cron tries again, up to 4 times, every 15 minutes).
+- Not asked of it today (the runner's research file covers them): review texts with stars, competitor listing details, listings, AI answers.
+
+After the deploy that brings these sections (one time): `POST /api/free-report/rerender {"k":"..."}` renders every open report
+with the new code. Every report built before it goes back to "fill pending sections first" and loses any old check marks. The test
+request fr-20261120-vbukvz (two passes on the old page) will show `changed: true` and lose both marks. check() and the cron
+also re-render on their own before a pass or a send, so an old page can never be passed or sent even if this step is missed.
