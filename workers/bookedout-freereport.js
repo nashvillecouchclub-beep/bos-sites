@@ -363,7 +363,8 @@ async function reviewsCall(env, task, f) {
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // Visitor text rules: no long dashes, no emojis (also cleans text that comes from Google reviews).
 function plain(s) {
-  return String(s == null ? '' : s).replace(/\s*[\u2012-\u2015]\s*/g, ', ').replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, '').replace(/\s{2,}/g, ' ').trim();
+  // a dash joining two words ("5\u2013minute") becomes a plain hyphen; a dash used as a pause ("fast \u2014 fair") becomes a comma
+  return String(s == null ? '' : s).replace(/([\p{L}\p{N}])[\u2010-\u2015\u2212]([\p{L}\p{N}])/gu, '$1-$2').replace(/\s*[\u2012-\u2015]\s*/g, ', ').replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, '').replace(/\s{2,}/g, ' ').trim();
 }
 const t = (s) => esc(plain(s));
 const money = (n) => '$' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -405,12 +406,20 @@ function pickFixes(rec) {
   const ahNo = !!(sp && sp.tested === true && sp.after_hours && sp.after_hours.tested === true && sp.after_hours.answered === false);
   const found = speedFinding(sp);
   const reserved = found ? (found.fix === 'after hours' ? afterHoursFix(sp.after_hours.channel) : SPEED_FIX) : '';
+  // Both speed problems are kept when both are true (a slow or missing answer AND an unanswered after-hours test): the one the
+  // diagnosis names first, then the other. A slow answerer always sees the one 5-minute fix.
+  const extra = [];
+  if (sp && sp.tested === true && (sp.minutes == null || +sp.minutes > 5) && normFix(SPEED_FIX) !== normFix(reserved)) extra.push(SPEED_FIX);
+  if (ahNo && normFix(afterHoursFix(sp.after_hours.channel)) !== normFix(reserved)) extra.push(afterHoursFix(sp.after_hours.channel));
+  const keep = reserved ? [reserved, ...extra] : [];
   const out = [];
   const seen = (x, list) => list.some((y) => normFix(y) === normFix(x));
   const add = (x) => {
     x = plain(x);
     if (!x || (fast && FU.FIVE_MIN_TEST(x))) return; // he already answers that fast
-    if ((reserved && normFix(x) === normFix(reserved)) || seen(x, out)) return;
+    // at most one 5-minute fix ever, and it is always worded as SPEED_FIX (any other 5-minute wording is dropped)
+    if (FU.FIVE_MIN_TEST(x) && normFix(x) !== normFix(SPEED_FIX)) return;
+    if (seen(x, keep) || seen(x, out)) return; // a kept speed fix wins over any other fix with the same words
     if (reserved === SPEED_FIX && FU.FIVE_MIN_TEST(x)) return; // the kept 5-minute fix already says it; no second fix saying the same
     out.push(x);
   };
@@ -426,14 +435,9 @@ function pickFixes(rec) {
   if (ct && ct.match === false) add(`Change your Google main category to the one that fits ${plain(ct.big_job || 'the big-ticket job you want most')}, so Google shows you for that work.`);
   if (bk && Array.isArray(bk.fixes) && bk.fixes[0]) add(bk.fixes[0]);
   if (ai && ai.chatgpt && ai.chatgpt.named === false) add('Put your town, your main services and your best reviews in plain words on your website, so ChatGPT and Gemini have something to say about you.');
-  // the other speed fix (not the reserved one) only if there is room
-  const extra = [];
-  if (sp && sp.tested === true && (sp.minutes == null || +sp.minutes > 5) && normFix(SPEED_FIX) !== normFix(reserved)) extra.push(SPEED_FIX);
-  if (ahNo && normFix(afterHoursFix(sp.after_hours.channel)) !== normFix(reserved)) extra.push(afterHoursFix(sp.after_hours.channel));
-  const pick = out.slice(0, reserved ? 2 : 3);
-  if (reserved) pick.push(reserved);
+  const pick = out.slice(0, 3 - keep.length).concat(keep);
   const base = [
-    ...out.slice(reserved ? 2 : 3), ...extra,
+    ...out.slice(3 - keep.length),
     'Put your phone number and a clear "Get a quote" button at the top of every page of your website.',
     SPEED_FIX,
     'Follow up on every quote you send: a short note 2 days later, then again a week later.',
@@ -441,7 +445,7 @@ function pickFixes(rec) {
   ];
   for (const b of base) {
     if (pick.length >= 3) break;
-    if (fast && FU.FIVE_MIN_TEST(b)) continue;
+    if (FU.FIVE_MIN_TEST(b) && (fast || pick.some((y) => FU.FIVE_MIN_TEST(y)))) continue; // never a second 5-minute fix
     if (!seen(b, pick)) pick.push(b);
   }
   // the reserved fix keeps its place even when the fill-up above came before it in the list order

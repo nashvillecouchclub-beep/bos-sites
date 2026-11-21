@@ -39,7 +39,8 @@ function fixLine(s, max = 25) {
 // The text is lower-cased and every run of other characters (any hyphen or dash, brackets, commas) becomes one space first,
 // so "5-minute", "5\u2011minute", "5\u2013minute", "five (5) minutes" and "5 or fewer minutes" all count.
 export function FIVE_MIN_TEST(x) {
-  return /\b(5|five)( 5)? ?(or (fewer|less) )?min(ute)?s?\b/.test(String(x == null ? '' : x).toLowerCase().replace(/[^a-z0-9]+/g, ' '));
+  // (?<!\d ) : "1.5 minutes" becomes "1 5 minutes" here, and a digit right before the 5 means it was a decimal, not five minutes
+  return /(?<!\d )\b(5|five)( 5)? ?(or (fewer|less) )?min(ute)?s?\b/.test(String(x == null ? '' : x).toLowerCase().replace(/[^a-z0-9]+/g, ' '));
 }
 export function answeredFast(sp) { return !!(sp && sp.tested === true && sp.minutes != null && +sp.minutes <= 5); }
 

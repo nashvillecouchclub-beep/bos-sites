@@ -850,9 +850,11 @@ await test('Fix picker: the fix that matches his speed result keeps a place even
   // email channel wording too
   fx = T.pickFixes({ ...base, sections: { speed: { tested: true, channel: 'call', when: 'Mon', minutes: 2, after_hours: ah(false, 'email') } } });
   assert.ok(fx.includes('Make sure every after-hours email reaches a person or gets an answer first thing the next morning.'), fx.join(' | '));
-  // no answer AND after-hours unanswered: the matching 5-minute fix is reserved; the after-hours one only if there is room
+  // no answer AND after-hours unanswered: both speed fixes are kept, the one the diagnosis names first
   fx = T.pickFixes({ ...base, sections: { ...weak, speed: { tested: true, channel: 'call', when: 'Mon', minutes: null, waited_hours: 48, after_hours: ah(false) } } });
-  assert.equal(fx.length, 3); assert.equal(fx[2], 'Call or text back every new lead within 5 minutes, even after hours.');
+  assert.equal(fx.length, 3); assert.match(fx[0], /Google review the day/);
+  assert.equal(fx[1], 'Call or text back every new lead within 5 minutes, even after hours.');
+  assert.equal(fx[2], 'Make sure every after-hours call reaches a person or gets a call back first thing the next morning.');
   fx = T.pickFixes({ ...base, sections: { speed: { tested: true, channel: 'call', when: 'Mon', minutes: null, waited_hours: 48, after_hours: ah(false) } } });
   assert.ok(fx.some((x) => /within 5 minutes/.test(x)) && fx.some((x) => /after-hours call/.test(x)), fx.join(' | '));
   // the diagnosis and the reserved fix agree for the weak shop
@@ -920,12 +922,14 @@ await test('Fourth review regressions: reserved fix wins over a duplicate, every
   assert.match(T.diagnose({ ...base, sections: { ...weak, speed: sp3 } }).line, /after-hours test call got no answer/);
   assert.equal(T.speedFinding(sp3).fix, 'after hours');
   fx = T.pickFixes({ ...base, sections: { ...weak, speed: sp3 } });
-  assert.equal(fx.length, 3); assert.equal(fx[2], AH, fx.join(' | '));
+  assert.equal(fx.length, 3); assert.equal(fx[1], AH, fx.join(' | ')); assert.equal(fx[2], SPEED, 'a slow answerer still gets the one 5-minute fix');
   // the picker and the diagnosis agree in every speed case for a top 3 shop
   for (const sp of [{ ...fastSp, minutes: null, waited_hours: 24 }, { ...fastSp, minutes: 90 }, { ...fastSp, minutes: 30 }, sp3, { ...fastSp, after_hours: ah(false, 'text') }, fastSp]) {
     const f = T.speedFinding(sp), d = T.diagnose({ ...base, sections: { ...weak, speed: sp } }), p3 = T.pickFixes({ ...base, sections: { ...weak, speed: sp } });
     if (!f) { assert.equal(d.kind, 'chosen'); continue; }
-    assert.equal(p3[2], f.fix === 'after hours' ? T.pickFixes({ ...base, sections: { speed: sp } }).find((x) => /after-hours/.test(x)) : SPEED, JSON.stringify(sp));
+    const want = f.fix === 'after hours' ? T.pickFixes({ ...base, sections: { speed: sp } }).find((x) => /after-hours/.test(x)) : SPEED;
+    assert.ok(p3.includes(want), JSON.stringify(sp) + ' -> ' + p3.join(' | '));
+    assert.equal(p3.filter((x) => T.FIVE_MIN_TEST(x)).length, sp.minutes == null || sp.minutes > 5 ? 1 : 0, 'one 5-minute fix for a slow answerer, none for a fast one');
     assert.equal(/after-hours/.test(d.line), f.fix === 'after hours', d.line);
   }
 });
@@ -946,6 +950,31 @@ await test('Five-minute test: any hyphen or dash, "five (5) minutes", "5 or fewe
   fx = T.pickFixes({ ...base, sections: { booking: { score: 5, fixes: ['Reply to every lead within five (5) minutes.'] }, speed: { ...fastSp, minutes: null, waited_hours: 48 } } });
   assert.equal(fx.length, 3);
   assert.deepEqual(fx.filter((x) => T.FIVE_MIN_TEST(x)), ['Call or text back every new lead within 5 minutes, even after hours.'], fx.join(' | '));
+});
+
+await test('Sixth review: at most one 5-minute fix ever; decimals are not five minutes; a dash inside a word stays a hyphen', () => {
+  const ah = { tested: true, answered: false, when: 'Mon 8 pm', channel: 'call' };
+  // slow answerer (6 to 60 minutes) with the after-hours test unanswered and a booking fix saying "within 5 minutes"
+  for (const m of [6, 20, 60]) for (const bf of ['Answer every quote request within 5–minutes.', 'Text back in five (5) minutes or less.', 'Call or text back every new lead within 5 minutes, even after hours.']) {
+    const fx = T.pickFixes({ ...base, sections: { booking: { score: 3, fixes: [bf, 'Put a quote button on top.'] }, speed: { tested: true, channel: 'call', when: 'Mon', minutes: m, after_hours: ah } } });
+    assert.equal(fx.length, 3, fx.join(' | '));
+    assert.ok(fx.filter((x) => T.FIVE_MIN_TEST(x)).length <= 1, m + ' ' + bf + ' -> ' + fx.join(' | '));
+    assert.ok(fx.some((x) => /after-hours call reaches a person/.test(x)), 'the kept after-hours fix: ' + fx.join(' | '));
+    for (const x of fx) if (T.FIVE_MIN_TEST(x)) assert.equal(x, 'Call or text back every new lead within 5 minutes, even after hours.', 'the only 5-minute wording');
+  }
+  // no speed test at all: a booking 5-minute fix in other words is replaced by nothing; the one wording comes from the base list
+  const fx2 = T.pickFixes({ ...base, sections: { booking: { score: 3, fixes: ['Reply in 5min.'] } } });
+  assert.ok(fx2.filter((x) => T.FIVE_MIN_TEST(x)).length <= 1); assert.ok(!fx2.includes('Reply in 5min.'), fx2.join(' | '));
+  // decimals
+  for (const x of ['1.5 minutes', '0.5 min', '2.5-minute', 'about 3.5 minutes']) assert.equal(T.FIVE_MIN_TEST(x), false, x);
+  for (const x of ['5 minutes', 'under 5 minutes.', 'in 5. minutes']) assert.equal(T.FIVE_MIN_TEST(x), true, x);
+  // dashes
+  assert.equal(T.plain('within 5–minutes'), 'within 5-minutes');
+  assert.equal(T.plain('a 5‑minute rule'), 'a 5-minute rule');
+  assert.equal(T.plain('fast — and fair'), 'fast, and fair');
+  assert.equal(T.plain('Great work—fast'), 'Great work-fast');
+  const page = visible(rr({ booking: { score: 4, fixes: ['Answer within 5–minutes.'] }, speed: { tested: true, channel: 'call', when: 'Mon', minutes: 40 } }).html);
+  assert.match(page, /Answer within 5-minutes\./); assert.doesNotMatch(page, DASH);
 });
 
 await test('E2E mirror of fr-20261120-vbukvz: fill all, checker 1 + checker 2 pass; LIVE off sends nothing; LIVE on sends once; TEST never', async () => {

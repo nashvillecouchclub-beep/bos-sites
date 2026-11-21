@@ -35,7 +35,8 @@ Fail the report if any of these is not true:
     chosen, but slow to answer". The minutes or hours match the speed section word for word. The three fixes are always three, none twice.
     The fix that matches his speed result is always among them: no answer or a slow answer has the 5-minute fix; a fast answer
     with an unanswered after-hours test has the after-hours fix for that channel. The kept fix is the one the diagnosis line points at (same rule in the
-    code). A fast answerer never sees a "within 5 minutes" fix in any wording (5 or five, minute, minutes, mins, 5-minute), not in the
+    code); when he was slow (or did not answer) AND missed the after-hours test, both speed fixes are kept. There is never more than
+    one 5-minute fix, always worded "Call or text back every new lead within 5 minutes, even after hours." A fast answerer never sees a "within 5 minutes" fix in any wording (5 or five, minute, minutes, mins, 5-minute), not in the
     three fixes, the booking test list or the follow-ups. Every number in it (rank, top 3 average, his reviews, hours waited) is in `sections`.
   - The answer speed line (channel, when, minutes or hours waited, after-hours result) is in `sections.speed`. Each estimate is
     labeled as an estimate and has its source line; the after-hours estimate shows only for heating and air, and a calls-a-month
