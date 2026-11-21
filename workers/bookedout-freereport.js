@@ -17,8 +17,9 @@
 //                                         section: "google" | "reviews" | "ai" | "booking" | "category" |
 //                                         "speed" | "known_for" | "competitor" | "listings" | "spot" (Nov 20; shapes in DEPLOY.md)
 //   POST /api/free-report/rerender        {k} -> every open report rendered again with the current code (once after a deploy)
-//   POST /api/free-report/shot            {id, k, engine: "chatgpt"|"gemini"|"google_ai", png: "<base64>"} -> {url}
-//                                         hosts one AI answer screenshot in KV (PNG only, up to 1 MB) for the ai fill
+//   POST /api/free-report/shot            {id, k, engine: "chatgpt"|"gemini"|"google_ai", png: "<base64>"} -> {url} (url ends ?v=<sha8>)
+//                                         hosts one AI answer screenshot in KV (PNG only, up to 1 MB) for the ai fill;
+//                                         refused once the report is checked or when the engine already has another image
 //   GET  /r/<token>/                      the report page (noindex, no-store, no-referrer)
 //   GET  /r/<token>/ai-<engine>.png       a hosted AI answer screenshot (same token as the page)
 // Cron (every 15 minutes): build new reports; send reports that have two pass marks (only when LIVE is on);
@@ -34,7 +35,7 @@
 //   open:<id>     marker while the request is not sent (the cron reads these)
 //   tok:<token>   report token -> id
 //   rep:<id>      the report page HTML
-//   shot:<id>:<engine>  one AI answer screenshot (PNG, base64), kept as long as the report
+//   shot:<id>:<engine>  one AI answer screenshot {v: first 8 of its sha, png: base64}, kept as long as the report
 //   rl:<email>    one request per email per 10 minutes
 //   lead:<id>     every lead, kept for good (no expiry): name, business, contact, trade, town, when, page
 //   watch:<time>:<id>  a problem for the watchdog (warn = 75% of the clock, problem = overdue, failed check or failed send), 30 days
@@ -488,7 +489,7 @@ function speedEstimate(sp) {
 // Screenshot links: our own domain, a plain path, an image; no "//" and no ".." anywhere in the path.
 function shotOk(u) {
   u = String(u || '');
-  const m = u.match(/^https:\/\/getbookedoutsolutions\.com(\/[\w./-]+\.(png|jpe?g|webp))$/i);
+  const m = u.match(/^https:\/\/getbookedoutsolutions\.com(\/[\w./-]+\.(png|jpe?g|webp))(\?v=[a-f0-9]{8})?$/i);
   return !!m && !m[1].includes('//') && !m[1].includes('..');
 }
 const pct = (n) => (Math.round(n * 10) / 10).toString();
@@ -640,9 +641,29 @@ function fillProblem(rec, section, d) {
         return 'google.top3 must be up to 3 of {name, rating, review_count}';
     }
   }
+  const optStr = (x, n) => x == null || (typeof x === 'string' && x.length <= n);
+  if (section === 'reviews') {
+    const r = d.newest_review;
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return 'reviews.newest_review must be {rating, text, date}';
+    if (r.rating != null && !num(r.rating, 1, 5)) return 'reviews.newest_review.rating must be 1 to 5 or null';
+    if (!optStr(r.text, 5000)) return 'reviews.newest_review.text must be text (up to 5000 characters)';
+    if (!optStr(r.date, 80)) return 'reviews.newest_review.date must be text (up to 80 characters)';
+    if (!bool(d.owner_reply_on_newest)) return 'reviews.owner_reply_on_newest must be true or false';
+  }
+  if (section === 'category') {
+    if (!str(d.main_category, 120)) return 'category.main_category must be text (up to 120 characters)';
+    if (!optStr(d.big_job, 120)) return 'category.big_job must be text (up to 120 characters)';
+    if (!bool(d.match)) return 'category.match must be true or false';
+    if (!optStr(d.note, 300)) return 'category.note must be text (up to 300 characters)';
+  }
   if (section === 'ai') {
     if (!d.chatgpt || !bool(d.chatgpt.named) || !d.gemini || !bool(d.gemini.named)) return 'ai needs chatgpt {named} and gemini {named}';
     if (!d.google_ai || typeof d.google_ai !== 'object' || !bool(d.google_ai.named)) return 'ai needs google_ai {named: true|false} (the AI fill job asks Google too)';
+    if (!optStr(d.question, 300)) return 'ai.question must be text (up to 300 characters)';
+    for (const e of ['chatgpt', 'gemini', 'google_ai']) {
+      if (d[e].correct != null && !bool(d[e].correct)) return e + '.correct must be true or false';
+      if (!optStr(d[e].note, 300)) return e + '.note must be text (up to 300 characters)';
+    }
     for (const e of ['chatgpt', 'gemini', 'google_ai']) if (d[e] && d[e].top != null && (!Array.isArray(d[e].top) || d[e].top.length > 5 || !d[e].top.every((x) => str(x, 120)))) return e + '.top must be a list of up to 5 names';
     if (d.screenshots != null && (!Array.isArray(d.screenshots) || d.screenshots.length > 3 || !d.screenshots.every((x) => x && ['chatgpt', 'gemini', 'google_ai'].includes(x.engine) && shotOk(x.url))))
       return 'screenshots: up to 3 of {engine: chatgpt|gemini|google_ai, url: https://getbookedoutsolutions.com/....png}';
@@ -1259,7 +1280,8 @@ async function fill(req, env) {
   // Screenshots: only ones hosted for THIS report through /shot (so the page never points at a missing or foreign image).
   if (b.section === 'ai' && Array.isArray(b.data.screenshots)) {
     for (const x of b.data.screenshots) {
-      if (x.url !== shotUrl(rec, x.engine) || !(await env.KV.get(`shot:${rec.id}:${x.engine}`)))
+      const st = await shotRead(env, rec.id, x.engine);
+      if (!st || x.url !== shotUrl(rec, x.engine, st.v))
         return json({ ok: false, error: `bad fill: screenshot for ${x.engine} is not hosted for this report (POST /api/free-report/shot first)` }, 400);
     }
   }
@@ -1276,7 +1298,13 @@ async function fill(req, env) {
 const SHOT_ENGINES = ['chatgpt', 'gemini', 'google_ai'];
 const SHOT_MAX = 1024 * 1024;
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-function shotUrl(rec, engine) { return `${SITE}/r/${rec.token}/ai-${engine}.png`; }
+// ?v= is the first 8 of the image's sha, so the page (and its hash) changes when the image changes.
+function shotUrl(rec, engine, v) { return `${SITE}/r/${rec.token}/ai-${engine}.png${v ? '?v=' + v : ''}`; }
+async function shotRead(env, id, engine) {
+  const raw = await env.KV.get(`shot:${id}:${engine}`);
+  if (!raw) return null;
+  try { const j = JSON.parse(raw); return j && typeof j.png === 'string' && /^[a-f0-9]{8}$/.test(j.v || '') ? j : null; } catch { return null; }
+}
 function pngBytes(b64) {
   if (typeof b64 !== 'string' || !b64.length || b64.length > Math.ceil(SHOT_MAX / 3) * 4 + 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return null;
   let bin; try { bin = atob(b64); } catch { return null; }
@@ -1293,12 +1321,22 @@ async function shot(req, env) {
   const rec = await getJ(env, 'req:' + b.id);
   if (!rec) return json({ ok: false, error: 'not found' }, 404);
   if (rec.status === 'sent') return json({ ok: false, error: 'already sent' }, 409);
-  await env.KV.put(`shot:${rec.id}:${b.engine}`, b.png, { expirationTtl: KEEP });
-  return json({ ok: true, id: rec.id, engine: b.engine, url: shotUrl(rec, b.engine) });
+  // A checked report is frozen: a new image would change what both checkers passed.
+  if (rec.status === 'checked') return json({ ok: false, error: 'report already checked; screenshots are frozen' }, 409);
+  const v = (await sha(b.png)).slice(0, 8);
+  const had = await shotRead(env, rec.id, b.engine);
+  if (had) {
+    // the same image again is fine (a re-run); a different one is refused (one screenshot per engine)
+    if (had.v === v) return json({ ok: true, id: rec.id, engine: b.engine, url: shotUrl(rec, b.engine, v), again: true });
+    return json({ ok: false, error: 'this engine already has a screenshot for this report' }, 409);
+  }
+  await env.KV.put(`shot:${rec.id}:${b.engine}`, JSON.stringify({ v, png: b.png }), { expirationTtl: KEEP });
+  return json({ ok: true, id: rec.id, engine: b.engine, url: shotUrl(rec, b.engine, v) });
 }
 async function shotGet(token, engine, env) {
   const id = await env.KV.get('tok:' + token);
-  const by = id ? pngBytes(await env.KV.get(`shot:${id}:${engine}`)) : null;
+  const st = id ? await shotRead(env, id, engine) : null;
+  const by = st ? pngBytes(st.png) : null;
   if (!by) return new Response('not found', { status: 404, headers: { 'x-robots-tag': 'noindex, nofollow', 'cache-control': 'no-store' } });
   return new Response(by, { status: 200, headers: { 'content-type': 'image/png', 'cache-control': 'private, max-age=300',
     'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff' } });
@@ -1379,6 +1417,8 @@ export default {
       if (m && req.method === 'GET') return await report(m[1], u, env);
       const ms = p.match(/^\/r\/([a-f0-9]{48})\/ai-(chatgpt|gemini|google_ai)\.png$/);
       if (ms && req.method === 'GET') return await shotGet(ms[1], ms[2], env);
+      // anything else under /r/ is not a page we serve
+      if (p.startsWith('/r/')) return new Response(GONE, { status: 404, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow' } });
       return new Response('Booked Out free report', { status: 200, headers: { 'x-robots-tag': 'noindex' } });
     } catch (e) {
       return json({ saved: false, error: 'server' }, 500);

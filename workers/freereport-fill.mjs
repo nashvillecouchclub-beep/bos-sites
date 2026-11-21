@@ -6,7 +6,7 @@
 //
 //   node workers/freereport-fill.mjs <fr-id> <data.json> [--dry-run] [--after-go-live]
 //     data.json = {"google": {...}, "ai": {...}, "known_for": {...}, ...}  (shapes in workers/DEPLOY.md)
-//     STATUS_KEY comes from the environment (never printed). FREEREPORT_BASE overrides https://getbookedoutsolutions.com.
+//     STATUS_KEY comes from the environment (never printed). FREEREPORT_BASE, if set, must be https://getbookedoutsolutions.com.
 //
 // It only talks to our own worker. It never contacts a business. The answer speed TEST (a real call or text to a shop) is
 // not built here and must not run before GO LIVE; this file refuses a real shop's tested speed result unless
@@ -14,6 +14,14 @@
 import W from './bookedout-freereport.js';
 
 const T = W._t;
+const reEsc = (x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// The only base address these jobs may talk to (FREEREPORT_BASE may not point anywhere else).
+export const SITE_BASE = 'https://getbookedoutsolutions.com';
+export function baseFromEnv(v) {
+  const b = (v == null || v === '' ? SITE_BASE : String(v)).replace(/\/+$/, '');
+  if (b !== SITE_BASE) throw new Error(`FREEREPORT_BASE must be ${SITE_BASE} (got ${b})`);
+  return b;
+}
 export const ORDER = ['google', 'reviews', 'ai', 'booking', 'category', 'speed', 'known_for', 'competitor', 'listings', 'spot'];
 
 // item: one entry from GET /api/free-report/review (id, test, trade, sections). Returns {fills, problems}.
@@ -32,7 +40,7 @@ export function prepareFills(item, data, opts = {}) {
     const why = T.fillProblem(rec, section, d);
     if (why) { problems.push(`${section}: ${why}`); continue; }
     // screenshots must be this report's own hosted images (POST /api/free-report/shot first; the worker checks the image is there)
-    if (section === 'ai' && Array.isArray(d.screenshots) && item.report && d.screenshots.some((x) => x.url !== `${item.report.replace(/\/$/, '')}/ai-${x.engine}.png`))
+    if (section === 'ai' && Array.isArray(d.screenshots) && item.report && d.screenshots.some((x) => !new RegExp(`^${reEsc(item.report.replace(/\/$/, ''))}/ai-${reEsc(x.engine)}\\.png\\?v=[a-f0-9]{8}$`).test(String(x.url))))
       { problems.push('ai: screenshots must be hosted for this report first (postShot)'); continue; }
     rec.sections[section] = d; // later sections (competitor) are checked against the google data in this same batch
     fills.push({ section, data: d });
@@ -72,7 +80,8 @@ export async function findItem({ base, key, id, fetch: f = fetch }) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [id, file] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
   const dry = process.argv.includes('--dry-run'), afterGoLive = process.argv.includes('--after-go-live');
-  const key = process.env.STATUS_KEY, base = process.env.FREEREPORT_BASE || 'https://getbookedoutsolutions.com';
+  const key = process.env.STATUS_KEY;
+  let base; try { base = baseFromEnv(process.env.FREEREPORT_BASE); } catch (e) { console.error(e.message); process.exit(2); }
   if (!id || !file || !key) { console.error('usage: STATUS_KEY=... node workers/freereport-fill.mjs <fr-id> <data.json> [--dry-run] [--after-go-live]'); process.exit(2); }
   const { readFileSync } = await import('node:fs');
   const data = JSON.parse(readFileSync(file, 'utf8'));

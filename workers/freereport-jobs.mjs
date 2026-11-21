@@ -103,7 +103,11 @@ export const JOBS = {
     }
     return { sites };
   },
-  spot(item, r, ctx) { return spotFor(item, ctx.locks || []); },
+  spot(item, r, ctx) {
+    const sp = spotFor(item, ctx.locks || []);
+    if (sp && sp.hold) { ctx.notes.push('spot held: ' + sp.hold); return null; }
+    return sp;
+  },
 };
 
 // Works out the fills one request still needs, in the door's order, applying each to a copy so later jobs see earlier
@@ -111,12 +115,16 @@ export const JOBS = {
 export function planFills(item, research = {}, { locks = [], shots = [] } = {}) {
   const rec = { ...item, sections: { ...(item.sections || {}) } };
   const data = {}, notes = [];
+  if (!research || typeof research !== 'object' || Array.isArray(research)) research = {};
   if (research && 'speed' in research) notes.push('research speed ignored: the answer speed result is always "not tested" until a method is picked');
   if (research && 'spot' in research) notes.push('research spot ignored: the spot comes from workers/data/zone-locks.json');
   for (const section of ORDER) {
     if (!pendingSections(rec).sections.includes(section)) continue;
-    const d = JOBS[section](item, research || {}, { rec, locks, shots });
+    const d = JOBS[section](item, research || {}, { rec, locks, shots, notes });
     if (!d) continue;
+    // the worker's own type and range rules, before anything is planned (the fill door checks again before posting)
+    const why = T.fillProblem(rec, section, d);
+    if (why) { notes.push(`research ${section} refused: ${why}`); continue; }
     data[section] = d;
     rec.sections[section] = d;
   }

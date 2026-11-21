@@ -5,8 +5,9 @@
 import W from './bookedout-freereport.js';
 import { prepareFills, findItem } from './freereport-fill.mjs';
 import { planFills, researchTemplate, pendingSections, SPEED_UNTESTED, JOBS } from './freereport-jobs.mjs';
-import { loadZoneLocks, checkLocks, spotFor, FILE } from './zone-locks.mjs';
-import { run, checker1, checker2 } from './freereport-checkers.mjs';
+import { loadZoneLocks, checkLocks, spotFor, townKey, realDate, FILE } from './zone-locks.mjs';
+import { run, checker1, checker2, args } from './freereport-checkers.mjs';
+import { baseFromEnv } from './freereport-fill.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -66,12 +67,31 @@ await test('Zone locks: a sold zone reads "taken" for that trade only; towns in 
   assert.deepEqual(spotFor({ trade: 'Plumbing', town: 'Murfreesboro TN' }, locks, '2026-11-21'), { zone: 'Murfreesboro', open: true }, 'an ended lock is open again');
   assert.deepEqual(spotFor({ trade: 'Heating and air', town: 'Smyrna TN' }, locks, '2026-10-15'), { zone: 'Smyrna', open: true }, 'not started yet');
 });
-await test('Zone locks: a bad list is an error, never a quiet "open"', () => {
+await test('Zone locks: a bad list is an error, never a quiet "open" (bad trades, unreal dates, fakes, overlaps incl. future ones)', () => {
   assert.throws(() => checkLocks({}), /locks/);
+  assert.throws(() => checkLocks({ locks: [null] }), /must be an object/);
   assert.throws(() => checkLocks({ locks: [{ trade: 'Roofing', zone: 'Smyrna', business_name: 'X', since: '2026-11-01' }] }), /trade/);
-  assert.throws(() => checkLocks({ locks: [{ trade: 'Plumbing', zone: 'Smyrna', business_name: 'X', since: 'Nov 1' }] }), /since/);
+  for (const bad of ['Nov 1', '2026-13-45', '2026-02-30', '2026-11-1'])
+    assert.throws(() => checkLocks({ locks: [{ trade: 'Plumbing', zone: 'Smyrna', business_name: 'X', since: bad }] }), /real date/, bad);
+  assert.throws(() => checkLocks({ locks: [{ trade: 'Plumbing', zone: 'Smyrna', business_name: 'X', since: '2026-05-01', until: '2026-04-01' }] }), /before since/);
   assert.throws(() => checkLocks({ locks: [{ trade: 'Plumbing', zone: 'Smyrna', business_name: 'Fake (TEST)', since: '2026-11-01' }] }), /fake/i);
-  assert.throws(() => checkLocks({ locks: [{ trade: 'Plumbing', zone: 'Smyrna', business_name: 'A', since: '2026-01-01' }, { trade: 'Plumbing', zone: 'Smyrna', business_name: 'B', since: '2026-02-01' }] }), /already locked/);
+  assert.throws(() => checkLocks({ locks: [{ trade: 'Plumbing', zone: '37167', business_name: 'X', since: '2026-11-01' }] }), /plain town name/);
+  const L = (...x) => ({ locks: x.map(([zone, business_name, since, until]) => ({ trade: 'Plumbing', zone, business_name, since, ...(until ? { until } : {}) })) });
+  assert.throws(() => checkLocks(L(['Smyrna', 'A', '2026-01-01'], ['Smyrna', 'B', '2026-02-01'])), /overlaps/);
+  // an ended lock in between does not hide a clash between the two open-ended ones (the attack: A, ended B, C)
+  assert.throws(() => checkLocks(L(['Smyrna', 'A', '2026-01-01'], ['Smyrna', 'B', '2025-01-01', '2025-06-01'], ['Smyrna', 'C', '2026-02-01'])), /locks\[2\].*overlaps the lock held by A/);
+  assert.throws(() => checkLocks(L(['Smyrna', 'A', '2027-01-01', '2027-12-31'], ['Smyrna, TN', 'B', '2027-06-01'])), /overlaps/, 'future locks, same town written two ways');
+  assert.equal(checkLocks(L(['Smyrna', 'A', '2025-01-01', '2025-12-31'], ['Smyrna', 'B', '2026-01-01'])).length, 2, 'back to back is fine');
+  assert.ok(realDate('2028-02-29') && !realDate('2027-02-29'));
+});
+await test('Zone locks: towns are read the same however they are typed (ZIP, full state name, punctuation); unreadable towns are held', () => {
+  const locks = checkLocks({ locks: [{ trade: 'Plumbing', zone: 'Smyrna', business_name: 'A', since: '2026-01-01' }] });
+  for (const town of ['Smyrna, Tennessee', 'Smyrna TN 37167', 'Smyrna, TN.', '  smyrna  ', 'SMYRNA tn 37167-1234'])
+    assert.deepEqual(spotFor({ trade: 'Plumbing', town }, locks, '2026-11-21'), { zone: 'Smyrna', open: false }, town);
+  assert.deepEqual(spotFor({ trade: 'Plumbing', town: 'Mt. Juliet, Tennessee' }, locks, '2026-11-21'), { zone: 'Mt. Juliet', open: true });
+  for (const town of ['37167', '<b>x</b>', 'Smyrna 2', ''])
+    assert.ok(spotFor({ trade: 'Plumbing', town }, locks, '2026-11-21').hold, JSON.stringify(town));
+  assert.equal(townKey('La Vergne, TN').key, 'la vergne');
 });
 await test('Open-spot line on the page: open zone shows "Your spot is open", a taken zone does not (the guarantee stays)', async () => {
   const { rec } = await built();
@@ -135,122 +155,232 @@ await test('planFills: "Something else" gets no spot; a missing listing site is 
   assert.deepEqual(p.missing, ['listings']);
 });
 
-// ---------- screenshot hosting ----------
-await test('Screenshots: hosted in KV for one report, served as a PNG on our domain, shown on the page; foreign or missing ones refused', async () => {
+// ---------- worker fill rules (item 5) ----------
+await test('Fill rules: reviews, category and ai text fields are type and size checked; junk never reaches a page', async () => {
+  const F = (sec, d) => T.fillProblem({ sections: {} }, sec, d);
+  const R = RESEARCH.reviews, C = RESEARCH.category, A = RESEARCH.ai;
+  assert.equal(F('reviews', R), ''); assert.equal(F('category', C), ''); assert.equal(F('ai', A), '');
+  for (const d of [{ ...R, newest_review: { ...R.newest_review, rating: 99 } }, { ...R, newest_review: { ...R.newest_review, text: { x: 1 } } },
+    { ...R, newest_review: { ...R.newest_review, date: 7 } }, { ...R, newest_review: { ...R.newest_review, text: 'a'.repeat(5001) } }, { ...R, owner_reply_on_newest: 'yes' }, { owner_reply_on_newest: true }])
+    assert.match(F('reviews', d), /reviews/, JSON.stringify(d).slice(0, 80));
+  for (const d of [{ main_category: { a: 1 }, big_job: [1, 2], match: 'yes' }, { main_category: 5, match: true }, { ...C, match: 'yes' }, { ...C, big_job: 'a'.repeat(121) }, { ...C, note: 'a'.repeat(301) }, { ...C, main_category: 'a'.repeat(121) }])
+    assert.match(F('category', d), /category/, JSON.stringify(d).slice(0, 80));
+  for (const d of [{ ...A, chatgpt: { named: false, note: 'a'.repeat(2000000) } }, { ...A, gemini: { named: true, correct: 'banana' } }, { ...A, question: { q: 1 } }, { ...A, google_ai: { named: false, note: 5 } }])
+    assert.ok(F('ai', d), JSON.stringify(d).slice(0, 80));
+  // and through the worker door
+  const { env, id } = await built();
+  const r = await local(env)(BASE + '/api/free-report/fill', { method: 'POST', body: JSON.stringify({ id, k: KEY, section: 'category', data: { main_category: { a: 1 }, match: true } }) });
+  assert.equal(r.status, 400);
+  assert.doesNotMatch(env.KV.m.get('rep:' + id), /\[object Object\]/);
+});
+
+// ---------- screenshot hosting (item 6) ----------
+await test('Screenshots: hosted in KV for one report, served as a PNG, URL carries the image sha; foreign, missing, swapped or late ones refused', async () => {
   const { env, id, rec } = await built();
   const f = local(env);
-  const up = (body) => f(BASE + '/api/free-report/shot', { method: 'POST', body: JSON.stringify({ id, k: KEY, ...body }) });
+  const up = (body, i = id) => f(BASE + '/api/free-report/shot', { method: 'POST', body: JSON.stringify({ id: i, k: KEY, ...body }) });
   assert.equal((await up({ engine: 'chatgpt', png: PNG.toString('base64'), k: 'nope' })).status, 403);
   assert.equal((await up({ engine: 'chatgpt', png: Buffer.from('GIF89a not a png at all').toString('base64') })).status, 400);
   assert.equal((await up({ engine: 'bing', png: PNG.toString('base64') })).status, 400);
   assert.equal((await up({ engine: 'chatgpt', png: Buffer.concat([PNG, Buffer.alloc(1024 * 1024)]).toString('base64') })).status, 400, 'over 1 MB');
   const j = await (await up({ engine: 'chatgpt', png: PNG.toString('base64') })).json();
-  assert.equal(j.url, `${BASE}/r/${rec().token}/ai-chatgpt.png`);
+  const v = (await T.sha(PNG.toString('base64'))).slice(0, 8);
+  assert.equal(j.url, `${BASE}/r/${rec().token}/ai-chatgpt.png?v=${v}`);
+  assert.equal((await up({ engine: 'chatgpt', png: PNG.toString('base64') })).status, 200, 'the same image again is fine');
+  const PNG2 = Buffer.concat([PNG, Buffer.from('another image')]);
+  assert.equal((await up({ engine: 'chatgpt', png: PNG2.toString('base64') })).status, 409, 'a different image for the same engine');
   const g = await f(j.url);
   assert.equal(g.status, 200); assert.equal(g.headers.get('content-type'), 'image/png');
   assert.deepEqual(Buffer.from(await g.arrayBuffer()), PNG);
   assert.equal((await f(`${BASE}/r/${rec().token}/ai-gemini.png`)).status, 404, 'not uploaded');
   assert.equal((await f(`${BASE}/r/${'b'.repeat(48)}/ai-chatgpt.png`)).status, 404, 'wrong token');
-  // fills
+  for (const u of [`/r/${rec().token}/ai-..%2frep.png`, `/r/${rec().token}/ai-bing.png`, `/r/${rec().token}/../rep`]) assert.equal((await f(BASE + u)).status, 404, u);
   const fillAi = (screenshots) => f(BASE + '/api/free-report/fill', { method: 'POST', body: JSON.stringify({ id, k: KEY, section: 'ai', data: { ...RESEARCH.ai, screenshots } }) });
-  assert.equal((await fillAi([{ engine: 'gemini', url: `${BASE}/r/${rec().token}/ai-gemini.png` }])).status, 400, 'not hosted');
+  assert.equal((await fillAi([{ engine: 'gemini', url: `${BASE}/r/${rec().token}/ai-gemini.png?v=${v}` }])).status, 400, 'not hosted');
+  assert.equal((await fillAi([{ engine: 'chatgpt', url: `${BASE}/r/${rec().token}/ai-chatgpt.png` }])).status, 400, 'no version');
+  assert.equal((await fillAi([{ engine: 'chatgpt', url: `${BASE}/r/${rec().token}/ai-chatgpt.png?v=00000000` }])).status, 400, 'wrong version');
   assert.equal((await fillAi([{ engine: 'chatgpt', url: `${BASE}/some/other.png` }])).status, 400, 'not this report');
+  // a shot hosted for another report can't be used here
+  const o = await built(); const oj = await (await local(o.env)(BASE + '/api/free-report/shot', { method: 'POST', body: JSON.stringify({ id: o.id, k: KEY, engine: 'gemini', png: PNG.toString('base64') }) })).json();
+  assert.equal((await local(o.env)(oj.url)).status, 200);
+  assert.equal((await fillAi([{ engine: 'gemini', url: oj.url }])).status, 400, 'another report');
   assert.equal((await fillAi([{ engine: 'chatgpt', url: j.url }])).status, 200);
-  assert.match(env.KV.m.get('rep:' + id), new RegExp(`<img src="${j.url.replace(/[.]/g, '\\.')}" alt="ChatGPT answer"`));
-  // the door refuses a screenshot that is not this report's own hosted URL before anything is posted
+  assert.ok(env.KV.m.get('rep:' + id).includes(`<img src="${j.url}" alt="ChatGPT answer"`));
   const item = await findItem({ base: BASE, key: KEY, id, fetch: f });
   assert.match(prepareFills(item, { ai: { ...RESEARCH.ai, screenshots: [{ engine: 'chatgpt', url: `${BASE}/elsewhere/x.png` }] } }).problems[0], /hosted for this report/);
+  // once checked, screenshots are frozen
+  const c = await built(); const cr = JSON.parse(c.env.KV.m.get('req:' + c.id)); cr.status = 'checked'; c.env.KV.m.set('req:' + c.id, JSON.stringify(cr));
+  assert.equal((await local(c.env)(BASE + '/api/free-report/shot', { method: 'POST', body: JSON.stringify({ id: c.id, k: KEY, engine: 'chatgpt', png: PNG.toString('base64') }) })).status, 409);
 });
 
 // ---------- the runner ----------
+const rdir = (id, rs) => { const d = mkdtempSync(join(tmpdir(), 'frc-')); if (rs !== undefined) writeFileSync(join(d, id + '.json'), typeof rs === 'string' ? rs : JSON.stringify(rs)); return d; };
+const withId = (id, rs = RESEARCH) => ({ id, ...rs });
+const steps = (r) => r.steps.map((s) => s.step + ' ' + (s.msg || '')).join('\n');
+const goodVerdicts = (id, hash, a = 'checker-1-sub-run9', b = 'checker-2-sub-run9') => ({ [id]: { 1: { agent: a, result: 'pass', hash }, 2: { agent: b, result: 'pass', hash } } });
+
 await test('Runner dry run (default): reads, plans and checks, but posts nothing at all', async () => {
   const { env, id, rec } = await built();
-  const dir = mkdtempSync(join(tmpdir(), 'frc-')); writeFileSync(join(dir, id + '.json'), JSON.stringify(RESEARCH));
   const spy = [], before = env.KV.m.get('req:' + id);
-  const r = await run({ base: BASE, key: KEY, fetch: local(env, spy), research: dir, locks: [], out: quiet, runId: 't1' });
+  const r = await run({ base: BASE, key: KEY, fetch: local(env, spy), research: rdir(id, withId(id)), locks: [], out: quiet, runId: 't1' });
   assert.equal(r.ok, true);
   assert.deepEqual(spy.filter((x) => x.method !== 'GET'), [], 'no POST in a dry run');
   assert.equal(env.KV.m.get('req:' + id), before, 'record untouched');
-  assert.deepEqual(r.summary, [{ id, result: 'would be checked' }]);
-  assert.ok(r.steps.some((s) => s.step === 'checker 1' && /pass/.test(s.msg)) && r.steps.some((s) => s.step === 'checker 2' && /pass/.test(s.msg)), r.steps.map((s) => s.step + ' ' + s.msg).join('\n'));
+  assert.equal(r.summary[0].result, 'waiting for verdicts', steps(r));
+  assert.ok(r.steps.some((s) => s.step === 'checker 1' && /pass/.test(s.msg)) && r.steps.some((s) => s.step === 'checker 2' && /pass/.test(s.msg)), steps(r));
   assert.ok(r.steps.every((s) => s.mode === 'dry-run'));
-  assert.equal(rec().status, 'built');
 });
-await test('Runner --apply: fills every section, both checkers pass, status "checked"; LIVE off sends nothing; log file has every step', async () => {
+await test('Runner: script checks alone NEVER post a pass; passes need two sub-agent verdicts on this exact hash (item 1)', async () => {
+  const { env, id, rec } = await built({ ...FAKE, business_name: 'Checker Run Heating', email: 'owner@checkerrun-heating.com' }, { LIVE: 'off', SEND_ROUTE: 'gmail' });
+  const dir = rdir(id, withId(id)), spy = [];
+  const r = await run({ base: BASE, key: KEY, fetch: local(env, spy), research: dir, locks: [], apply: true, out: quiet, runId: 'x1' });
+  assert.equal(r.summary[0].result, 'waiting for verdicts', steps(r));
+  assert.deepEqual(rec().checks || {}, {}, 'no marks at all'); assert.equal(rec().status, 'built'); assert.equal(rec().complete, true);
+  assert.equal(spy.filter((c) => /\/check$/.test(c.url)).length, 0);
+  // the attack: LIVE flips on afterwards; nothing was passed, so the cron has nothing to send
+  env.LIVE = 'on'; const out = [];
+  await T.tick(env, at('2026-11-20T15:00:00-06:00'), async (u) => { out.push(String(u)); return new Response('{}'); });
+  assert.deepEqual(out, []); assert.equal(rec().status, 'built');
+  env.LIVE = 'off';
+  // half verdicts (slot 1 only): still nothing posted
+  const h = rec().hash;
+  const r2 = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, verdicts: { [id]: { 1: { agent: 'sub1', result: 'pass', hash: h } } }, out: quiet, runId: 'x4' });
+  assert.match(steps(r2), /waiting for a sub-agent pass verdict from checker 2/); assert.deepEqual(rec().checks || {}, {});
+  // script-named sub-agents are not accepted
+  const r3 = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, verdicts: goodVerdicts(id, h, 'checker-1-script-x', 'checker-2-script-x'), out: quiet, runId: 'x5' });
+  assert.match(steps(r3), /not a script name/); assert.deepEqual(rec().checks || {}, {});
+  // two real verdicts on this hash: checked (LIVE off: not sent)
+  const r4 = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, verdicts: goodVerdicts(id, h), out: quiet, runId: 'x6' });
+  assert.deepEqual(r4.summary, [{ id, result: 'checked', sent: false }], steps(r4));
+  assert.equal(rec().checks['1'].agent, 'checker-1-sub-run9'); assert.equal(rec().checks['2'].agent, 'checker-2-sub-run9');
+  assert.match(rec().send_blocked || '', /LIVE/i);
+});
+await test('Runner: the same agent name in both slots is held and logged, never renamed (item 2)', async () => {
   const { env, id, rec } = await built();
-  const dir = mkdtempSync(join(tmpdir(), 'frc-'));
-  const shotFile = join(dir, 'chatgpt.png'); writeFileSync(shotFile, PNG);
-  writeFileSync(join(dir, id + '.json'), JSON.stringify({ ...RESEARCH, screenshots: { chatgpt: shotFile } }));
-  const spy = [], logFile = join(dir, 'log.jsonl');
-  const r = await run({ base: BASE, key: KEY, fetch: local(env, spy), research: dir, locks: [], apply: true, out: quiet, runId: 't2', logFile });
-  assert.deepEqual(r.summary, [{ id, result: 'checked', sent: false }], r.steps.map((s) => s.step + ' ' + (s.msg || '')).join('\n'));
-  const x = rec();
-  assert.equal(x.status, 'checked'); assert.equal(x.complete, true);
-  assert.equal(x.checks['1'].agent, 'checker-1-script-t2'); assert.equal(x.checks['2'].agent, 'checker-2-script-t2');
-  assert.equal(x.sections.ai.screenshots[0].url, `${BASE}/r/${x.token}/ai-chatgpt.png`);
-  assert.deepEqual(x.sections.speed, SPEED_UNTESTED);
-  assert.ok(spy.every((c) => c.url.startsWith(BASE + '/api/free-report/') || c.url.startsWith(BASE + '/r/')), 'only our own worker');
-  assert.ok(!spy.some((c) => /mark-sent/.test(c.url)));
-  const lines = readFileSync(logFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-  assert.ok(lines.length >= 10 && lines.some((l) => l.step === 'fill') && lines.some((l) => l.step === 'mark') && lines.at(-1).step === 'done');
-  // a second run finds nothing left to do for it
-  const r2 = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, out: quiet, runId: 't3' });
-  assert.deepEqual(r2.summary, [{ id, result: 'checked' }]);
+  const dir = rdir(id, withId(id));
+  await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, out: quiet, runId: 's1' });
+  const r = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, verdicts: goodVerdicts(id, rec().hash, 'same', 'same'), out: quiet, runId: 's2' });
+  assert.match(steps(r), /same agent/); assert.deepEqual(rec().checks || {}, {});
+  assert.ok(!steps(r).includes('same-b'));
+});
+await test('Runner: a verdict on an old version (hash) is ignored (item 3)', async () => {
+  const { env, id, rec } = await built();
+  const dir = rdir(id, withId(id));
+  const r = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, verdicts: goodVerdicts(id, 'e'.repeat(32)), out: quiet, runId: 'h1' });
+  assert.match(steps(r), /verdict read version eeeeeeeeeeee/); assert.deepEqual(rec().checks || {}, {});
+  const r2 = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, verdicts: { [id]: { 1: { agent: 'a1', result: 'pass' }, 2: { agent: 'a2', result: 'pass' } } }, out: quiet, runId: 'h2' });
+  assert.match(steps(r2), /verdict read version none/); assert.deepEqual(rec().checks || {}, {});
+});
+await test('Runner: stops without a clear LIVE answer; re-reads /ping before the checker 2 pass and holds while LIVE is on (item 4)', async () => {
+  const shop = { ...FAKE, business_name: 'Checker Run Heating', email: 'owner@checkerrun-heating.com' };
+  // /review without "live" (an old deploy): stop, nothing done
+  { const { env, id, rec } = await built(shop, { LIVE: 'on', SEND_ROUTE: 'gmail' }); const spy = [];
+    const f0 = local(env, spy);
+    const f = async (u, i) => { const r = await f0(u, i); if (/\/review\?/.test(u)) { const j = await r.json(); delete j.live; return new Response(JSON.stringify(j)); } return r; };
+    const r = await run({ base: BASE, key: KEY, fetch: f, research: rdir(id, withId(id)), locks: [], apply: true, out: quiet, runId: 'l1' });
+    assert.equal(r.ok, false); assert.equal(spy.filter((c) => c.method === 'POST').length, 0); assert.equal(rec().status, 'built'); }
+  // LIVE off when listed, flipped on before checker 2: ping catches it
+  { const { env, id, rec } = await built(shop, { LIVE: 'off', SEND_ROUTE: 'gmail' });
+    const dir = rdir(id, withId(id));
+    await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, out: quiet, runId: 'l2' });
+    const f0 = local(env), spy = [];
+    const f = async (u, i) => { spy.push(u); if (/\/check$/.test(u)) env.LIVE = 'on'; return f0(u, i); };
+    const r = await run({ base: BASE, key: KEY, fetch: f, research: dir, locks: [], apply: true, verdicts: goodVerdicts(id, rec().hash), out: quiet, runId: 'l3' });
+    assert.ok(spy.some((u) => /\/ping$/.test(u)), 'ping read before checker 2');
+    assert.match(steps(r), /LIVE is on/); assert.equal(rec().checks['1'].result, 'pass'); assert.equal(rec().checks['2'], undefined); assert.equal(rec().status, 'built'); }
+  // ping with no clear answer: hold
+  { const { env, id, rec } = await built(shop);
+    const dir = rdir(id, withId(id));
+    await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, out: quiet, runId: 'l4' });
+    const f0 = local(env); const f = async (u, i) => (/\/ping$/.test(u) ? new Response('{"ok":true}') : f0(u, i));
+    const r = await run({ base: BASE, key: KEY, fetch: f, research: dir, locks: [], apply: true, verdicts: goodVerdicts(id, rec().hash), out: quiet, runId: 'l5' });
+    assert.match(steps(r), /no clear LIVE answer/); assert.equal(rec().checks['2'], undefined); }
+});
+await test('Runner: junk research (type junk, huge text, "[object Object]") is refused or caught by checker 1 (item 5)', async () => {
+  for (const patch of [{ category: { main_category: { a: 1 }, big_job: [1, 2], match: 'yes' } }, { reviews: { newest_review: { rating: 99, text: 'x', date: 'x' }, owner_reply_on_newest: false } },
+    { ai: { ...RESEARCH.ai, chatgpt: { named: false, note: 'a'.repeat(3000000) } } }, { reviews: { newest_review: { rating: 5, text: { x: 1 }, date: 7 }, owner_reply_on_newest: true } }]) {
+    const { env, id, rec } = await built();
+    const r = await run({ base: BASE, key: KEY, fetch: local(env), research: rdir(id, withId(id, { ...RESEARCH, ...patch })), locks: [], apply: true, out: quiet, runId: 'j' });
+    assert.equal(r.summary[0].result, 'needs research', steps(r));
+    assert.match(steps(r), /refused/);
+    const h = env.KV.m.get('rep:' + id) || '';
+    assert.doesNotMatch(h, /\[object Object\]|99 stars/); assert.ok(h.length < 150000);
+  }
+  // checker 1 on a page that somehow carries junk
+  const { rec } = await built();
+  const item = { ...rec(), sections: { ...planFills(rec(), RESEARCH, { locks: [] }).data } };
+  const html = T.renderReport(item).html;
+  for (const junk of ['[object Object]', 'undefined', 'NaN', 'x'.repeat(200000)])
+    assert.ok((await checker1(item, html.replace('</main>', junk + '</main>'))).problems.some((p) => /bad data|over the/.test(p)), junk.slice(0, 20));
+});
+await test('Runner: a research file for another id, or not an object, is skipped (item 10)', async () => {
+  for (const rs of ['<html>nope', '[1,2]', 'null', JSON.stringify({ ...RESEARCH, id: 'fr-20990101-zzzzzz' }), JSON.stringify(RESEARCH)]) {
+    const { env, id, rec } = await built();
+    const r = await run({ base: BASE, key: KEY, fetch: local(env), research: rdir(id, rs), locks: [], apply: true, out: quiet, runId: 'i' });
+    assert.equal(r.summary[0].result, 'needs research', rs.slice(0, 30));
+    assert.equal(rec().sections.google, undefined, 'nothing from that file was used');
+  }
+});
+await test('Runner options: values must not be another option; --only needs a real id; FREEREPORT_BASE only our site (items 11, 12)', async () => {
+  assert.throws(() => args(['--only', '--apply']), /needs a value/);
+  assert.throws(() => args(['--only']), /needs a value/);
+  assert.throws(() => args(['--only', 'abc']), /request id/);
+  assert.throws(() => args(['--research', '--templates']), /needs a value/);
+  assert.equal(args(['--only', 'fr-20261121-abc123', '--apply']).only, 'fr-20261121-abc123');
+  assert.equal(baseFromEnv(undefined), BASE); assert.equal(baseFromEnv(''), BASE); assert.equal(baseFromEnv(BASE + '/'), BASE);
+  for (const b of ['https://evil.example', 'http://getbookedoutsolutions.com', 'https://getbookedoutsolutions.com.evil.example', 'https://bookedout-freereport.rickey-38a.workers.dev'])
+    assert.throws(() => baseFromEnv(b), /FREEREPORT_BASE/, b);
+  await assert.rejects(() => run({ base: 'https://evil.example', key: KEY, fetch: async () => { throw new Error('called'); }, locks: [], out: quiet }), /base must be/);
 });
 await test('Runner --apply with no research: fills speed and spot only, waits, and --templates writes the research file', async () => {
   const { env, id, rec } = await built();
-  const dir = mkdtempSync(join(tmpdir(), 'frc-'));
+  const dir = rdir(id);
   const r = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, templates: true, out: quiet, runId: 't4' });
   assert.equal(r.summary[0].result, 'needs research');
   assert.deepEqual(rec().sections.speed, SPEED_UNTESTED); assert.deepEqual(rec().sections.spot, { zone: 'Smyrna', open: true });
   assert.deepEqual(rec().checks || {}, {}, 'no check marks on an incomplete report');
-  assert.ok(existsSync(join(dir, id + '.json')));
-  assert.equal(JSON.parse(readFileSync(join(dir, id + '.json'), 'utf8')).id, id);
+  assert.equal(JSON.parse(readFileSync(join(dir, id + '.json'), 'utf8')).id, id, 'the template carries the id, so it is accepted once filled');
 });
-await test('Runner: a REAL shop with LIVE off is checked but never sent; with LIVE on the checker 2 pass is held back without --allow-send', async () => {
-  const shop = { ...FAKE, business_name: 'Checker Run Heating', email: 'owner@checkerrun-heating.com' };
-  for (const live of ['off', 'on']) {
-    const { env, id, rec } = await built(shop, { LIVE: live, SEND_ROUTE: 'gmail' });
-    const dir = mkdtempSync(join(tmpdir(), 'frc-')); writeFileSync(join(dir, id + '.json'), JSON.stringify(RESEARCH));
-    const spy = [];
-    const r = await run({ base: BASE, key: KEY, fetch: local(env, spy), research: dir, locks: [], apply: true, out: quiet, runId: 'r' + live });
-    const marks = spy.filter((c) => /\/check$/.test(c.url)).map((c) => JSON.parse(c.body).checker);
-    if (live === 'off') {
-      assert.deepEqual(marks, [1, 2]); assert.equal(rec().status, 'checked'); assert.equal(r.summary[0].sent, false);
-      assert.match(rec().send_blocked || '', /LIVE/i);
-    } else {
-      assert.deepEqual(marks, [1], 'checker 2 not posted while LIVE is on');
-      assert.match(r.summary[0].result, /LIVE on/); assert.equal(rec().status, 'built');
-    }
-  }
-});
-await test('Runner: a script fail holds the report (fail mark + watch entry); the next run skips it until the data is fixed', async () => {
+await test('Runner --apply full path with screenshots: fills, waits for verdicts, then checked; LIVE off sends nothing; log has every step', async () => {
   const { env, id, rec } = await built();
-  const dir = mkdtempSync(join(tmpdir(), 'frc-'));
-  // a reviewer's private note copied into the category note: checker 2 must catch it
-  writeFileSync(join(dir, id + '.json'), JSON.stringify({ ...RESEARCH, category: { ...RESEARCH.category, note: FAKE.note } }));
+  const dir = rdir(id);
+  const shotFile = join(dir, 'chatgpt.png'); writeFileSync(shotFile, PNG);
+  writeFileSync(join(dir, id + '.json'), JSON.stringify(withId(id, { ...RESEARCH, screenshots: { chatgpt: shotFile } })));
+  const spy = [], logFile = join(dir, 'log.jsonl');
+  const r1 = await run({ base: BASE, key: KEY, fetch: local(env, spy), research: dir, locks: [], apply: true, out: quiet, runId: 'p1', logFile });
+  assert.equal(r1.summary[0].result, 'waiting for verdicts', steps(r1));
+  const x = rec();
+  assert.match(x.sections.ai.screenshots[0].url, new RegExp(`^${BASE}/r/${x.token}/ai-chatgpt\\.png\\?v=[a-f0-9]{8}$`));
+  assert.deepEqual(x.sections.speed, SPEED_UNTESTED);
+  const r2 = await run({ base: BASE, key: KEY, fetch: local(env, spy), research: dir, locks: [], apply: true, verdicts: goodVerdicts(id, x.hash), out: quiet, runId: 'p2', logFile });
+  assert.deepEqual(r2.summary, [{ id, result: 'checked', sent: false }], steps(r2));
+  assert.equal(rec().status, 'checked');
+  assert.ok(spy.every((c) => c.url.startsWith(BASE + '/api/free-report/') || c.url.startsWith(BASE + '/r/')), 'only our own worker');
+  assert.ok(!spy.some((c) => /mark-sent/.test(c.url)));
+  const lines = readFileSync(logFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.ok(lines.length >= 10 && lines.some((l) => l.step === 'fill') && lines.some((l) => l.step === 'mark') && lines.at(-1).step === 'done');
+  const r3 = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, out: quiet, runId: 'p3' });
+  assert.deepEqual(r3.summary, [{ id, result: 'checked' }]);
+});
+await test('Runner: a script fail is posted (fail mark + watch entry) even with sub-agent passes; the next run skips it until fixed', async () => {
+  const { env, id, rec } = await built();
+  // the owner's private note copied into the category note: checker 2 must catch it
+  const dir = rdir(id, withId(id, { ...RESEARCH, category: { ...RESEARCH.category, note: FAKE.note } }));
   const r = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, out: quiet, runId: 't5' });
-  assert.equal(rec().status, 'held', r.steps.map((s) => s.step + ' ' + (s.msg || '')).join('\n'));
+  assert.equal(rec().status, 'held', steps(r));
   assert.ok(r.steps.some((s) => s.step === 'checker 2' && /private note/.test(s.msg)));
+  assert.equal(rec().checks['2'].result, 'fail'); assert.match(rec().checks['2'].agent, /script/);
   assert.ok([...env.KV.m.keys()].some((k) => k.startsWith('watch:')));
-  const r2 = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, out: quiet, runId: 't6' });
+  const r2 = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, verdicts: goodVerdicts(id, rec().hash), out: quiet, runId: 't6' });
   assert.equal(r2.summary[0].result, 'held, fix first');
 });
-await test('Runner --verdicts: a sub-agent fail is posted with its own name; a script fail always wins over a sub-agent pass', async () => {
+await test('Runner --verdicts: a sub-agent fail on this hash is posted with its own name', async () => {
   const { env, id, rec } = await built();
-  const dir = mkdtempSync(join(tmpdir(), 'frc-')); writeFileSync(join(dir, id + '.json'), JSON.stringify(RESEARCH));
-  const verdicts = { [id]: { 1: { agent: 'checker-1-run77', result: 'fail', notes: 'rank looks wrong on the live listing' } } };
-  await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, verdicts, out: quiet, runId: 't7' });
+  const dir = rdir(id, withId(id));
+  await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, out: quiet, runId: 't7' });
+  const verdicts = { [id]: { 1: { agent: 'checker-1-run77', result: 'fail', hash: rec().hash, notes: 'rank looks wrong on the live listing' } } };
+  await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, verdicts, out: quiet, runId: 't8' });
   assert.equal(rec().status, 'held'); assert.equal(rec().checks['1'].agent, 'checker-1-run77'); assert.match(rec().checks['1'].notes, /rank looks wrong/);
-  // script fail (private note on the page) + sub-agent pass for checker 2: the fail is posted
-  const b = await built();
-  const dir2 = mkdtempSync(join(tmpdir(), 'frc-'));
-  writeFileSync(join(dir2, b.id + '.json'), JSON.stringify({ ...RESEARCH, category: { ...RESEARCH.category, note: FAKE.note } }));
-  const v2 = { [b.id]: { 1: { agent: 'checker-1-run78', result: 'pass' }, 2: { agent: 'checker-2-run78', result: 'pass' } } };
-  await run({ base: BASE, key: KEY, fetch: local(b.env), research: dir2, locks: [], apply: true, verdicts: v2, out: quiet, runId: 't8' });
-  const y = b.rec();
-  assert.equal(y.status, 'held'); assert.equal(y.checks['1'].agent, 'checker-1-run78'); assert.equal(y.checks['2'].result, 'fail');
-  assert.equal(y.checks['2'].agent, 'checker-2-run78'); assert.match(y.checks['2'].notes, /private note/);
 });
 await test('Checkers catch wording and fact problems on a page', async () => {
   const { rec } = await built();
@@ -261,8 +391,7 @@ await test('Checkers catch wording and fact problems on a page', async () => {
   const p2 = checker2(item, bad).problems.join(' | ');
   for (const re of [/locked wording/, /long dash/, /emoji/, /tools/, /promises/]) assert.match(p2, re);
   assert.match((await checker1(item, bad)).problems.join(' | '), /not what the current code renders/);
-  const wrongRank = r.html.replace('Number 9', 'Number 2');
-  assert.match(checker2(item, wrongRank).problems.join(' | '), /rank on the page/);
+  assert.match(checker2(item, r.html.replace('Number 9', 'Number 2')).problems.join(' | '), /rank on the page/);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

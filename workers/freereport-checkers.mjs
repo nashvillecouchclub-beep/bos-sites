@@ -16,15 +16,15 @@
 //   3. check 2  wording, rules and risk (the checker 2 list), then checker 1's rank and review gap again.
 //   4. mark   POST /api/free-report/check for checker 1, then checker 2 (different agent names). Two passes on the same
 //             version = status "checked".
-// --verdicts FILE: {"fr-...": {"1": {"agent","result","notes"}, "2": {...}}} from the live chat's two checker sub-agents.
-//   A script fail always wins; otherwise the sub-agent's verdict and agent name are posted. Without it the script checks
-//   alone decide, as agents "checker-<slot>-script-<run id>".
-//
-// Never sends: it never calls mark-sent or any send route. While LIVE is off the worker sends nothing. If the review list
-// says LIVE is on, a checker 2 pass would make the worker send right away, so that mark is only posted with --allow-send.
+// --verdicts FILE: {"fr-...": {"1": {"agent","result","notes","hash"}, "2": {...}}} from the live chat's two checker sub-agents.
+//   The script checks may only post FAILS. A pass is posted only when BOTH slots have a sub-agent "pass" with a non-script agent
+//   name and hash = the report's current hash; the same name in both slots is held. A script fail always wins.
+// Never sends: it never calls mark-sent or any send route. While LIVE is off the worker sends nothing. It stops unless the
+// review list says LIVE is true or false, and re-reads /ping right before each checker 2 pass (which would make the worker send
+// at once when LIVE is on): on or unclear = held unless --allow-send. Base address: https://getbookedoutsolutions.com only.
 // It never contacts a business and never asks Rickey for anything.
 import W from './bookedout-freereport.js';
-import { prepareFills, postFills, postShot, findItem } from './freereport-fill.mjs';
+import { prepareFills, postFills, postShot, findItem, baseFromEnv } from './freereport-fill.mjs';
 import { planFills, researchTemplate, SPEED_REASON } from './freereport-jobs.mjs';
 import { loadZoneLocks } from './zone-locks.mjs';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from 'node:fs';
@@ -40,6 +40,7 @@ const LOCKED = [
   'Start your free 30 days',
   'Nothing is charged for 30 days. Cancel any time with one reply.',
 ];
+const MAX_PAGE = 150000; // a full real report is about 11 KB; anything near this size means oversized data got in
 const TERMS_LINES = ['Once your first paid month starts', 'We never promise jobs, revenue or a spot on Google.', 'There are no guarantees during a free period, because nothing is being charged.'];
 
 // ---------- checker 1: facts and data ----------
@@ -51,7 +52,14 @@ export async function checker1(item, html) {
   if (!local.complete || local.pending.length || !item.complete || (item.pending || []).length) p.push('pending sections: ' + (local.pending.join(', ') || (item.pending || []).join(', ')));
   if (/Pending check\./.test(html)) p.push('the page still says "Pending check"');
   const s = item.sections || {}, g = s.google, v = text(html);
-  for (const [k, d] of Object.entries(s)) { if (k === 'reviews') continue; const why = T.fillProblem(item, k, d); if (why) p.push(`${k}: ${why}`); }
+  for (const [k, d] of Object.entries(s)) {
+    // the worker's own lookup saves google and reviews with extra keys (task, tries); the rules are the same
+    if (k === 'reviews' && d && d.task && !d.newest_review) { p.push('reviews: the review lookup has not answered yet'); continue; }
+    const why = T.fillProblem(item, k, d); if (why) p.push(`${k}: ${why}`);
+  }
+  const junk = html.match(/\[object Object\]|\bundefined\b|\bNaN\b/);
+  if (junk) p.push(`the page contains "${junk[0]}" (bad data reached the page)`);
+  if (html.length > MAX_PAGE) p.push(`the page is ${html.length} characters, over the ${MAX_PAGE} limit (something oversized got in)`);
   if (s.speed && !(s.speed.tested === false || item.test)) p.push('speed: a tested result on a real report (no speed test is run before GO LIVE)');
   for (const [k, label] of [['business_name', 'business name'], ['town', 'town']]) if (!v.includes(text(T.plain(item[k])))) p.push(`the ${label} "${item[k]}" is not on the page as written on the form`);
   const bl = T.budgetLine(item.revenue);
@@ -100,7 +108,7 @@ export function checker2(item, html) {
 }
 
 // ---------- the run ----------
-function args(argv) {
+export function args(argv) {
   const o = { apply: false, allowSend: false, templates: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -108,7 +116,12 @@ function args(argv) {
     else if (a === '--dry-run') o.apply = false;
     else if (a === '--allow-send') o.allowSend = true;
     else if (a === '--templates') o.templates = true;
-    else if (['--only', '--research', '--verdicts', '--log', '--locks'].includes(a)) o[a.slice(2)] = argv[++i];
+    else if (['--only', '--research', '--verdicts', '--log', '--locks'].includes(a)) {
+      const val = argv[++i];
+      if (val == null || val === '' || val.startsWith('--')) throw new Error(`${a} needs a value`);
+      if (a === '--only' && !/^fr-[0-9]{8}-[a-z0-9]{6}$/.test(val)) throw new Error('--only needs a request id like fr-20261121-abc123');
+      o[a.slice(2)] = val;
+    }
     else throw new Error('unknown option ' + a);
   }
   return o;
@@ -126,12 +139,14 @@ export async function run(opts) {
     if (logFile) { mkdirSync(dirname(logFile), { recursive: true }); appendFileSync(logFile, JSON.stringify(e) + '\n'); }
   };
   if (!key) throw new Error('STATUS_KEY is needed');
+  if (base !== SITE && !opts.testMock) throw new Error(`base must be ${SITE}`);
   const locks = locksIn || loadZoneLocks();
   log('start', { msg: `zone locks: ${locks.length}; research: ${research}; speed result: not tested ("${SPEED_REASON}")` });
   const r0 = await f(`${base}/api/free-report/review?k=${encodeURIComponent(key)}`);
   if (!r0.ok) { log('stop', { msg: 'review list ' + r0.status }); return { ok: false, steps }; }
-  const list = await r0.json();
-  const live = !!list.live;
+  const list = await r0.json().catch(() => null);
+  if (!list || typeof list.live !== 'boolean' || !Array.isArray(list.waiting)) { log('stop', { msg: 'the review list gave no clear LIVE answer (old deploy?); nothing done' }); return { ok: false, steps }; }
+  const live = list.live;
   log('list', { msg: `${list.count} waiting; LIVE is ${live ? 'ON' : 'off'}` });
   const summary = [];
   for (let item of list.waiting || []) {
@@ -148,7 +163,12 @@ export async function run(opts) {
     if (item.needs === 'fill pending sections first') {
       const file = join(research, item.id + '.json');
       let rs = {};
-      if (existsSync(file)) { try { rs = JSON.parse(readFileSync(file, 'utf8')); log('research', { id: item.id, msg: 'read ' + file }); } catch (e) { log('research', { id: item.id, msg: 'unreadable ' + file + ': ' + e.message }); rs = {}; } }
+      if (existsSync(file)) {
+        try { rs = JSON.parse(readFileSync(file, 'utf8')); } catch (e) { log('research', { id: item.id, msg: 'unreadable ' + file + ': ' + e.message }); rs = {}; }
+        if (!rs || typeof rs !== 'object' || Array.isArray(rs)) { log('research', { id: item.id, msg: 'skipped ' + file + ': not a research object' }); rs = {}; }
+        else if (rs.id !== item.id) { log('research', { id: item.id, msg: `skipped ${file}: its id is ${JSON.stringify(rs.id)}, not this report` }); rs = {}; }
+        else log('research', { id: item.id, msg: 'read ' + file });
+      }
       else log('research', { id: item.id, msg: 'no research file yet (' + file + ')' });
       // screenshots: host them first (apply), or check the files and use the URL they will get (dry run)
       const shots = [];
@@ -156,7 +176,7 @@ export async function run(opts) {
         if (!path || !T.SHOT_ENGINES.includes(engine)) continue;
         let png; try { png = readFileSync(path).toString('base64'); } catch (e) { log('shot', { id: item.id, msg: `${engine}: cannot read ${path}` }); continue; }
         if (!T.pngBytes(png)) { log('shot', { id: item.id, msg: `${engine}: not a PNG of 1 MB or less, left out` }); continue; }
-        const url = `${item.report.replace(/\/$/, '')}/ai-${engine}.png`;
+        const url = `${item.report.replace(/\/$/, '')}/ai-${engine}.png?v=${(await T.sha(png)).slice(0, 8)}`;
         if (!apply) { shots.push({ engine, url }); log('shot', { id: item.id, msg: `${engine}: would host ${path}` }); continue; }
         const h = await postShot({ base, key, id: item.id, engine, png, fetch: f });
         log('shot', { id: item.id, msg: `${engine}: ${h.ok ? 'hosted ' + h.url : 'refused ' + h.status + ' ' + (h.error || '')}` });
@@ -201,39 +221,72 @@ export async function run(opts) {
     const c1 = await checker1(target, html), c2 = checker2(target, html);
     log('checker 1', { id: item.id, msg: c1.pass ? 'pass' : 'FAIL: ' + c1.problems.join(' | ') });
     log('checker 2', { id: item.id, msg: c2.pass ? 'pass' : 'FAIL: ' + c2.problems.join(' | ') });
-    // 4. marks
+    // 4. marks. The script may only post FAILS. A pass is posted only from a sub-agent verdict that says pass, names a
+    // non-script agent, and read this exact version (hash). Both slots need one before any pass is posted.
     const v = (verdicts && verdicts[item.id]) || {};
-    const mark = (slot, c) => {
+    const have1 = !!(item.checks && item.checks['1'] && item.checks['1'].result === 'pass' && item.checks['1'].hash === target.hash);
+    const verdict = (slot) => {
       const sub = v[slot];
-      if (!c.pass) return { result: 'fail', agent: (sub && sub.agent) || `checker-${slot}-script-${runId}`, notes: c.problems.join(' | ').slice(0, 1900) };
-      if (sub && ['pass', 'fail'].includes(sub.result) && sub.agent) return { result: sub.result, agent: String(sub.agent), notes: String(sub.notes || '') };
-      return { result: 'pass', agent: `checker-${slot}-script-${runId}`, notes: 'script checks passed' };
+      if (!sub) return { state: 'missing' };
+      if (!['pass', 'fail'].includes(sub.result)) return { state: 'bad', why: `checker ${slot} verdict has no pass/fail result` };
+      const agent = String(sub.agent || '').trim();
+      if (!agent || /script/i.test(agent)) return { state: 'bad', why: `checker ${slot} verdict needs a real sub-agent name (not a script name)` };
+      if (sub.hash !== target.hash) return { state: 'bad', why: `checker ${slot} verdict read version ${String(sub.hash || 'none').slice(0, 12)}, the report is now ${target.hash.slice(0, 12)}; read it again` };
+      return { state: 'ok', result: sub.result, agent: agent.slice(0, 80), notes: String(sub.notes || '').slice(0, 1900) };
     };
-    const m1 = mark('1', c1), m2 = mark('2', c2);
-    if (m1.agent === m2.agent) m2.agent += '-b';
+    const v1 = verdict('1'), v2 = verdict('2');
+    for (const x of [v1, v2]) if (x.state === 'bad') log('verdict', { id: item.id, msg: 'ignored: ' + x.why });
+    const marks = []; // [slot, {result, agent, notes}]
+    const scriptFail = (slot, c) => ({ result: 'fail', agent: `checker-${slot}-script-${runId}`, notes: c.problems.join(' | ').slice(0, 1900) });
+    let hold = '';
+    const ok = (x, r) => x.state === 'ok' && x.result === r;
+    if (!c1.pass) marks.push(['1', scriptFail('1', c1)]);               // a script fail always wins
+    else if (!c2.pass) marks.push(['2', scriptFail('2', c2)]);
+    else if (!have1 && ok(v1, 'fail')) marks.push(['1', v1]);           // a sub-agent fail is posted with its own name
+    else if (ok(v2, 'fail')) marks.push(['2', v2]);
+    else {
+      const need = [];
+      if (!have1 && !ok(v1, 'pass')) need.push('checker 1');
+      if (!ok(v2, 'pass')) need.push('checker 2');
+      const first = have1 ? item.checks['1'].agent : v1.agent;
+      if (need.length) hold = `script checks passed; waiting for a sub-agent pass verdict from ${need.join(' and ')} on version ${target.hash} (--verdicts)`;
+      else if (first === v2.agent) hold = `checker 1 and checker 2 name the same agent (${v2.agent}); they must be two different agents`;
+      else { if (!have1) marks.push(['1', v1]); marks.push(['2', v2]); }
+    }
+    // a fail and a pass from the same agent name in both slots is refused by the worker too; hold instead of renaming
+    if (!hold && marks.length === 2 && marks[0][1].agent === marks[1][1].agent) { hold = `the same agent name in both slots (${marks[0][1].agent})`; marks.length = 0; }
+    if (hold) {
+      log('hold', { id: item.id, msg: hold });
+      summary.push({ id: item.id, result: 'waiting for verdicts', hash: target.hash });
+      continue;
+    }
     if (!apply) {
-      log('would mark', { id: item.id, msg: `checker 1 ${m1.result} (${m1.agent}); checker 2 ${m1.result === 'pass' ? m2.result : 'not reached'} (${m2.agent})` });
-      summary.push({ id: item.id, result: m1.result === 'pass' && m2.result === 'pass' ? 'would be checked' : 'would be held' });
+      log('would mark', { id: item.id, msg: marks.map(([s, m]) => `checker ${s} ${m.result} (${m.agent})`).join('; ') });
+      summary.push({ id: item.id, result: marks.some(([, m]) => m.result === 'fail') ? 'would be held' : 'would be checked' });
       continue;
     }
     const post = async (slot, m) => {
       const r = await f(`${base}/api/free-report/check`, { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ id: item.id, k: key, checker: +slot, agent: m.agent, result: m.result, hash: item.hash, notes: m.notes }) });
       const j = await r.json().catch(() => ({}));
-      log('mark', { id: item.id, msg: `checker ${slot} ${m.result}: ${r.status} ${j.status || j.error || ''}${j.sent ? ' SENT' : ''}` });
+      log('mark', { id: item.id, msg: `checker ${slot} ${m.result} (${m.agent}): ${r.status} ${j.status || j.error || ''}${j.sent ? ' SENT' : ''}` });
       return { ok: r.ok, ...j };
     };
-    const have1 = item.checks && item.checks['1'] && item.checks['1'].result === 'pass' && item.checks['1'].hash === item.hash;
-    let r1 = { ok: true, status: item.status };
-    if (!have1) r1 = await post('1', m1);
-    if (!r1.ok || m1.result !== 'pass') { summary.push({ id: item.id, result: 'held (checker 1)' }); continue; }
-    if (m2.result === 'pass' && live && !allowSend && !item.test) {
-      log('skip', { id: item.id, msg: 'LIVE is on: a checker 2 pass would send this report now. Not posted (run with --allow-send to let it go).' });
-      summary.push({ id: item.id, result: 'checker 1 passed; checker 2 waiting (LIVE on)' });
-      continue;
+    let last = { ok: true, status: item.status }, stopped = '';
+    for (const [slot, m] of marks) {
+      if (slot === '2' && m.result === 'pass') {
+        // re-read LIVE right before the one mark that can make the worker send
+        const pg = await f(`${base}/api/free-report/ping`);
+        const pj = pg.ok ? await pg.json().catch(() => ({})) : {};
+        if (typeof pj.live !== 'boolean') { stopped = 'ping gave no clear LIVE answer; checker 2 pass not posted'; break; }
+        if (pj.live && !allowSend) { stopped = 'LIVE is on: a checker 2 pass would send this report now. Not posted (run with --allow-send to let it go).'; break; }
+      }
+      last = await post(slot, m);
+      if (!last.ok || m.result === 'fail') break;
     }
-    const r2 = await post('2', m2);
-    summary.push({ id: item.id, result: r2.ok && r2.status === 'checked' ? 'checked' : r2.ok ? r2.status : 'mark refused', sent: !!r2.sent });
+    if (stopped) { log('hold', { id: item.id, msg: stopped }); summary.push({ id: item.id, result: 'checker 2 waiting (LIVE on or unknown)' }); continue; }
+    const failedMark = marks.find(([, m]) => m.result === 'fail');
+    summary.push({ id: item.id, result: !last.ok ? 'mark refused' : failedMark ? `held (checker ${failedMark[0]})` : last.status === 'checked' ? 'checked' : last.status, sent: !!last.sent });
   }
   log('done', { msg: summary.map((x) => `${x.id} ${x.result}`).join('; ') || 'nothing waiting' });
   return { ok: true, live, summary, steps };
@@ -247,7 +300,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const logFile = o.log || join(homedir(), '.bookedout', 'logs', `freereport-checkers-${new Date().toISOString().slice(0, 10)}.jsonl`);
   const verdicts = o.verdicts ? JSON.parse(readFileSync(o.verdicts, 'utf8')) : null;
   const locks = o.locks ? loadZoneLocks(o.locks) : undefined;
-  const r = await run({ base: process.env.FREEREPORT_BASE || SITE, key, apply: o.apply, allowSend: o.allowSend, only: o.only, templates: o.templates,
+  let base; try { base = baseFromEnv(process.env.FREEREPORT_BASE); } catch (e) { console.error(e.message); process.exit(2); }
+  const r = await run({ base, key, apply: o.apply, allowSend: o.allowSend, only: o.only, templates: o.templates,
     research: o.research, verdicts, locks, logFile });
   process.exit(r.ok ? 0 : 1);
 }

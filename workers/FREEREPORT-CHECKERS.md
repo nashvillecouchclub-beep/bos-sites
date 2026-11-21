@@ -83,7 +83,8 @@ Until the scheduled task exists, a live chat runs `workers/freereport-checkers.m
 can (answer speed is always "not tested"; the spot comes from `workers/data/zone-locks.json`; the rest from the research file the
 chat gathers from public pages), runs the checker 1 and checker 2 lists above as script checks, and posts both marks. For the two
 separate Claude checkers, the chat starts two sub-agents (checker 2 never sees checker 1's notes) and passes their verdicts with
-`--verdicts`; a script fail always wins. Details: DEPLOY.md, "The Free report checkers runner".
+`--verdicts`, each with the `hash` it read. The script checks can only fail a report; a pass needs both sub-agents' pass verdicts on
+the current hash, under two different agent names. A script fail always wins. Details: DEPLOY.md, "The Free report checkers runner".
 
 ## Timing (scheduled task, created only when GO LIVE is near)
 - One cloud scheduled task, "Free report checkers", runs every hour from 7 am to 7 pm Central on weekdays, plus once at

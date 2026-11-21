@@ -54,6 +54,9 @@ Endpoints for later jobs (all need `k` = STATUS_KEY):
   - Nov 20 additions (item 215, item 211, Nov 19 diagnosis). Section names: `speed|known_for|competitor|listings|spot`, and `ai` grew.
     A fill that breaks these shapes is refused with 400 and changes nothing. Every one of them is required: the report stays
     "fill pending sections first" (checkers get 409 on a pass) until each is in.
+  - Nov 21 (checked on fill): reviews `{newest_review:{rating 1 to 5 or null, text up to 5000, date up to 80}, owner_reply_on_newest: true|false}`;
+    category `main_category` text up to 120, `big_job` up to 120, `match` true|false, `note` up to 300; ai `question` up to 300, each engine's
+    `correct` true|false and `note` up to 300.
   - ai (now 3 answers): add `"google_ai":{"named":false,"correct":true,"note":""}`. Optional on each engine: `"top":["names it gave", ...]` (up to 5).
     Optional `"screenshots":[{"engine":"chatgpt|gemini|google_ai","url":"https://getbookedoutsolutions.com/r/<token>/ai-<engine>.png"}]` (up to 3;
     host each one first with `POST /api/free-report/shot`, or the fill is refused). Without google_ai the AI part stays pending.
@@ -146,12 +149,12 @@ worker. Tests: `node workers/test-freereport-fill.mjs`.
 |---|---|---|---|
 | google, reviews | the worker itself at build time (`lookup()`); until the lookup worker is set, the research file | the lookup worker at `LOOKUP_URL` | The lookup worker's code is NOT in this repo or in the Mac mini engine folder (`~/.bookedout/engine`, searched Nov 20), and `LOOKUP_URL`/`LOOKUP_KEY` are not set. What it must provide is in the "Lookup worker contract" below. Until then the runner fills google (with `rank_checked`) and reviews from the research file. |
 | ai (ChatGPT, Gemini AND google_ai) | `JOBS.ai` in `workers/freereport-jobs.mjs`, run by the runner | the research file (the live chat asks each engine the customer's question; default question "Who is the best <trade> in <town>, <ST>?") | Built (Nov 21). All three engines are needed or it waits. |
-| ai screenshots | the runner hosts them, then `JOBS.ai` lists them | PNG files named in the research file (`"screenshots":{"chatgpt":"/path.png"}`) | Built (Nov 21): `POST /api/free-report/shot` stores each PNG (1 MB max) in the existing `KV` namespace (free, no new storage), served at `/r/<token>/ai-<engine>.png`. The worker refuses an ai fill whose screenshot is not hosted for that report. No screenshot = the part is simply left out (no "not checked" text needed). |
+| ai screenshots | the runner hosts them, then `JOBS.ai` lists them | PNG files named in the research file (`"screenshots":{"chatgpt":"/path.png"}`) | Built (Nov 21): `POST /api/free-report/shot` stores each PNG (1 MB max) in the existing `KV` namespace (free, no new storage) with its sha, served at `/r/<token>/ai-<engine>.png`; the fill URL is `...ai-<engine>.png?v=<first 8 of the sha>`, so a different image would change the page hash. One image per engine (the same image again is fine), and none once the report is `checked`. The worker refuses an ai fill whose screenshot URL is not the hosted one for that report. No screenshot = the part is simply left out (no "not checked" text needed). |
 | booking, category | `JOBS.booking`, `JOBS.category` | the research file (his website on a phone, never sending the form; his public Google listing) | Built (Nov 21). |
 | known_for | `JOBS.known_for` | the research file: his public Google reviews, text AND stars (`{scanned, reviews:[{text, rating}]}`) | Built (Nov 21). Not needed without a Google profile. If the lookup worker learns to return reviews with stars, move this to `lookup()`. |
 | competitor | `JOBS.competitor` | the research file: the public Google listing of the top 3 shop above him (photos, reply_pct, posts_90d, website, hours) | Built (Nov 21). `name` is optional: the job picks the highest top 3 shop above him. Stars and review counts are always taken from google. Not needed at number 1, with no profile, or with no top 3. |
 | listings | `JOBS.listings` | the research file: public searches of Google, Yelp, BBB, Facebook, Nextdoor and the local chamber directory | Built (Nov 21). The Google row can come from the google section (found only; "complete" is never guessed). All six needed. |
-| spot | `JOBS.spot` | `workers/data/zone-locks.json` via `workers/zone-locks.mjs` (never the research file) | Built (Nov 21). The list is empty, so every zone reads open. Zone = his town (or the lock's zone when his town is in its `towns`). A bad list stops the run (never a quiet "open"). Not used for "Something else". |
+| spot | `JOBS.spot` | `workers/data/zone-locks.json` via `workers/zone-locks.mjs` (never the research file) | Built (Nov 21). The list is empty, so every zone reads open. Zone = his town, read the same however it is typed (ZIP, state code or full state name, punctuation), or the lock's zone when his town is in its `towns`. A town that can't be read as a plain town name is held (no spot filled). A bad list stops the run (never a quiet "open"): real dates only, `until` not before `since`, and no two locks for the same trade and town whose dates overlap (past, current or future). Not used for "Something else". |
 | speed | `JOBS.speed` | nothing: always `{"tested":false,"reason":"we do not call, text or email your business for this report."}` | Built (Nov 21) as the "We did not run this test for you" result only. Rickey has not picked a test method, so nothing contacts a shop. Research files cannot change it. The two locks (fill door `--after-go-live`, worker `SPEED_TEST_LIVE`) stay. |
 
 ### The "Free report checkers" runner (Nov 21 2026, run by hand from a live chat; no scheduled task)
@@ -162,8 +165,16 @@ worker. Tests: `node workers/test-freereport-fill.mjs`.
 - `--apply`: hosts screenshots, posts the fills through `freereport-fill.mjs` (`prepareFills` -> `fillProblem` -> `postFills`), reads the live page, runs checker 1 and checker 2 and posts both marks (two passes = status `checked`).
 - Research files: `<DIR>/<fr-id>.json` (default `~/.bookedout/freereport-research`). `--templates` writes one with only the still-needed sections for any report without one. Public pages only.
 - Checks: checker 1 (facts: the live page is exactly what the current code renders from the report's data and form answers, nothing pending, every section passes the fill rules, budget, profile wording, price link, three fixes, competitor in top 3, spot line) and checker 2 (locked wording, no long dashes or emojis, no tools named, no promises, sources on every outside number, terms lines, private note not shown, test shop flags, rank and review gap again).
-- `--verdicts FILE` (`{"fr-...":{"1":{"agent","result","notes"},"2":{...}}}`) posts the live chat's two checker sub-agents' verdicts. A script fail always wins. Without it the script checks decide (agents `checker-<slot>-script-<run id>`).
-- Never sends: no mark-sent, no send route. LIVE off = the worker sends nothing. If `/review` says LIVE is on, the checker 2 pass (which would send at once) is held back unless `--allow-send`. A report whose last check failed on the same version is skipped until a fill changes it.
+- The script checks may only post FAILS (agents `checker-<slot>-script-<run id>`). A pass is posted only from `--verdicts FILE`
+  (`{"fr-...":{"1":{"agent","result","notes","hash"},"2":{...}}}`, the live chat's two checker sub-agents), and only when BOTH slots
+  have a `pass` with a non-script agent name and `hash` equal to the report's current hash (the run logs the hash to read). Same agent
+  name in both slots = held and logged (never renamed). A script fail always wins; a sub-agent fail is posted with its own name.
+- Never sends: no mark-sent, no send route. The run stops unless `/review` gives `live` as true or false. Right before every checker 2
+  pass it reads `/ping` again and holds if LIVE is on (or unclear) unless `--allow-send`. A report whose last check failed on the same
+  version is skipped until a fill changes it.
+- Research files are used only when their `id` is this report's id (templates carry it). Every research section is checked with the
+  worker's own fill rules before it is planned. `--only` and every other option need a value that is not another option.
+  `FREEREPORT_BASE` may only be https://getbookedoutsolutions.com (both the runner and freereport-fill.mjs refuse anything else).
 - Log: every step to the screen and as JSON lines to `--log` (default `~/.bookedout/logs/freereport-checkers-<date>.jsonl`).
 - Tests: `node workers/test-freereport-checkers.mjs` (fake TEST shops, in-process worker, any real network call fails the test).
 
