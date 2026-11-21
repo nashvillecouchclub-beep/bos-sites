@@ -255,7 +255,7 @@ await test('Follow-ups: booking_fix_1 is never a "5 minutes" fix for a shop that
     'Use a 5\u2013minute callback rule.', 'Reply within five (5) minutes.', 'Answer in 5 or fewer minutes.'])
     assert.equal(FU.values(rec(2, [x, 'Make the quote button bigger.']), h).booking_fix_1, 'Make the quote button bigger.', 'the first fix the page shows: ' + x);
   assert.equal(FU.values(rec(40, ['Reply within five minutes.']), h).booking_fix_1, undefined, 'other 5-minute wordings are dropped for every shop');
-  assert.equal(FU.values(rec(40, [FU.SPEED_FIX]), h).booking_fix_1, FU.SPEED_FIX, 'the standard sentence is fine for a slow shop');
+  assert.equal(FU.values(rec(40, [FU.SPEED_FIX]), h).booking_fix_1, undefined, 'the speed sentence never comes from the booking list');
   assert.equal(FU.values(rec(2, [FU.SPEED_FIX]), h).booking_fix_1, undefined, 'and never for a fast one');
   assert.equal(FU.values(rec(2, ['Make the quote button bigger.']), h).booking_fix_1, 'Make the quote button bigger.');
 });

@@ -34,12 +34,11 @@ function fixLine(s, max = 25) {
   return x.charAt(0).toUpperCase() + x.slice(1);
 }
 
-// "5 minutes", "five minutes", "5-minute", "5 mins", "under 5 min", "3-5 minutes": a fix about answering within 5 minutes.
-// Only one wording of it is ever shown (SPEED_FIX, in the three fixes), and never to a shop that already answered that fast.
-// Shared with the worker. The text is NFKC-normalized and every Unicode digit becomes 0-9 ("٥", "５"); a real decimal
-// ("1.5", "2,5") is read as one number; then every run of other characters (any dash, brackets, commas) becomes one space,
-// so a range ending in 5 ("3-5 minutes") counts.
+// Shared text tools for the worker and the follow-ups (Nov 21 2026).
+// fold(): NFKC, every Unicode digit to 0-9 ("٥", "५", "５"), Cyrillic/Greek look-alike letters to Latin ("mіnutes" with a
+// Cyrillic i), and the invisible format characters removed (zero-width spaces and joiners, word joiners, BOM, soft hyphen).
 export const SPEED_FIX = 'Call or text back every new lead within 5 minutes, even after hours.';
+export const INVISIBLE = /[​-‏⁠-⁤﻿­]/g;
 const isNd = (ch) => /\p{Nd}/u.test(ch);
 function asciiDigits(str) {
   return [...str].map((ch) => {
@@ -51,14 +50,45 @@ function asciiDigits(str) {
     return String(k % 10);
   }).join('');
 }
-export function FIVE_MIN_TEST(x) {
-  let s = asciiDigits(String(x == null ? '' : x).normalize('NFKC')).toLowerCase();
-  s = s.replace(/(\d)[.,](\d)/g, '$1$2'); // 1.5 -> 15, 2,5 -> 25: not five
-  return /\b(5|five)( 5)? ?(or (fewer|less) )?min(ute)?s?\b/.test(s.replace(/[^a-z0-9]+/g, ' '));
+const LOOKALIKE = { 'а': 'a', 'е': 'e', 'і': 'i', 'ј': 'j', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'ѕ': 's', 'һ': 'h', 'ԁ': 'd', 'ԛ': 'q', 'ԝ': 'w',
+  'А': 'a', 'В': 'b', 'Е': 'e', 'І': 'i', 'Ј': 'j', 'К': 'k', 'М': 'm', 'Н': 'h', 'О': 'o', 'Р': 'p', 'С': 'c', 'Т': 't', 'Х': 'x', 'У': 'y', 'Ѕ': 's',
+  'ο': 'o', 'ι': 'i', 'ν': 'v', 'α': 'a', 'ε': 'e', 'κ': 'k', 'ρ': 'p', 'τ': 't', 'υ': 'u', 'χ': 'x', 'Ο': 'o', 'Ι': 'i', 'Α': 'a', 'Β': 'b', 'Ε': 'e',
+  'Η': 'h', 'Κ': 'k', 'Μ': 'm', 'Ν': 'n', 'Ρ': 'p', 'Τ': 't', 'Χ': 'x', 'Υ': 'y', 'Ζ': 'z' };
+export function fold(x) {
+  return asciiDigits(String(x == null ? '' : x).normalize('NFKC').replace(INVISIBLE, '')).replace(/[Ͱ-ϿЀ-ӿԀ-ԯ]/g, (c) => LOOKALIKE[c] || c).toLowerCase();
 }
-const normWords = (x) => String(x == null ? '' : x).normalize('NFKC').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-// A 5-minute fix in any wording other than the one standard sentence (dropped everywhere, for every shop).
-export function otherFiveMin(x) { return FIVE_MIN_TEST(x) && normWords(x) !== normWords(SPEED_FIX); }
+const words2 = (x) => fold(x).replace(/[^a-z0-9]+/g, ' ').trim();
+// FIVE_MIN_TEST: does this text talk about answering within 5 minutes? (Used for the diagnosis and fast-shop checks only; it
+// no longer decides which booking fixes show.) A real decimal ("1.5", "2,5") is one number, a 5 that ends a sentence ("5.
+// Minutes later") does not count, a range ending in 5 ("3-5 minutes") does, "twenty-five" does not.
+export function FIVE_MIN_TEST(x) {
+  let s = fold(x);
+  s = s.replace(/(\d)[.,](\d)/g, '$1$2').replace(/(\d)[.!?](\s|$)/g, '$1 xstop$2');
+  s = s.replace(/[^a-z0-9]+/g, ' ');
+  return /(?<!(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety) )\b(5|five)(ish)?( ish)?( 5)? ?(or (fewer|less|so) |to \d+ |to [a-z]+ )?min(ute)?s?\b/.test(s);
+}
+// Response speed belongs to SPEED_FIX alone (Rickey's coordinator, Nov 21): a booking fix that talks about any time unit, or
+// that is the standard speed sentence, is never shown as a booking fix, for any shop.
+const TIME_UNIT = /(?<![a-z])(secs?|seconds?|mins?|minutes?|hrs?|hours?)(?![a-z])/;
+export function bookingFixOk(x) {
+  const w = words2(x);
+  if (!w) return false;
+  if (w === words2(SPEED_FIX)) return false;
+  return !TIME_UNIT.test(w);
+}
+// The one filtered booking list. The page's booking test section, the three fixes (its first item) and the follow-ups'
+// booking_fix_1 all come from this list, so they never disagree. Cleaned, no blanks, no repeats.
+export function bookingList(fixes, plainFn) {
+  const out = [], seen = new Set();
+  for (const x of Array.isArray(fixes) ? fixes : []) {
+    const c = plainFn(x);
+    if (!c || !bookingFixOk(c)) continue;
+    const k = words2(c);
+    if (seen.has(k)) continue;
+    seen.add(k); out.push(c);
+  }
+  return out;
+}
 export function answeredFast(sp) { return !!(sp && sp.tested === true && sp.minutes != null && +sp.minutes <= 5); }
 
 // Every placeholder value, from the owner's own report only. A missing value is left out (never guessed).
@@ -93,9 +123,9 @@ export function values(rec, h) {
   }
   if (rv && rv.newest_review) set('newest_review_replied', rv.owner_reply_on_newest ? 'yes' : 'no');
   if (bk && bk.score != null) set('booking_score', Math.max(0, Math.min(10, +bk.score)));
-  const bfix = bk && Array.isArray(bk.fixes) ? bk.fixes.find((x) => x && h.plain(x) && !otherFiveMin(x) && !(answeredFast(s.speed) && FIVE_MIN_TEST(x))) : null;
+  const bfix = bk ? bookingList(bk.fixes, h.plain)[0] : null;
   // the first booking fix as the report page lists it (the same filter as the page's booking test list)
-  if (bfix && words(bfix) <= 45) set('booking_fix_1', h.plain(bfix));
+  if (bfix && words(bfix) <= 45) set('booking_fix_1', bfix);
   if (ai && ai.chatgpt && ai.gemini) {
     const named = !!(ai.chatgpt.named || ai.gemini.named), both = !!(ai.chatgpt.named && ai.gemini.named);
     // "yes" only when both named it, "no" only when neither did; a split answer is left out (the step uses its fallback).
@@ -130,6 +160,9 @@ export function bodyProblems(body, reportLink) {
   if ((body.match(/\?/g) || []).length !== 1 || !lines[lines.length - 1].trim().endsWith('?')) p.push('not exactly one question on the last line');
   if (/\$/.test(body)) p.push('dollar sign');
   if (/[<>]/.test(body)) p.push('angle bracket (raw HTML)');
+  if (/""/.test(body) || lines.some((l) => l.trim() && !/[\p{L}\p{N}]/u.test(l.replace(INVISIBLE, '')))) p.push('blank fix line');
+  if (INVISIBLE.test(body)) p.push('invisible characters');
+  INVISIBLE.lastIndex = 0;
   if (/[‒-―]/.test(body)) p.push('long dash');
   if (/[\p{Extended_Pictographic}]/u.test(body)) p.push('emoji');
   if (/\{[a-z_0-9]+\}/.test(body)) p.push('placeholder left');

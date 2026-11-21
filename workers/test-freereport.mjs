@@ -968,7 +968,8 @@ await test('Sixth review: at most one 5-minute fix ever; decimals are not five m
   assert.ok(fx2.filter((x) => T.FIVE_MIN_TEST(x)).length <= 1); assert.ok(!fx2.includes('Reply in 5min.'), fx2.join(' | '));
   // decimals
   for (const x of ['1.5 minutes', '0.5 min', '2.5-minute', 'about 3.5 minutes']) assert.equal(T.FIVE_MIN_TEST(x), false, x);
-  for (const x of ['5 minutes', 'under 5 minutes.', 'in 5. minutes']) assert.equal(T.FIVE_MIN_TEST(x), true, x);
+  for (const x of ['5 minutes', 'under 5 minutes.']) assert.equal(T.FIVE_MIN_TEST(x), true, x);
+  assert.equal(T.FIVE_MIN_TEST('Step 5. Minutes later, call back'), false, 'a 5 that ends a sentence is not five minutes');
   // dashes
   assert.equal(T.plain('within 5–minutes'), 'within 5-minutes');
   assert.equal(T.plain('a 5‑minute rule'), 'a 5-minute rule');
@@ -988,7 +989,7 @@ await test('Seventh review: other 5-minute wordings dropped for every shop; rang
     assert.doesNotMatch(s4, /five minutes|5 MINUTES/i, x); assert.match(s4, /One fix: Shorten the form\./);
     assert.equal(FU.values({ ...base, sections: { booking: { score: 4, fixes: [x] }, speed: slow } }, { ...T.fuHelpers(), now: new Date() }).booking_fix_1, undefined, x);
   }
-  assert.equal(FU.values({ ...base, sections: { booking: { score: 4, fixes: [SF] }, speed: slow } }, { ...T.fuHelpers(), now: new Date() }).booking_fix_1, SF);
+  assert.equal(FU.values({ ...base, sections: { booking: { score: 4, fixes: [SF] }, speed: slow } }, { ...T.fuHelpers(), now: new Date() }).booking_fix_1, undefined, 'the speed sentence only comes from the speed logic');
   // a dropped first booking fix: the picker, the page and the follow-ups all use the next one ("Shorten the form.")
   const two = { ...base, sections: { booking: { score: 4, fixes: ['Answer within five minutes.', 'Shorten the form.'] }, speed: slow } };
   assert.ok(T.pickFixes(two).includes('Shorten the form.'), T.pickFixes(two).join(' | '));
@@ -1000,6 +1001,42 @@ await test('Seventh review: other 5-minute wordings dropped for every shop; rang
   assert.equal(T.plain('— Shorten the form —'), 'Shorten the form');
   assert.equal(T.plain(', , Shorten the form ,'), 'Shorten the form');
   assert.ok(FU.bodyProblems('Hi,\n<img src=x> Add a <b>Book now</b> button\nWant it?', 'https://getbookedoutsolutions.com/r/x/').includes('angle bracket (raw HTML)'));
+});
+
+await test('Eighth review: booking fixes about any time unit never show; one filtered list for section 4, the three fixes and the follow-ups', () => {
+  const SF = FU.SPEED_FIX;
+  const slow = { tested: true, channel: 'call', when: 'Mon', minutes: 30 }, fast = { tested: true, channel: 'text', when: 'Mon', minutes: 2 }, none = { tested: true, channel: 'call', when: 'Mon', minutes: null, waited_hours: 24 };
+  const dropped = ['Answer within five-ish minutes.', 'Answer in 5 or so minutes', 'Within 5 to 10 minutes, call back.', 'Reply within twenty-five minutes.', SF, SF.toUpperCase(), SF.replace(/\.$/, ''),
+    'Add a 2-minute form.', 'Call back within the hour.', 'Reply in 30 secs.', 'Answer in 2 hrs.', 'Reply in 5​minutes.', 'Reply in 5 mіnutes (Cyrillic i).', '​', '﻿⁠', '   ', '— , —', null];
+  for (const x of dropped) assert.equal(T.bookingList([x], T.plain).length, 0, JSON.stringify(x));
+  for (const x of ['Shorten the form.', 'Add a Book now button.', 'Put the minimum fields on the form.', 'Make the admin page simpler.']) assert.deepEqual(T.bookingList([x], T.plain), [x], x);
+  assert.deepEqual(T.bookingList(['Shorten the form', 'Shorten the form.', 'SHORTEN THE FORM. '], T.plain), ['Shorten the form'], 'no repeats');
+  for (const sp of [slow, fast, none, { ...slow, after_hours: { tested: true, answered: false, when: 'Mon 8 pm', channel: 'call' } }]) {
+    for (const fixes of [['Answer within five-ish minutes.', '  ', 'Shorten the form.'], ['​', 'Add a Book now button.'], [SF, 'Shorten the form.'], ['Shorten the form.', SF], [SF.toUpperCase()]]) {
+      const rec = { ...base, sections: { booking: { score: 4, fixes }, speed: sp } };
+      const list = T.bookingList(fixes, T.plain);
+      const page = visible(T.renderReport(rec).html).replace(/\s+/g, ' ');
+      const s4 = page.split('Booking test from a phone')[1].split('Your Google main category')[0];
+      for (const x of list) assert.ok(s4.includes(x), x + ' in section 4');
+      assert.doesNotMatch(s4, /minute|even after hours/i, 'no time talk in the booking list: ' + s4);
+      const three = T.pickFixes(rec);
+      assert.equal(three.length, 3); assert.equal(new Set(three.map((x) => x.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim())).size, 3);
+      if (list[0]) assert.ok(three.includes(list[0]), 'the three fixes use the first booking fix: ' + three.join(' | '));
+      const fiveFixes = three.filter((x) => T.FIVE_MIN_TEST(x));
+      assert.deepEqual(fiveFixes, sp.minutes == null || sp.minutes > 5 ? [SF] : [], 'speed sentence only from the speed logic');
+      const v = FU.values(rec, { ...T.fuHelpers(), now: new Date() });
+      assert.equal(v.booking_fix_1, list[0], 'booking_fix_1 = the first item of the same list');
+    }
+  }
+  // plain() removes invisible characters; a fix that is blank after that is dropped everywhere
+  assert.equal(T.plain('Short​en the­ form﻿'), 'Shorten the form');
+  assert.ok(FU.bodyProblems('Hi,\nThe first of its three fixes is "".\nWant it?', 'https://x/').includes('blank fix line'));
+  assert.ok(FU.bodyProblems('Hi,\n.\nWant it?', 'https://x/').includes('blank fix line'));
+  // FIVE_MIN_TEST for the diagnosis / fast checks
+  for (const [x, want] of [['within 5​minutes', true], ['5­minutes', true], ['within 5 mіnutes', true], ['five-ish minutes', true], ['within 5 or so minutes', true], ['5 to 10 minutes', true],
+    ['within 5ish minutes', true], ['॰५ minutes', true], ['fifteen minutes', false], ['twenty-five minutes', false], ['twenty five minutes', false], ['5 m', false], ['10-15 minutes', false],
+    ['१५ minutes', false], ['within ٥ мinutes', false], ['5. Minutes later', false]])
+    assert.equal(T.FIVE_MIN_TEST(x), want, JSON.stringify(x));
 });
 
 await test('E2E mirror of fr-20261120-vbukvz: fill all, checker 1 + checker 2 pass; LIVE off sends nothing; LIVE on sends once; TEST never', async () => {

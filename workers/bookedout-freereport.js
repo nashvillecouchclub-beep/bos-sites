@@ -364,7 +364,7 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':
 // Visitor text rules: no long dashes, no emojis (also cleans text that comes from Google reviews).
 function plain(s) {
   // a dash joining two words ("5\u2013minute") becomes a plain hyphen; a dash used as a pause ("fast \u2014 fair") becomes a comma
-  return String(s == null ? '' : s).replace(/([\p{L}\p{N}])[\u2010-\u2015\u2212]([\p{L}\p{N}])/gu, '$1-$2').replace(/\s*[\u2012-\u2015]\s*/g, ', ').replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, '').replace(/\s{2,}/g, ' ').trim()
+  return String(s == null ? '' : s).replace(FU.INVISIBLE, '').replace(/([\p{L}\p{N}])[\u2010-\u2015\u2212]([\p{L}\p{N}])/gu, '$1-$2').replace(/\s*[\u2012-\u2015]\s*/g, ', ').replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, '').replace(/\s{2,}/g, ' ').trim()
     .replace(/^[\s,]+|[\s,]+$/g, '');
 }
 const t = (s) => esc(plain(s));
@@ -435,7 +435,8 @@ function pickFixes(rec) {
   if (rv && rv.newest_review && !rv.owner_reply_on_newest) add('Reply to your newest Google review today, and to every new review within a day from now on. The next customer reads those replies.');
   if (ct && ct.match === false) add(`Change your Google main category to the one that fits ${plain(ct.big_job || 'the big-ticket job you want most')}, so Google shows you for that work.`);
   // the first booking fix the page's booking test list shows (other 5-minute wordings, and 5-minute fixes for a fast shop, are skipped)
-  if (bk && Array.isArray(bk.fixes)) { const b0 = bk.fixes.find((x) => plain(x) && !FU.otherFiveMin(x) && !(fast && FU.FIVE_MIN_TEST(x))); if (b0) add(b0); }
+  // the first item of the one filtered booking list (the same list the page's booking test section shows)
+  if (bk) { const b0 = FU.bookingList(bk.fixes, plain)[0]; if (b0) add(b0); }
   if (ai && ai.chatgpt && ai.chatgpt.named === false) add('Put your town, your main services and your best reviews in plain words on your website, so ChatGPT and Gemini have something to say about you.');
   const pick = out.slice(0, 3 - keep.length).concat(keep);
   const base = [
@@ -754,8 +755,8 @@ function renderReport(rec) {
   let b4 = '';
   if (bk && bk.score != null) {
     // a shop that already answered our test within 5 minutes is not told to answer within 5 minutes
-    // only the standard 5-minute sentence may appear, and not at all for a shop that answered within 5 minutes
-    const list = (bk.fixes || []).filter((x) => plain(x) && !FU.otherFiveMin(x) && !(FU.answeredFast(s.speed) && FU.FIVE_MIN_TEST(x))).slice(0, 3);
+    // the one filtered booking list: no fix about any time unit (answer speed belongs to the speed section), no blanks, no repeats
+    const list = FU.bookingList(bk.fixes, plain).slice(0, 3);
     const fx = list.map((x) => `<li>${t(x)}</li>`).join('');
     b4 = `<p class="score"><b>${t(Math.max(0, Math.min(10, +bk.score)))}</b> out of 10</p>${fx ? `<p>${['', 'One fix', 'Two fixes', 'Three fixes'][list.length]}:</p><ol class="plainlist">${fx}</ol>` : ''}`;
   } else { b4 = PENDING; pending.push('4 Booking test'); }
@@ -1340,7 +1341,7 @@ export default {
   _t: { validate, businessClock, federalHolidays, isBusinessDay, local, fromLocal, chicagoText, isLive, deliverToOwner,
     sendAlert, isTestRequest, plain, ownerEmail, mime, sendMail, sendBlock, check, review, trySend, sha, budgetLine, renderReport, submit, build, tick, TRADES, REVENUE,
     fuTick, followup, startFollowups, fuHelpers, gmailThread, allowed, pickFixes,
-    diagnose, speedFinding, FIVE_MIN_TEST: FU.FIVE_MIN_TEST, knownFor, competitorView, refreshReport, speedEstimate, fillProblem, fill, rerender, SOURCES, FEW_REVIEWS, FILL },
+    diagnose, speedFinding, FIVE_MIN_TEST: FU.FIVE_MIN_TEST, bookingList: FU.bookingList, bookingFixOk: FU.bookingFixOk, knownFor, competitorView, refreshReport, speedEstimate, fillProblem, fill, rerender, SOURCES, FEW_REVIEWS, FILL },
 };
 
 const GONE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Report not found | Booked Out Solutions</title><style>body{margin:0;font:18px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#F6F1E7;color:#0A0F26}main{max-width:34rem;margin:0 auto;padding:3rem 1.2rem}</style></head><body><main><h1>This report is not here</h1><p>The link may be old or mistyped. Reply to the email it came in and we will send it again, or write to hello@getbookedoutsolutions.com.</p><p>Booked Out Solutions</p></main></body></html>';
