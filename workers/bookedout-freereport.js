@@ -643,6 +643,10 @@ function fillProblem(rec, section, d) {
     if (d.screenshots != null && (!Array.isArray(d.screenshots) || d.screenshots.length > 3 || !d.screenshots.every((x) => x && ['chatgpt', 'gemini', 'google_ai'].includes(x.engine) && shotOk(x.url))))
       return 'screenshots: up to 3 of {engine: chatgpt|gemini|google_ai, url: https://getbookedoutsolutions.com/....png}';
   }
+  if (section === 'booking') {
+    if (!num(d.score, 0, 10)) return 'booking.score must be a number from 0 to 10';
+    if (!Array.isArray(d.fixes) || d.fixes.length > 10 || !d.fixes.every((x) => str(x, 500) && plain(x).length > 0)) return 'booking.fixes must be a list of up to 10 fixes, each one non-empty text';
+  }
   if (section === 'speed') {
     if (typeof d.tested !== 'boolean') return 'speed.tested must be true or false';
     if (d.tested === false) return str(d.reason, 300) ? '' : 'speed with tested:false needs a reason';

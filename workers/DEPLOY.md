@@ -45,8 +45,9 @@ Endpoints for later jobs (all need `k` = STATUS_KEY):
 - `POST /api/free-report/mark-sent` `{"id":"fr-...","k":"..."}` (only for a report sent some other way; recorded as manual)
 - `POST /api/free-report/fill` `{"id":"fr-...","k":"...","section":"ai|booking|category|google|reviews","data":{...}}`
   - ai: `{"question":"...","chatgpt":{"named":true,"correct":true,"note":""},"gemini":{...}}`
-  - booking: `{"score":7,"fixes":["...","...","..."]}` (fixes about answer time are never shown: any fix mentioning seconds, minutes
-    or hours is dropped, since answer speed belongs to the speed section; blank and repeated fixes are dropped too)
+  - booking: `{"score":7,"fixes":["...","...","..."]}` (checked on fill: score a number 0 to 10, fixes a list of up to 10 non-empty
+    texts. Fixes about answer time are never shown: any fix mentioning seconds, minutes or hours is dropped, since answer speed belongs
+    to the speed section; "a second button" and "business hours" / "opening hours" are fine. Blank and repeated fixes are dropped too.)
   - category: `{"main_category":"...","big_job":"...","match":false,"note":""}`
   - Nov 20 additions (item 215, item 211, Nov 19 diagnosis). Section names: `speed|known_for|competitor|listings|spot`, and `ai` grew.
     A fill that breaks these shapes is refused with 400 and changes nothing. Every one of them is required: the report stays

@@ -1039,6 +1039,28 @@ await test('Eighth review: booking fixes about any time unit never show; one fil
     assert.equal(T.FIVE_MIN_TEST(x), want, JSON.stringify(x));
 });
 
+await test('Ninth review: booking fill is checked; ordinal "second" and business/opening hours are not time talk; all format characters stripped', async () => {
+  for (const d of [{ score: '5', fixes: [] }, { score: 11, fixes: [] }, { score: 5, fixes: { a: 1 } }, { score: 5, fixes: [''] }, { score: 5, fixes: ['ok', 3] }, { score: 5, fixes: Array(11).fill('x') }, { score: 5 }])
+    assert.match(T.fillProblem({ sections: {} }, 'booking', d), /booking\./, JSON.stringify(d));
+  assert.equal(T.fillProblem({ sections: {} }, 'booking', { score: 6, fixes: ['Shorten the form.'] }), '');
+  assert.equal(T.fillProblem({ sections: {} }, 'booking', { score: 0, fixes: [] }), '');
+  const env = { KV: kv(), STATUS_KEY: KEY };
+  const j = await (await T.submit(post(SHOP), env, at('2026-11-17T10:30:00-06:00'))).json();
+  await T.tick(env, at('2026-11-17T10:45:00-06:00'), sendFetch());
+  assert.equal((await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section: 'booking', data: { score: '5', fixes: [] } })).status, 400);
+  assert.equal((await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section: 'booking', data: { score: 5, fixes: { a: 1 } } })).status, 400);
+  // ordinal "second" and listing hours are fine; real time talk is still dropped
+  for (const x of ['Add a second call button.', 'Put the second button lower.', 'List your business hours on the page.', 'Show your opening hours.'])
+    assert.deepEqual(T.bookingList([x], T.plain), [x], x);
+  for (const x of ['Answer in 30 seconds.', 'Reply in 1 second.', 'Pick up within one second.', 'Answer after hours too.', 'Call back within 2 hours.', 'Reply in a few minutes.'])
+    assert.deepEqual(T.bookingList([x], T.plain), [], x);
+  // every format character (\p{Cf}), CGJ and MVS are stripped; dotless and small-capital i fold to i
+  assert.equal(T.plain('Short⁦en⁩ the͏ fo᠎rm‎'), 'Shorten the form');
+  assert.deepEqual(T.bookingList(['Reply in 5 mınutes.'], T.plain), []);
+  assert.deepEqual(T.bookingList(['Reply in 5 mɪnutes.'], T.plain), []);
+  assert.deepEqual(T.bookingList(['⁦⁩͏'], T.plain), []);
+});
+
 await test('E2E mirror of fr-20261120-vbukvz: fill all, checker 1 + checker 2 pass; LIVE off sends nothing; LIVE on sends once; TEST never', async () => {
   // the exact fake data used on the live worker Nov 20 (plus the new sections)
   const E2E = { google: { has_google_profile: true, rating: 4.3, review_count: 27, rank_for_keyword: 9, keyword: 'hvac Smyrna',

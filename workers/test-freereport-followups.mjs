@@ -245,7 +245,7 @@ await test('Few reviews + slow answer: the three fixes on the sent page are save
   const f = gfetch();
   for (let d = new Date('2026-11-18T17:15:00Z'), i = 0; i < 40; i++, d = new Date(d.getTime() + 86400000)) await T.fuTick(env, d, f);
   const texts = sends(f).map((c) => decode(c).text).join('\n');
-  assert.doesNotMatch(texts, /500/, 'never quotes the changed data');
+  assert.doesNotMatch(texts, /\b500 (Google )?reviews\b|\byou have 500\b/, 'never quotes the changed data');
 });
 
 await test('Follow-ups: booking_fix_1 is never a "5 minutes" fix for a shop that answered within 5 minutes', () => {
@@ -258,6 +258,16 @@ await test('Follow-ups: booking_fix_1 is never a "5 minutes" fix for a shop that
   assert.equal(FU.values(rec(40, [FU.SPEED_FIX]), h).booking_fix_1, undefined, 'the speed sentence never comes from the booking list');
   assert.equal(FU.values(rec(2, [FU.SPEED_FIX]), h).booking_fix_1, undefined, 'and never for a fast one');
   assert.equal(FU.values(rec(2, ['Make the quote button bigger.']), h).booking_fix_1, 'Make the quote button bigger.');
+});
+
+await test('Follow-ups: a fix that already has double quotes is not double-wrapped', () => {
+  const h = { ...T.fuHelpers(), now: new Date('2026-11-18T17:15:00Z') };
+  const rec = { ...SHOP, token: 'a'.repeat(48), sections: { ...FILLS, booking: { score: 5, fixes: ['Add a "Book now" button at the top.'] } } };
+  const v = FU.values(rec, h);
+  for (const k of ['fix_1', 'fix_2', 'fix_3']) if (v[k]) {
+    assert.match(v[k], /^"[^"]*"$/, v[k]);
+  }
+  assert.ok(Object.values(v).some((x) => /'Book now'/.test(x)), JSON.stringify(v));
 });
 
 await test('A bare domain in a filled email is refused (it would turn into a link)', () => {

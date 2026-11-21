@@ -38,7 +38,7 @@ function fixLine(s, max = 25) {
 // fold(): NFKC, every Unicode digit to 0-9 ("٥", "५", "５"), Cyrillic/Greek look-alike letters to Latin ("mіnutes" with a
 // Cyrillic i), and the invisible format characters removed (zero-width spaces and joiners, word joiners, BOM, soft hyphen).
 export const SPEED_FIX = 'Call or text back every new lead within 5 minutes, even after hours.';
-export const INVISIBLE = /[​-‏⁠-⁤﻿­]/g;
+export const INVISIBLE = /[\p{Cf}\u034F\u180E]/gu; // every format character (zero-width, joiners, BOM, soft hyphen, bidi marks), CGJ, MVS
 const isNd = (ch) => /\p{Nd}/u.test(ch);
 function asciiDigits(str) {
   return [...str].map((ch) => {
@@ -50,12 +50,12 @@ function asciiDigits(str) {
     return String(k % 10);
   }).join('');
 }
-const LOOKALIKE = { 'а': 'a', 'е': 'e', 'і': 'i', 'ј': 'j', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'ѕ': 's', 'һ': 'h', 'ԁ': 'd', 'ԛ': 'q', 'ԝ': 'w',
+const LOOKALIKE = { 'ı': 'i', 'ɪ': 'i', 'а': 'a', 'е': 'e', 'і': 'i', 'ј': 'j', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'ѕ': 's', 'һ': 'h', 'ԁ': 'd', 'ԛ': 'q', 'ԝ': 'w',
   'А': 'a', 'В': 'b', 'Е': 'e', 'І': 'i', 'Ј': 'j', 'К': 'k', 'М': 'm', 'Н': 'h', 'О': 'o', 'Р': 'p', 'С': 'c', 'Т': 't', 'Х': 'x', 'У': 'y', 'Ѕ': 's',
   'ο': 'o', 'ι': 'i', 'ν': 'v', 'α': 'a', 'ε': 'e', 'κ': 'k', 'ρ': 'p', 'τ': 't', 'υ': 'u', 'χ': 'x', 'Ο': 'o', 'Ι': 'i', 'Α': 'a', 'Β': 'b', 'Ε': 'e',
   'Η': 'h', 'Κ': 'k', 'Μ': 'm', 'Ν': 'n', 'Ρ': 'p', 'Τ': 't', 'Χ': 'x', 'Υ': 'y', 'Ζ': 'z' };
 export function fold(x) {
-  return asciiDigits(String(x == null ? '' : x).normalize('NFKC').replace(INVISIBLE, '')).replace(/[Ͱ-ϿЀ-ӿԀ-ԯ]/g, (c) => LOOKALIKE[c] || c).toLowerCase();
+  return asciiDigits(String(x == null ? '' : x).normalize('NFKC').replace(INVISIBLE, '')).replace(/[\u0131\u026A\u0370-\u03FF\u0400-\u04FF\u0500-\u052F]/g, (c) => LOOKALIKE[c] || c).toLowerCase();
 }
 const words2 = (x) => fold(x).replace(/[^a-z0-9]+/g, ' ').trim();
 // FIVE_MIN_TEST: does this text talk about answering within 5 minutes? (Used for the diagnosis and fast-shop checks only; it
@@ -69,12 +69,14 @@ export function FIVE_MIN_TEST(x) {
 }
 // Response speed belongs to SPEED_FIX alone (Rickey's coordinator, Nov 21): a booking fix that talks about any time unit, or
 // that is the standard speed sentence, is never shown as a booking fix, for any shop.
-const TIME_UNIT = /(?<![a-z])(secs?|seconds?|mins?|minutes?|hrs?|hours?)(?![a-z])/;
+// "second" alone is an ordinal ("add a second call button"); it is time talk only with a number ("1 second", "one second") or
+// as "seconds". "business hours" and "opening hours" are about listing hours, not answer speed.
+const TIME_UNIT = /(?<![a-z])(secs?|seconds|mins?|minutes?|hrs?|hours?)(?![a-z])|\b(\d+|one) second\b/;
 export function bookingFixOk(x) {
   const w = words2(x);
   if (!w) return false;
   if (w === words2(SPEED_FIX)) return false;
-  return !TIME_UNIT.test(w);
+  return !TIME_UNIT.test(w.replace(/\b(business|opening) hours?\b/g, ' '));
 }
 // The one filtered booking list. The page's booking test section, the three fixes (its first item) and the follow-ups'
 // booking_fix_1 all come from this list, so they never disagree. Cleaned, no blanks, no repeats.
@@ -134,7 +136,7 @@ export function values(rec, h) {
   }
   // The fixes saved on the record when the report was sent (what he actually read); older records fall back to a re-pick.
   const fixes = rec.fu && Array.isArray(rec.fu.fixes) ? rec.fu.fixes : h.pickFixes(rec);
-  fixes.forEach((f, i) => { const x = fixLine(h.plain(f)); if (x) { set('fix_' + (i + 1), `"${x}"`); set('fix_' + (i + 1) + '_line', x + '.'); } });
+  fixes.forEach((f, i) => { const x = fixLine(h.plain(f)); if (x) { set('fix_' + (i + 1), `"${x.replace(/["\u201C\u201D]/g, "'")}"`); set('fix_' + (i + 1) + '_line', x + '.'); } });
   const checks = [];
   if (g && g.has_google_profile) checks.push('your Google reviews', 'your map spot');
   if (ai && ai.chatgpt) checks.push('the ChatGPT and Gemini test');
@@ -161,8 +163,7 @@ export function bodyProblems(body, reportLink) {
   if (/\$/.test(body)) p.push('dollar sign');
   if (/[<>]/.test(body)) p.push('angle bracket (raw HTML)');
   if (/""/.test(body) || lines.some((l) => l.trim() && !/[\p{L}\p{N}]/u.test(l.replace(INVISIBLE, '')))) p.push('blank fix line');
-  if (INVISIBLE.test(body)) p.push('invisible characters');
-  INVISIBLE.lastIndex = 0;
+  if (body.replace(INVISIBLE, '') !== body) p.push('invisible characters');
   if (/[‒-―]/.test(body)) p.push('long dash');
   if (/[\p{Extended_Pictographic}]/u.test(body)) p.push('emoji');
   if (/\{[a-z_0-9]+\}/.test(body)) p.push('placeholder left');
