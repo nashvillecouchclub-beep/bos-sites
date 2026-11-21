@@ -1,5 +1,7 @@
 {
   "about": "Sold zone locks (Metro Lock): one shop per trade per zone. The free report's open-spot line reads this list through workers/zone-locks.mjs. Until a lock is sold the list is empty and every zone is open. Add a lock only after the shop's Metro Lock (or Complete) first paid month starts. Never put a fake TEST shop here.",
+  "version": 1,
+  "version_rule": "Raise version by 1 on EVERY change to locks, and set the worker variable ZONE_LOCKS_VERSION to the same number. The worker refuses to send a report whose spot was filled from an older version, and the runner fills the spot again.",
   "schema": {
     "trade": "one of: Heating and air | Plumbing | Electrical (the form's trade names; Something else has no zone locks)",
     "zone": "a plain town name shown on the report, e.g. Smyrna (owner towns are matched however they are typed: ZIP, state, punctuation)",

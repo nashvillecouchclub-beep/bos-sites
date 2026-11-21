@@ -34,7 +34,7 @@ const NEW = {
   known_for: { scanned: 5, reviews: ['On time and fair price', 'Showed up on time, fair price', 'On time again, clean work', 'Fair price and clean', 'Clean and on time'].map((text) => ({ text, rating: 5 })) },
   competitor: { name: 'Fake Air One', theirs: { photos: 80 }, yours: { photos: 12 } },
   listings: { sites: { google: { found: true }, yelp: { found: false }, bbb: { found: true }, facebook: { found: true }, nextdoor: { found: false }, chamber: { found: false } } },
-  spot: { zone: 'Smyrna', open: true },
+  spot: { zone: 'Smyrna', open: true, lock_version: 1 },
 };
 const GMAIL = { SEND_ROUTE: 'gmail', GMAIL_CLIENT_ID: 'id', GMAIL_CLIENT_SECRET: 'sec', GMAIL_REFRESH_TOKEN: 'ref' };
 // Fake Google: token, send (returns a thread id), thread read (ours only, or with a reply, or refused).

@@ -80,8 +80,13 @@ const REVENUE = {
 const BIG = ['$1M to $3M', 'Over $3M'];
 
 // ---------- validation (the page uses the same rules) ----------
+// Control characters (\p{Cc}, plus the line and paragraph separators) never get into a saved field: in one-line fields they
+// become a space; the private note keeps plain line breaks only.
+const CTRL = /[\p{Cc}\u2028\u2029]/gu;
 function validate(b) {
-  const s = (k, n) => String((b && b[k]) == null ? '' : b[k]).trim().slice(0, n);
+  const raw = (k) => String((b && b[k]) == null ? '' : b[k]);
+  const s = (k, n) => (k === 'email' ? raw(k).trim() : k === 'note' ? raw(k).replace(/\r\n?/g, '\n').replace(/[^\S\n]|[\p{Cc}\u2028\u2029]/gu, (c) => (c === '\n' ? c : ' '))
+    : raw(k).replace(CTRL, ' ').replace(/ {2,}/g, ' ')).trim().slice(0, n);
   const c = {
     first_name: s('first_name', 200), business_name: s('business_name', 300), email: s('email', 300).toLowerCase(),
     phone: s('phone', 60), town: s('town', 200), trade: s('trade', 40) || 'Something else',
@@ -92,7 +97,8 @@ function validate(b) {
   const e = {};
   if (c.first_name.length < 1 || c.first_name.length > 60) e.first_name = 'Please add your first name.';
   if (c.business_name.length < 2 || c.business_name.length > 120) e.business_name = 'Please add your business name.';
-  if (!/^[^\s@<>()",;:]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(c.email) || c.email.length > 160) e.email = 'Please check your email address. It should look like name@yourbusiness.com.';
+  // ASCII only, a plain local part and a plain domain: nothing that can turn into a second address or a header
+  if (!/^[A-Za-z0-9._%+'-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}$/.test(c.email) || c.email.length > 160 || /\.\.|^\.|\.@/.test(c.email)) e.email = 'Please check your email address. It should look like name@yourbusiness.com.';
   let n = c.phone.replace(/\D/g, '');
   if (n.length === 11 && n[0] === '1') n = n.slice(1);
   if (!/^[2-9]\d{9}$/.test(n)) e.phone = 'Please add a phone number with area code, like 615 555 0123.';
@@ -216,11 +222,26 @@ function ownerEmail(env, rec) {
 }
 const b64u = (str) => { const by = new TextEncoder().encode(str); let bin = ''; for (const x of by) bin += String.fromCharCode(x); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
 const b64 = (str) => { const by = new TextEncoder().encode(str); let bin = ''; for (const x of by) bin += String.fromCharCode(x); return btoa(bin); };
+// Header text: control characters and line separators become a space (no header can ever be split or added).
+const hdrText = (v) => String(v == null ? '' : v).replace(/[\p{Cc}\u2028\u2029\u0085]/gu, ' ').replace(/ {2,}/g, ' ').trim();
+// The subject as one header value. B-encoded when it is not plain ASCII, or when it holds "=?" (so text that looks like an
+// encoded word is never decoded by a mail program into something else). ascii=false: the route takes UTF-8 (Resend, Cloudflare).
+// In a raw MIME header (ascii=true) the subject stays plain only when it is made of plain name characters (no colon, so
+// nothing that reads like "Bcc: ..."), with an optional leading "Re: "; anything else is B-encoded.
+const SAFE_SUBJECT = /^(Re: )?[A-Za-z0-9 .,'&()!?\/+#@-]*$/;
+function subjectValue(v, ascii = true) {
+  v = hdrText(v);
+  if (/=\?/.test(v)) return `=?UTF-8?B?${b64(v)}?=`;
+  // header-like words (bcc, x-...) are encoded too, so a log or a careless reader never takes them for a header
+  return ascii && (!SAFE_SUBJECT.test(v) || /\b(bcc|cc|x-[a-z])/i.test(v)) ? `=?UTF-8?B?${b64(v)}?=` : v;
+}
+const MSGID = /^<[A-Za-z0-9._%+=-]{1,200}@[A-Za-z0-9.-]{1,200}>$/;
 function mime(m) {
-  const hdr = (v) => (v = String(v).replace(/[\r\n]+/g, ' ')) && /^[\x20-\x7e]*$/.test(v) ? v : `=?UTF-8?B?${b64(v)}?=`;
-  return [`From: ${m.from}`, `To: ${m.to}`, `Subject: ${hdr(m.subject)}`, 'MIME-Version: 1.0',
+  const reply = MSGID.test(String(m.inReplyTo || '')) ? m.inReplyTo : '';
+  const from = hdrText(m.from), to = hdrText(m.to);
+  return [`From: ${/^[\x20-\x7e]*$/.test(from) ? from : FROM}`, `To: ${to}`, `Subject: ${subjectValue(m.subject)}`, 'MIME-Version: 1.0',
     ...(m.messageId && /^<[\w.-]+@getbookedoutsolutions\.com>$/.test(m.messageId) ? [`Message-ID: ${m.messageId}`] : []),
-    ...(m.inReplyTo ? [`In-Reply-To: ${hdr(m.inReplyTo)}`, `References: ${hdr(m.inReplyTo)}`] : []),
+    ...(reply ? [`In-Reply-To: ${reply}`, `References: ${reply}`] : []),
     'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', b64(m.text)].join('\r\n');
 }
 
@@ -242,13 +263,13 @@ async function sendMail(env, m, f) {
       // Cloudflare Email Sending (public beta since Apr 16 2026, Workers Paid). The binding's exact call shape is
       // checked on Cloudflare's docs before this route is ever switched on.
       if (!env.EMAIL || typeof env.EMAIL.send !== 'function') return { ok: false, route, error: 'cloudflare route not set up' };
-      const r = await env.EMAIL.send({ from: m.from, to: m.to, subject: m.subject, text: m.text });
+      const r = await env.EMAIL.send({ from: hdrText(m.from), to: hdrText(m.to), subject: subjectValue(m.subject, false), text: m.text });
       return { ok: true, route, id: (r && (r.messageId || r.id)) || '' };
     }
     if (route === 'resend') {
       if (!env.RESEND_KEY) return { ok: false, route, error: 'resend route not set up' };
       const r = await out(env, RESEND_SEND, { method: 'POST', headers: { authorization: 'Bearer ' + env.RESEND_KEY, 'content-type': 'application/json' },
-        body: JSON.stringify({ from: m.from, to: [m.to], subject: m.subject, text: m.text }) }, f);
+        body: JSON.stringify({ from: hdrText(m.from), to: [hdrText(m.to)], subject: subjectValue(m.subject, false), text: m.text }) }, f);
       if (!r.ok) return { ok: false, route, error: 'resend send ' + r.status };
       return { ok: true, route, id: (await r.json()).id || '' };
     }
@@ -285,6 +306,16 @@ function cleanAgent(x) {
 }
 const scriptAgent = (a) => /script/.test(cleanAgent(a));
 const failedNow = (rec) => Array.isArray(rec.fails) && rec.fails.includes(rec.hash);
+// Every version (hash) that ever got a fail, in its own KV key so a pass that races a fail still sees it. Last 50 kept.
+const FAILS_KEEP = 50;
+async function failList(env, id) { const j = await getJ(env, 'fails:' + id); return Array.isArray(j) ? j.filter((x) => typeof x === 'string') : []; }
+async function addFail(env, id, hash) {
+  const list = (await failList(env, id)).filter((x) => x !== hash);
+  list.push(hash);
+  const kept = list.slice(-FAILS_KEEP);
+  await putJ(env, 'fails:' + id, kept, KEEP);
+  return kept;
+}
 
 // Every check that must be true before a report goes to an owner. Returns '' when it may go, else the reason.
 function sendBlock(env, rec) {
@@ -293,11 +324,18 @@ function sendBlock(env, rec) {
   if (rec.status === 'sent') return 'already sent';
   if (rec.status !== 'checked') return 'not checked by both agents';
   if (!rec.complete || (rec.pending || []).length) return 'report still has pending sections';
-  const c = rec.checks || {}, c1 = c['1'], c2 = c['2'];
+  const c = rec.checks || {}, c1 = Object.hasOwn(c, '1') ? c['1'] : null, c2 = Object.hasOwn(c, '2') ? c['2'] : null;
   if (!c1 || !c2 || c1.result !== 'pass' || c2.result !== 'pass') return 'needs two pass marks';
   if (!cleanAgent(c1.agent) || !cleanAgent(c2.agent) || cleanAgent(c1.agent) === cleanAgent(c2.agent)) return 'the two checks must come from two different agents';
   if (scriptAgent(c1.agent) || scriptAgent(c2.agent)) return 'a pass from a script is never enough; two sub-agents must pass it';
   if (failedNow(rec)) return 'a checker failed this version; it needs a fill (a new version) first';
+  // The spot line must come from the current sold zone-lock list (workers/data/zone-locks.json "version")
+  const trade = TRADES[rec.trade] || TRADES['Something else'];
+  if (trade.slug !== 'other') {
+    const sp = (rec.sections || {}).spot, need = Math.max(1, parseInt(env.ZONE_LOCKS_VERSION || '1', 10) || 1);
+    if (!sp || !Number.isInteger(sp.lock_version) || sp.lock_version < need) return `the spot was filled from an older zone-lock list (need version ${need}); fill the spot again`;
+    if (spotProblem(rec, sp)) return 'the spot does not fit the owner\'s town: ' + spotProblem(rec, sp);
+  }
   if (c1.hash !== rec.hash || c2.hash !== rec.hash) return 'report changed after it was checked';
   if (!validate({ ...rec, consent: rec.consent }).ok) return 'contact details no longer valid';
   return '';
@@ -635,6 +673,61 @@ function competitorView(rec) {
   return { name: top.name, pos: pos + 1, rows, gaps: gaps.slice(0, 3).map((x) => x.line) };
 }
 
+// ---------- town names (zone locks; also used by workers/zone-locks.mjs) ----------
+const STATES = { AL: 'alabama', AK: 'alaska', AZ: 'arizona', AR: 'arkansas', CA: 'california', CO: 'colorado', CT: 'connecticut', DE: 'delaware',
+  DC: 'district of columbia', FL: 'florida', GA: 'georgia', HI: 'hawaii', ID: 'idaho', IL: 'illinois', IN: 'indiana', IA: 'iowa', KS: 'kansas',
+  KY: 'kentucky', LA: 'louisiana', ME: 'maine', MD: 'maryland', MA: 'massachusetts', MI: 'michigan', MN: 'minnesota', MS: 'mississippi',
+  MO: 'missouri', MT: 'montana', NE: 'nebraska', NV: 'nevada', NH: 'new hampshire', NJ: 'new jersey', NM: 'new mexico', NY: 'new york',
+  NC: 'north carolina', ND: 'north dakota', OH: 'ohio', OK: 'oklahoma', OR: 'oregon', PA: 'pennsylvania', RI: 'rhode island', SC: 'south carolina',
+  SD: 'south dakota', TN: 'tennessee', TX: 'texas', UT: 'utah', VT: 'vermont', VA: 'virginia', WA: 'washington', WV: 'west virginia',
+  WI: 'wisconsin', WY: 'wyoming' };
+// Short state forms people type (AP style and common ones), compared with dots removed and in lower case.
+const STATE_SHORT = ['ala', 'ariz', 'ark', 'calif', 'cal', 'colo', 'conn', 'del', 'fla', 'ga', 'ill', 'ind', 'kan', 'kans', 'ky', 'md', 'mass',
+  'mich', 'minn', 'miss', 'mo', 'mont', 'neb', 'nebr', 'nev', 'okla', 'ore', 'oreg', 'pa', 'penn', 'penna', 'tenn', 'tex', 'vt', 'va', 'wash',
+  'wis', 'wisc', 'wyo', 'wva'];
+const TAIL_ONE = new Set([...Object.keys(STATES).map((x) => x.toLowerCase()), ...STATE_SHORT, 'usa', 'us', 'america']);
+const TAIL_MULTI = [...Object.values(STATES), 'united states', 'united states of america', 'w va', 'n c', 's c', 'n d', 's d', 'n h', 'n j', 'n m', 'n y', 'r i']
+  .map((x) => x.split(' ')).sort((a, b) => b.length - a.length);
+const CANON = { mt: 'mount', mount: 'mount', st: 'saint', saint: 'saint', ste: 'sainte', ft: 'fort', fort: 'fort', pt: 'point' };
+
+// "Smyrna, TN 37167, USA" / "Smyrna, Tenn." / "Smyrna-TN" / "  smyrna  " -> {display: "Smyrna", key: "smyrna", words: ["smyrna"]}.
+// key: canonical words (Mt = Mount, St = Saint) joined with no spaces, so "LaVergne" = "La Vergne". null = cannot read it.
+function townKey(raw) {
+  let t = String(raw == null ? '' : raw).normalize('NFKC').replace(/[\p{Cf}​-‏﻿]/gu, '')
+    .replace(/[‐-―−-]/g, ' ').replace(/[(),;:!]/g, ' ').replace(/\s+/g, ' ').trim();
+  let words = t.split(' ').filter(Boolean);
+  const bare = (w) => w.toLowerCase().replace(/\./g, '');
+  // drop trailing ZIP codes, country names and state names or short forms (never the last word left)
+  for (let again = true; again && words.length > 1;) {
+    again = false;
+    const last = bare(words[words.length - 1]);
+    if (/^\d{4,5}$/.test(last) || /^\d{9}$/.test(last) || !last) { words.pop(); again = true; continue; }
+    // "T.N." -> "tn"; multi-word state names
+    if (TAIL_ONE.has(last)) { words.pop(); again = true; continue; }
+    for (const m of TAIL_MULTI) {
+      if (words.length > m.length && words.slice(-m.length).map(bare).join(' ') === m.join(' ')) { words.splice(-m.length); again = true; break; }
+    }
+  }
+  if (words.length) words[words.length - 1] = words[words.length - 1].replace(/\.+$/, '');
+  words = words.filter(Boolean);
+  const display = words.join(' ');
+  if (!display || display.length > 40 || !/^[A-Za-z][A-Za-z .']*$/.test(display)) return null;
+  const canon = words.map((w) => { const b = bare(w).replace(/'/g, ''); return CANON[b] || b; });
+  return { display: words.map((w) => w[0].toUpperCase() + w.slice(1)).join(' '), key: canon.join(''), words: canon };
+}
+
+// The spot must be about HIS town: an open spot names his own town; a taken one names his town, or a lock zone whose towns
+// (zone_towns, copied from the lock) include his town. Returns '' or the reason.
+function spotProblem(rec, d) {
+  if (!rec || rec.town == null) return '';
+  const mine = townKey(rec.town), z = townKey(d.zone);
+  if (!mine) return 'his town cannot be read as a plain town name; the spot is filled by hand';
+  if (!z) return 'spot.zone is not a plain town name';
+  if (z.key === mine.key) return '';
+  if (d.open === false && Array.isArray(d.zone_towns) && d.zone_towns.some((t) => (townKey(t) || {}).key === mine.key)) return '';
+  return `spot.zone "${String(d.zone).slice(0, 80)}" is not his town (${mine.display})${d.open ? '' : ' or a lock zone that lists his town'}`;
+}
+
 // Checks a fill for the new sections before it is saved. Returns '' when ok, else the reason.
 function fillProblem(rec, section, d) {
   const g = (rec.sections || {}).google;
@@ -725,6 +818,9 @@ function fillProblem(rec, section, d) {
   }
   if (section === 'spot') {
     if (!str(d.zone, 80) || !bool(d.open)) return 'spot needs {zone: "...", open: true|false}';
+    if (d.lock_version != null && !(Number.isInteger(d.lock_version) && d.lock_version >= 1)) return 'spot.lock_version must be the zone-lock list version (a whole number)';
+    if (d.zone_towns != null && (!Array.isArray(d.zone_towns) || d.zone_towns.length > 50 || !d.zone_towns.every((x) => str(x, 80)))) return 'spot.zone_towns must be a list of town names';
+    const why = spotProblem(rec, d); if (why) return why;
   }
   return '';
 }
@@ -995,7 +1091,7 @@ async function saveReport(env, rec) {
     // A new version of the report: any earlier check marks were for the old version, so they no longer count.
     if (rec.checks && Object.keys(rec.checks).length) rec.checks_cleared = (rec.checks_cleared || 0) + 1;
     rec.checks = {};
-    rec.fails = []; // a new version starts clean; fails were for the old one
+    // rec.fails is NOT cleared: a version that failed once can never pass, even if a later fill makes the same page again
     if (rec.status === 'checked' || rec.status === 'held') rec.status = 'built';
     rec.hash = h;
   }
@@ -1084,7 +1180,40 @@ async function tick(env, now = new Date(), f) {
 // watch list so the agents fix them. Returns {changed, log}.
 async function trySend(env, rec, now, f) {
   if (!rec.complete || (rec.pending || []).length) return { changed: false, log: '' }; // backstop: never send an incomplete report
+  // Right before sending: read the record and its fail list fresh from KV (a fail may have landed since this copy was read)
+  // and run every send rule on THAT copy. Only the same version that was checked can go.
+  const fresh = await getJ(env, 'req:' + rec.id);
+  const fails = [...new Set([...(Array.isArray(rec.fails) ? rec.fails : []), ...((fresh && fresh.fails) || []), ...(await failList(env, rec.id))])];
+  let why = '';
+  if (!fresh) why = 'record not found';
+  else if (fresh.status === 'sent') why = 'already sent';
+  else if (fresh.hash !== rec.hash) why = 'report changed after it was checked';
+  else if (Object.values(fresh.checks || {}).some((c) => c && c.result === 'fail' && c.hash === rec.hash)) why = 'a checker failed this version';
+  else {
+    // another check landed while this one was being saved (a race): the marks on record must be the ones in hand
+    const fc = fresh.checks || {}, rc = rec.checks || {};
+    for (const k of ['1', '2']) {
+      const a = Object.hasOwn(fc, k) ? fc[k] : null, b = Object.hasOwn(rc, k) ? rc[k] : null;
+      if (a && a.hash === rec.hash && (!b || cleanAgent(a.agent) !== cleanAgent(b.agent) || a.result !== b.result || a.hash !== b.hash)) why = 'the check marks changed while sending; the next run tries again';
+    }
+  }
+  if (!why) why = sendBlock(env, { ...rec, fails });
+  if (why) {
+    if (rec.send_blocked === why) return { changed: false, log: '' };
+    rec.send_blocked = why; return { changed: true, log: 'blocked' };
+  }
+  // One sender at a time: claim the send (put, then read back), like the follow-up day claim.
+  if (isLive(env) && !rec.test) {
+    const ck = 'sendclaim:' + rec.id, mine = rand(8);
+    if (await env.KV.get(ck)) return { changed: false, log: '' };
+    await env.KV.put(ck, mine, { expirationTtl: 3600 });
+    if ((await env.KV.get(ck)) !== mine) return { changed: false, log: '' };
+    rec._claim = ck;
+  }
   const r = await deliverToOwner(env, rec, f);
+  // a send that surely did not go frees the claim for the next try; a sent one keeps it (until it expires, by then sent)
+  if (rec._claim && !r.sent && (r.blocked || /^(gmail route not set up|gmail token|gmail send 4|resend route not set up|resend send 4|cloudflare route not set up|unknown SEND_ROUTE)/.test(String(r.reason || '')))) await env.KV.delete(rec._claim);
+  delete rec._claim;
   if (r.sent) {
     rec.status = 'sent'; rec.sent = now.toISOString(); rec.sent_by = 'auto'; rec.send_route = r.route; rec.send_id = r.id || '';
     await env.KV.delete('open:' + rec.id);
@@ -1112,7 +1241,7 @@ function reviewItem(r) {
     received: r.received, due: r.due, due_text: chicagoText(r.due), complete: !!r.complete, pending: r.pending || [],
     report: `${SITE}/r/${r.token}/`, hash: r.hash || '', sections: r.sections || {}, lookup_error: r.lookup_error || '',
     checks: { 1: c['1'] || null, 2: c['2'] || null },
-    needs: !r.complete ? 'fill pending sections first' : !(c['1'] && c['1'].result === 'pass' && c['1'].hash === r.hash) ? 'checker 1'
+    needs: !r.complete ? 'fill pending sections first' : failedNow(r) ? 'fix first (a checker failed this version)' : !(c['1'] && c['1'].result === 'pass' && c['1'].hash === r.hash) ? 'checker 1'
       : !(c['2'] && c['2'].result === 'pass' && c['2'].hash === r.hash) ? 'checker 2' : 'send' };
 }
 async function review(u, env) {
@@ -1121,6 +1250,7 @@ async function review(u, env) {
   for (const k of (await env.KV.list({ prefix: 'open:' })).keys) {
     const r = await getJ(env, 'req:' + k.name.slice(5));
     if (!r || !['built', 'held', 'checked'].includes(r.status)) continue;
+    r.fails = [...new Set([...(Array.isArray(r.fails) ? r.fails : []), ...(await failList(env, r.id))])];
     list.push(reviewItem(r));
   }
   list.sort((a, b) => a.due.localeCompare(b.due));
@@ -1143,6 +1273,7 @@ async function check(req, env, now = new Date(), f) {
   rec.checks = rec.checks || {};
   const other = rec.checks[slot === '1' ? '2' : '1'];
   if (b.result === 'pass' && scriptAgent(agent)) return json({ ok: false, error: 'a script may only fail a report; a pass must come from a sub-agent' }, 409);
+  if (b.result === 'pass') rec.fails = [...new Set([...(Array.isArray(rec.fails) ? rec.fails : []), ...(await failList(env, rec.id))])].slice(-FAILS_KEEP);
   if (b.result === 'pass' && failedNow(rec)) return json({ ok: false, error: 'a checker failed this version; fill the fix first (a new version), then both check again' }, 409);
   if (other && cleanAgent(other.agent) === agent) return json({ ok: false, error: 'checker 1 and checker 2 must be different agents' }, 409);
   if (slot === '2' && b.result === 'pass' && !(rec.checks['1'] && rec.checks['1'].result === 'pass' && rec.checks['1'].hash === rec.hash))
@@ -1153,14 +1284,19 @@ async function check(req, env, now = new Date(), f) {
   let sent = false;
   if (b.result === 'fail') {
     rec.status = 'held';
-    rec.fails = Array.isArray(rec.fails) ? rec.fails : [];
-    if (!rec.fails.includes(rec.hash)) rec.fails.push(rec.hash);
+    rec.fails = await addFail(env, rec.id, rec.hash);
     await sendAlert(env, `Free report failed check ${slot}: ${rec.business_name}`, alertText(rec, `Checker ${slot} (${agent}) failed this report: ${notes || 'no notes'}. Fix it (fill the section again), then both checkers read it again.`), f, rec.test ? 'test' : 'problem', rec.id);
   } else if (rec.checks['1'] && rec.checks['2'] && rec.checks['1'].result === 'pass' && rec.checks['2'].result === 'pass') {
     rec.status = 'checked';
     if (!rec.test) { const r = await trySend(env, rec, now, f); sent = rec.status === 'sent'; }
   }
   await putJ(env, 'req:' + rec.id, rec, KEEP);
+  // a fail written by another check while this one ran: the version stays held whatever this copy said
+  if (b.result === 'pass' && rec.status !== 'sent' && (await failList(env, rec.id)).includes(rec.hash)) {
+    rec.status = 'held'; rec.fails = await failList(env, rec.id);
+    await putJ(env, 'req:' + rec.id, rec, KEEP);
+    return json({ ok: false, error: 'a checker failed this version while this pass was being saved', status: rec.status }, 409);
+  }
   return json({ ok: true, id: rec.id, status: rec.status, sent, blocked: rec.send_blocked || '' });
 }
 
@@ -1292,6 +1428,7 @@ async function fill(req, env) {
   if (!ID.test(String(b.id || '')) || !FILL.includes(b.section) || !b.data || typeof b.data !== 'object') return json({ ok: false, error: 'bad fill' }, 400);
   const rec = await getJ(env, 'req:' + b.id);
   if (!rec) return json({ ok: false, error: 'not found' }, 404);
+  if (rec.status === 'sent') return json({ ok: false, error: 'already sent; the owner has this version' }, 409);
   const why = fillProblem(rec, b.section, b.data);
   if (why) return json({ ok: false, error: 'bad fill: ' + why }, 400);
   // Screenshots: only ones hosted for THIS report through /shot (so the page never points at a missing or foreign image).
@@ -1451,7 +1588,7 @@ export default {
     sendAlert, isTestRequest, plain, ownerEmail, mime, sendMail, sendBlock, check, review, trySend, sha, budgetLine, renderReport, submit, build, tick, TRADES, REVENUE,
     fuTick, followup, startFollowups, fuHelpers, gmailThread, allowed, pickFixes,
     diagnose, speedFinding, FIVE_MIN_TEST: FU.FIVE_MIN_TEST, bookingList: FU.bookingList, bookingFixOk: FU.bookingFixOk, knownFor, competitorView, refreshReport, speedEstimate, fillProblem, fill, rerender, SOURCES, FEW_REVIEWS, FILL,
-    shot, shotUrl, pngBytes, SHOT_ENGINES, townState, cleanAgent },
+    shot, shotUrl, pngBytes, SHOT_ENGINES, townState, cleanAgent, townKey, addFail, failList },
 };
 
 const GONE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Report not found | Booked Out Solutions</title><style>body{margin:0;font:18px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#F6F1E7;color:#0A0F26}main{max-width:34rem;margin:0 auto;padding:3rem 1.2rem}</style></head><body><main><h1>This report is not here</h1><p>The link may be old or mistyped. Reply to the email it came in and we will send it again, or write to hello@getbookedoutsolutions.com.</p><p>Booked Out Solutions</p></main></body></html>';

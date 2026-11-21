@@ -59,7 +59,7 @@ const NEW = {
   competitor: { name: 'Fake Air One', theirs: { photos: 80, reply_pct: 90, posts_90d: 6, website: true, hours: true }, yours: { photos: 12, reply_pct: 10, posts_90d: 0, website: true, hours: true } },
   listings: { sites: { google: { found: true, complete: true }, yelp: { found: false }, bbb: { found: true, complete: false, fix: 'Fix the old phone number on your BBB page.' },
     facebook: { found: true }, nextdoor: { found: false }, chamber: { found: true } } },
-  spot: { zone: 'Smyrna', open: true },
+  spot: { zone: 'Smyrna', open: true, lock_version: 1 },
 };
 const AI_FULL = (ai) => ({ ...ai, google_ai: { named: false } });
 // Visible text only (tags, styles and attributes removed)
@@ -427,7 +427,12 @@ await test('A failed send goes to the watch list (not to Rickey) and is tried ag
   const w = watchOf(env);
   assert.equal(w.length, 1); assert.equal(w[0].level, 'problem'); assert.match(w[0].subject, /send failed/);
   const ok = sendFetch();
+  // a 5xx may have gone out, so the send claim is kept (no double email) until it expires (1 hour in KV)
+  assert.ok(env.KV.m.has('sendclaim:' + id), 'claim kept after an unsure failure');
   await T.tick(env, at('2026-11-17T11:15:00-06:00'), ok);
+  assert.equal(rec().status, 'checked', 'not tried again while the claim holds');
+  env.KV.m.delete('sendclaim:' + id); // KV expires it
+  await T.tick(env, at('2026-11-17T12:15:00-06:00'), ok);
   assert.equal(rec().status, 'sent');
   for (const c of [...f.calls, ...ok.calls]) assert.ok(!/getbookedoutsolutions\.com/.test(c.url), 'no email or form post to us');
 });

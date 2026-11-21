@@ -172,8 +172,21 @@ worker. Tests: `node workers/test-freereport-fill.mjs`.
   hash (posted even when that slot already has a pass).
 - The worker enforces the same rules on `/check` (Nov 21, second review): agent names are cleaned one way everywhere (NFKC, no format or
   zero-width characters, plain spaces and hyphens, squeezed, lower case) and stored cleaned; a PASS from any name containing "script"
-  is refused (409); once any fail is on record for the current version (`fails` list), every pass is refused (409) until a fill makes
-  a new version (which clears the list); `sendBlock` refuses the same cases. The POST-only endpoints answer 405 to other methods, and
+  is refused (409). Every version (hash) that ever got a fail is kept in its own KV key `fails:<id>` (last 50) and is NEVER cleared:
+  a version that failed once can never pass, even if a later fill makes the same page again; `sendBlock` refuses it too. A pass that
+  races a fail re-reads `fails:<id>` after saving and holds the report. Right before sending, `trySend` re-reads `req:<id>` and
+  `fails:<id>` fresh, runs every send rule on that copy (same hash, no fail mark, same marks as in hand), then takes the claim
+  `sendclaim:<id>` (put, read back; kept 1 hour after an unsure failure so a 5xx can't become a double email).
+- A sent report takes no more fills (409).
+- Spot: the runner recomputes the spot from the zone-lock list on every run, right before any pass; when it differs it fills it again
+  (a new version to check), and a held town fails checker 1. The worker refuses a spot whose zone is not his town (an open spot is
+  always his own town; a taken one may name the lock zone only when its `zone_towns` list his town). The list file carries a
+  `version`; every spot fill carries it as `lock_version`, and the worker refuses to send when it is below the plain variable
+  `ZONE_LOCKS_VERSION` (default 1). Raise both together on every change to the list.
+- Email: the address must be plain ASCII (`[A-Za-z0-9._%+'-]` before the @, a plain domain after). Control characters never get
+  into a saved field (one-line fields get a space; the private note keeps plain line breaks). Header values lose control and line
+  separator characters; the Subject is B-encoded in the raw message unless it is plain name characters (no colon, no "bcc"/"x-"),
+  and on every route (Gmail, Resend, Cloudflare) whenever it holds "=?". In-Reply-To is used only when it is a plain message id. The POST-only endpoints answer 405 to other methods, and
   any unknown path under `/r/` answers 404.
 - Never sends: no mark-sent, no send route. The run stops unless `/review` gives `live` as true or false. Right before every checker 2
   pass it reads `/ping` again and holds if LIVE is on (or unclear) unless `--allow-send`. A report whose last check failed on the same

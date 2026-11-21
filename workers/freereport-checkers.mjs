@@ -26,7 +26,7 @@
 import W from './bookedout-freereport.js';
 import { prepareFills, postFills, postShot, findItem, baseFromEnv } from './freereport-fill.mjs';
 import { planFills, researchTemplate, SPEED_REASON } from './freereport-jobs.mjs';
-import { loadZoneLocks } from './zone-locks.mjs';
+import { loadZoneLocks, spotFor, LOCK_TRADES } from './zone-locks.mjs';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
@@ -157,6 +157,10 @@ export async function run(opts) {
     if (only && item.id !== only) continue;
     log('item', { id: item.id, msg: `${item.business_name} (${item.trade}, ${item.town}) status ${item.status}, needs ${item.needs}, due ${item.due_text}${item.test ? ', TEST shop' : ''}` });
     if (item.needs === 'send') { log('skip', { id: item.id, msg: 'both checks already passed this version; the worker sends it only when LIVE is on' }); summary.push({ id: item.id, result: 'checked' }); continue; }
+    if (/^fix first/.test(item.needs || '')) {
+      log('skip', { id: item.id, msg: 'a checker failed this exact version; fix the data with a fill (a new version) first' });
+      summary.push({ id: item.id, result: 'held, fix first' }); continue;
+    }
     const failed = Object.entries(item.checks || {}).find(([, c]) => c && c.result === 'fail' && c.hash === item.hash);
     if (failed && item.needs !== 'fill pending sections first') {
       log('skip', { id: item.id, msg: `checker ${failed[0]} failed this exact version (${failed[1].notes || 'no notes'}); fix the data with a fill first, then run again` });
@@ -225,6 +229,25 @@ export async function run(opts) {
     const c1 = await checker1(target, html), c2 = checker2(target, html);
     log('checker 1', { id: item.id, msg: c1.pass ? 'pass' : 'FAIL: ' + c1.problems.join(' | ') });
     log('checker 2', { id: item.id, msg: c2.pass ? 'pass' : 'FAIL: ' + c2.problems.join(' | ') });
+    // 3b. the spot, from the zone-lock list as it is NOW (a lock may have been sold since the spot was filled)
+    if (LOCK_TRADES.includes(target.trade)) {
+      const want = spotFor(target, locks), have = (target.sections || {}).spot;
+      const same = want && !want.hold && have && have.zone === want.zone && have.open === want.open && have.lock_version === want.lock_version
+        && JSON.stringify(have.zone_towns || null) === JSON.stringify(want.zone_towns || null);
+      if (want && want.hold) {
+        c1.pass = false; c1.problems.push('spot: ' + want.hold);
+        log('spot', { id: item.id, msg: 'held: ' + want.hold });
+      } else if (!same) {
+        log('spot', { id: item.id, msg: `the zone-lock list now says ${JSON.stringify(want)}, the report has ${JSON.stringify(have || null)}; ${apply ? 'filling it again' : 'would fill it again'}` });
+        if (apply) {
+          const { fills, problems } = prepareFills(item, { spot: want });
+          for (const x of problems) log('refused', { id: item.id, msg: x });
+          if (fills.length) { const pr = await postFills({ base, key, id: item.id, fills, fetch: f }); for (const x of pr.results) log('fill', { id: item.id, msg: `${x.section} ${x.status}${x.error ? ' ' + x.error : ''}` }); }
+        }
+        summary.push({ id: item.id, result: apply ? 'spot filled again; new version, check again' : 'would fill the spot again' });
+        continue;
+      }
+    }
     // 4. marks. The script may only post FAILS. A pass is posted only from a sub-agent verdict that says pass, names a
     // non-script agent, and read this exact version (hash). Both slots need one before any pass is posted.
     const v = (verdicts && Object.hasOwn(verdicts, item.id) && verdicts[item.id]) || {};

@@ -28,7 +28,7 @@ const DATA = {
   speed: { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: 30 },
   known_for: { scanned: 6, reviews: ['On time, fair price', 'Fair price and on time', 'On time and clean', 'Clean, fair price', 'Clean and on time', 'Fair price'].map((text) => ({ text, rating: 5 })) },
   listings: { sites: { google: { found: true }, yelp: { found: false }, bbb: { found: true }, facebook: { found: true }, nextdoor: { found: false }, chamber: { found: false } } },
-  spot: { zone: 'Smyrna', open: true },
+  spot: { zone: 'Smyrna', open: true, lock_version: 1 },
 };
 // a fetch that answers like our live worker (same code), for one env
 const local = (env) => async (url, init) => W.fetch(new Request(url, init), env, {});

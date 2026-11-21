@@ -5,7 +5,9 @@
 import W from './bookedout-freereport.js';
 import { prepareFills, findItem } from './freereport-fill.mjs';
 import { planFills, researchTemplate, pendingSections, SPEED_UNTESTED, JOBS } from './freereport-jobs.mjs';
-import { loadZoneLocks, checkLocks, spotFor, townKey, realDate, chicagoDay, FILE } from './zone-locks.mjs';
+import { loadZoneLocks, checkLocks, spotFor as spotForRaw, townKey, realDate, chicagoDay, FILE } from './zone-locks.mjs';
+// most tests look at zone and open only; lock_version and zone_towns have their own tests
+const spotFor = (...a) => { const x = spotForRaw(...a); return x && !x.hold ? { zone: x.zone, open: x.open } : x; };
 import { run, checker1, checker2, args } from './freereport-checkers.mjs';
 import { baseFromEnv } from './freereport-fill.mjs';
 import assert from 'node:assert/strict';
@@ -51,7 +53,7 @@ globalThis.fetch = async (u) => { throw new Error('network call attempted: ' + u
 // ---------- zone locks ----------
 await test('Zone locks: the shipped list is empty and valid, and an empty list reads "open"', () => {
   const locks = loadZoneLocks();
-  assert.deepEqual(locks, []);
+  assert.equal(locks.length, 0); assert.equal(locks.version, 1, 'the list carries its version');
   const doc = JSON.parse(readFileSync(FILE, 'utf8'));
   assert.ok(doc.schema && doc.schema.trade && doc.schema.zone, 'schema is in the file');
   assert.deepEqual(spotFor({ trade: 'Heating and air', town: 'Smyrna TN' }, locks), { zone: 'Smyrna', open: true });
@@ -337,7 +339,7 @@ await test('Runner --apply with no research: fills speed and spot only, waits, a
   const dir = rdir(id);
   const r = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, templates: true, out: quiet, runId: 't4' });
   assert.equal(r.summary[0].result, 'needs research');
-  assert.deepEqual(rec().sections.speed, SPEED_UNTESTED); assert.deepEqual(rec().sections.spot, { zone: 'Smyrna', open: true });
+  assert.deepEqual(rec().sections.speed, SPEED_UNTESTED); assert.deepEqual(rec().sections.spot, { zone: 'Smyrna', open: true, lock_version: 1 });
   assert.deepEqual(rec().checks || {}, {}, 'no check marks on an incomplete report');
   assert.equal(JSON.parse(readFileSync(join(dir, id + '.json'), 'utf8')).id, id, 'the template carries the id, so it is accepted once filled');
 });
@@ -423,7 +425,7 @@ await test('Review 2 item 2: once a fail is on record for this version the worke
   assert.match(T.sendBlock({ LIVE: 'on' }, { ...rec, test: false }), /failed this version/);
   // a fill makes a new version: the fail list is cleared and passes are taken again
   await local(b2.env)(BASE + '/api/free-report/fill', { method: 'POST', body: JSON.stringify({ id: b2.id, k: KEY, section: 'booking', data: { score: 7, fixes: ['Put your phone number at the top of the home page.'] } }) });
-  const nh = b2.rec().hash; assert.notEqual(nh, b2.hash); assert.deepEqual(b2.rec().fails, []);
+  const nh = b2.rec().hash; assert.notEqual(nh, b2.hash); assert.ok(b2.rec().fails.includes(b2.hash), 'the old fail is never cleared');
   assert.equal((await P(b2.env, b2.id, nh)(1, 'A', 'pass')).status, 200);
   assert.equal((await P(b2.env, b2.id, nh)(2, 'B', 'pass')).status, 200);
   assert.equal(b2.rec().status, 'checked');
@@ -477,6 +479,116 @@ await test('Review 2 item 7: names with angle brackets, quotes and & are compare
     assert.equal(r.summary[0].result, 'waiting for verdicts', steps(r));
     assert.ok(!h.includes('<i>Z</i>') && h.includes('&lt;i&gt;Z') && !h.includes('&amp;lt;'), 'escaped exactly once');
   }
+});
+
+// ---------- third review ----------
+const LIVEENV = { LIVE: 'on', SEND_ROUTE: 'gmail', GMAIL_CLIENT_ID: 'a', GMAIL_CLIENT_SECRET: 'b', GMAIL_REFRESH_TOKEN: 'c' };
+const REALSHOP = { ...FAKE, business_name: 'Checker Run Heating', email: 'owner@checkerrun-heating.com' };
+const fillX = (b, section, data) => local(b.env)(BASE + '/api/free-report/fill', { method: 'POST', body: JSON.stringify({ id: b.id, k: KEY, section, data }) }).then(async (r) => ({ ...(await r.json()), status: r.status }));
+await test('Review 3 item 1: a failed version can never pass again, even when a later fill makes the same page (H1 -> H2 -> H1)', async () => {
+  const b = await ready(); const H1 = b.hash, orig = JSON.parse(JSON.stringify(b.rec().sections.booking));
+  await P(b.env, b.id, H1)(1, 'sub-a', 'pass'); await P(b.env, b.id, H1)(2, 'sub-b', 'fail');
+  await fillX(b, 'booking', { ...orig, score: (orig.score % 10) + 1 }); assert.notEqual(b.rec().hash, H1);
+  await fillX(b, 'booking', orig); assert.equal(b.rec().hash, H1, 'back to the same page');
+  assert.equal((await P(b.env, b.id, H1)(1, 'sub-c', 'pass')).status, 409);
+  assert.equal((await P(b.env, b.id, H1)(2, 'sub-d', 'pass')).status, 409);
+  assert.deepEqual(JSON.parse(b.env.KV.m.get('fails:' + b.id)), [H1]);
+  // rerender and the cron never clear it
+  await T.rerender(new Request(BASE + '/x', { method: 'POST', body: JSON.stringify({ k: KEY }) }), b.env); await T.tick(b.env, new Date());
+  assert.ok(JSON.parse(b.env.KV.m.get('fails:' + b.id)).includes(H1));
+  const item = await findItem({ base: BASE, key: KEY, id: b.id, fetch: local(b.env) });
+  assert.match(item.needs, /^fix first/);
+  // capped at the last 50
+  const fl = await T.addFail(b.env, b.id, 'x'.repeat(32)); for (let i = 0; i < 60; i++) await T.addFail(b.env, b.id, String(i).padStart(32, '0'));
+  assert.equal(JSON.parse(b.env.KV.m.get('fails:' + b.id)).length, 50); assert.ok(fl.includes(H1));
+});
+await test('Review 3 item 2: a fail that races a pass still wins (own KV key); trySend re-reads the record and claims the send once', async () => {
+  // race: checker 1 passed; a slot-1 fail and a slot-2 pass land at the same time
+  { const b = await ready(REALSHOP, LIVEENV); const sends = [];
+    await P(b.env, b.id, b.hash)(1, 'sub-a', 'pass');
+    const m = b.env.KV, oget = m.get.bind(m); m.get = async (k) => { const v = await oget(k); await new Promise((r) => setTimeout(r, 5)); return v; };
+    const orig = globalThis.fetch; globalThis.fetch = async (u) => { sends.push(String(u)); return new Response(JSON.stringify({ access_token: 't', id: 'm', threadId: 'th' })); };
+    const [x, y] = await Promise.all([P(b.env, b.id, b.hash)(1, 'sub-c', 'fail'), P(b.env, b.id, b.hash)(2, 'sub-b', 'pass')]);
+    m.get = oget; globalThis.fetch = orig;
+    assert.equal(b.rec().status, 'held', JSON.stringify([x, y])); assert.ok(JSON.parse(b.env.KV.m.get('fails:' + b.id)).includes(b.hash));
+    assert.deepEqual(sends, [], 'nothing sent');
+    await T.tick(b.env, at('2026-11-20T16:00:00-06:00'), async (u) => { sends.push(String(u)); return new Response('{}'); });
+    assert.deepEqual(sends, []); }
+  // trySend: a KV copy that changed since (a fail mark on record) blocks the send even when the copy in hand looks fine
+  { const b = await ready(REALSHOP, LIVEENV); const H = b.hash;
+    const rec = { ...b.rec(), status: 'checked', checks: { 1: { agent: 'a', result: 'pass', hash: H }, 2: { agent: 'b', result: 'pass', hash: H } } };
+    const kvRec = { ...rec, checks: { ...rec.checks, 2: { agent: 'b', result: 'fail', hash: H } } };
+    b.env.KV.m.set('req:' + b.id, JSON.stringify(kvRec));
+    const calls = []; const r = await T.trySend(b.env, rec, new Date(), async (u) => { calls.push(u); return new Response('{}'); });
+    assert.equal(r.log, 'blocked'); assert.match(rec.send_blocked, /failed this version/); assert.deepEqual(calls, []); }
+  // the claim: a second sender while the first holds the claim sends nothing
+  { const b = await ready(REALSHOP, LIVEENV); const H = b.hash;
+    const rec = { ...b.rec(), status: 'checked', checks: { 1: { agent: 'a', result: 'pass', hash: H }, 2: { agent: 'b', result: 'pass', hash: H } } };
+    b.env.KV.m.set('req:' + b.id, JSON.stringify(rec)); b.env.KV.m.set('sendclaim:' + b.id, 'someone-else');
+    const calls = []; await T.trySend(b.env, rec, new Date(), async (u) => { calls.push(u); return new Response('{}'); });
+    assert.deepEqual(calls, []); assert.notEqual(rec.status, 'sent');
+    b.env.KV.m.delete('sendclaim:' + b.id);
+    const ok = async (u) => { calls.push(u); return new Response(JSON.stringify({ access_token: 't', id: 'm1', threadId: 'th' })); };
+    await T.trySend(b.env, rec, new Date(), ok);
+    assert.equal(rec.status, 'sent'); assert.equal(calls.filter((u) => /messages\/send/.test(u)).length, 1);
+    assert.ok(b.env.KV.m.has('sendclaim:' + b.id)); }
+});
+await test('Review 3 item 3: the spot follows the zone-lock list as it is now; the worker refuses a spot not about his town; old list versions never send', async () => {
+  const PL = { ...REALSHOP, trade: 'Plumbing', business_name: 'Checker Run Plumbing', email: 'owner@crp-plumb.com' };
+  const b = await ready(PL, { LIVE: 'off' });
+  assert.deepEqual(b.rec().sections.spot, { zone: 'Smyrna', open: true, lock_version: 1 });
+  const locks = checkLocks({ version: 2, locks: [{ trade: 'Plumbing', zone: 'Smyrna', business_name: 'Paid Plumbing Co', since: '2026-11-01' }] });
+  const H = b.hash;
+  const r = await run({ base: BASE, key: KEY, fetch: local(b.env), research: b.dir, locks, apply: true, verdicts: goodVerdicts(b.id, H), out: quiet, runId: 's1', allowSend: true });
+  assert.match(r.summary[0].result, /spot filled again/); assert.deepEqual(b.rec().checks || {}, {}, 'no pass on the old spot');
+  assert.deepEqual(b.rec().sections.spot, { zone: 'Smyrna', open: false, lock_version: 2, zone_towns: ['Smyrna'] });
+  assert.doesNotMatch(b.env.KV.m.get('rep:' + b.id), /Your spot is open/);
+  // a held town (close to a lock) fails checker 1 by script
+  const c = await ready({ ...PL, email: 'o3@crp-plumb.com', town: 'Smryna TN' }, { LIVE: 'off' });
+  const r2 = await run({ base: BASE, key: KEY, fetch: local(c.env), research: c.dir, locks, apply: true, out: quiet, runId: 's2' });
+  assert.ok(r2.steps.some((x) => x.step === 'spot' || /spot/.test(x.msg || '')), steps(r2));
+  // worker: a spot for another town is refused; a taken spot may name the lock zone only if its towns list his town
+  const d = await ready({ ...PL, email: 'o2@crp-plumb.com', town: 'La Vergne, TN' }, { LIVE: 'off' });
+  assert.equal((await fillX(d, 'spot', { zone: 'Murfreesboro', open: true, lock_version: 1 })).status, 400);
+  assert.equal((await fillX(d, 'spot', { zone: 'Mount Juliet', open: true, lock_version: 1 })).status, 400, 'an open spot is always his own town');
+  assert.equal((await fillX(d, 'spot', { zone: 'Mount Juliet', open: false, lock_version: 1, zone_towns: ['Mount Juliet', 'Lavergne'] })).status, 200);
+  assert.equal((await fillX(d, 'spot', { zone: 'Mount Juliet', open: false, lock_version: 1, zone_towns: ['Mount Juliet'] })).status, 400);
+  assert.equal((await fillX(d, 'spot', { zone: 'la vergne', open: true, lock_version: 1 })).status, 200);
+  // sendBlock: an older list version than ZONE_LOCKS_VERSION never sends
+  const ok = { ...d.rec(), status: 'checked', checks: { 1: { agent: 'a', result: 'pass', hash: d.rec().hash }, 2: { agent: 'b', result: 'pass', hash: d.rec().hash } } };
+  assert.equal(T.sendBlock({ LIVE: 'on' }, ok), '');
+  assert.match(T.sendBlock({ LIVE: 'on', ZONE_LOCKS_VERSION: '2' }, ok), /older zone-lock list/);
+  assert.match(T.sendBlock({ LIVE: 'on' }, { ...ok, sections: { ...ok.sections, spot: { zone: 'La Vergne', open: true } } }), /older zone-lock list/);
+  // the shipped list has a version
+  assert.equal(loadZoneLocks().version, 1);
+});
+await test('Review 3 item 4: a sent report takes no more fills (409)', async () => {
+  const b = await ready();
+  const r0 = JSON.parse(b.env.KV.m.get('req:' + b.id)); r0.status = 'sent'; b.env.KV.m.set('req:' + b.id, JSON.stringify(r0));
+  const h = b.rec().hash;
+  const r = await fillX(b, 'booking', { score: 3, fixes: ['Put your phone number at the top of the home page.'] });
+  assert.equal(r.status, 409); assert.equal(b.rec().hash, h);
+});
+await test('Review 3 items 5+6: emails are plain ASCII; control characters never reach a field; subjects that look like headers or encoded words are B-encoded on every route', async () => {
+  const V = (o) => T.validate({ ...REALSHOP, ...o });
+  for (const e of ['a@x.com\r\nBcc: e@x.com', 'a@x.com\u0000', 'a\u0085b@x.com', 'ü@x.com', 'a@x.com,e@evil.com', 'a%e@evil.com@x.com', '"a b"@x.com', 'a..b@x.com', '.a@x.com', 'a.@x.com', 'a@-x.com'])
+    assert.equal(V({ email: e }).ok, false, JSON.stringify(e));
+  for (const e of ['a+b@x.com', "o'brien@x.com", 'a.b_c-d%e@sub.x-y.com']) assert.equal(V({ email: e }).ok, true, e);
+  const c = V({ business_name: 'Acme\r\nBcc: evil@x.com\u2028X\u0000Y', first_name: 'Bob\u000b\u000cZ', note: 'line one\r\nline two\u0000' }).clean;
+  assert.ok(!/[\p{Cc}\u2028\u2029]/u.test(c.business_name + c.first_name)); assert.equal(c.note, 'line one\nline two');
+  const rec = { ...c, token: 'a'.repeat(48), id: 'fr-20261120-aaaaaa' };
+  const raw = T.mime(T.ownerEmail({}, rec)), lines = raw.split('\r\n\r\n')[0].split('\r\n');
+  assert.ok(lines.every((l) => /^(From|To|Subject|MIME-Version|Message-ID|In-Reply-To|References|Content-Type|Content-Transfer-Encoding): /.test(l)), lines.join('\n'));
+  assert.match(lines.find((l) => l.startsWith('Subject:')), /^Subject: =\?UTF-8\?B\?/);
+  const encoded = T.mime(T.ownerEmail({}, { ...rec, business_name: '=?utf-8?q?Acme=0D=0ABcc:_e@x.com?=' })).split('\r\n').find((l) => l.startsWith('Subject:'));
+  assert.match(encoded, /^Subject: =\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=$/);
+  assert.match(T.mime(T.ownerEmail({}, { ...rec, business_name: 'Test Shop Heating and Air' })), /\r\nSubject: Your free report for Test Shop Heating and Air\r\n/, 'plain names stay plain');
+  for (const bad of ['<a@b>\r\nBcc: e@x.com', '<a@b>\u2028Bcc: e@x.com', 'nope']) assert.doesNotMatch(T.mime({ from: 'x', to: 'a@x.com', subject: 's', text: 't', inReplyTo: bad }), /In-Reply-To|Bcc/);
+  // Resend and Cloudflare get the encoded subject when it holds "=?"
+  const seen = [];
+  await T.sendMail({ SEND_ROUTE: 'resend', RESEND_KEY: 'k', LIVE: 'on' }, { from: 'x', to: 'a@x.com', subject: 'Hi =?utf-8?q?x?=', text: 't' }, async (u, i) => { seen.push(JSON.parse(i.body).subject); return new Response('{"id":"r"}'); });
+  await T.sendMail({ SEND_ROUTE: 'cloudflare', EMAIL: { send: async (m) => { seen.push(m.subject); return { id: 'c' }; } } }, { from: 'x', to: 'a@x.com', subject: 'Hi =?utf-8?q?x?=\r\nBcc: e', text: 't' });
+  assert.equal(seen.length, 2); for (const x of seen) assert.match(x, /^=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=$/);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

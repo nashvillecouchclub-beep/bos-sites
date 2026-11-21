@@ -2,25 +2,12 @@
 // One shop per trade per zone at any one time. A bad list is an error (it never quietly reads "open"); an empty list reads
 // "open" everywhere. A town we cannot read cleanly is HELD (no spot is filled), never guessed.
 import { readFileSync } from 'node:fs';
+import W from './bookedout-freereport.js';
+// townKey lives in the worker (it also checks spot fills there); one copy of the rules.
+export const townKey = W._t.townKey;
 
 export const LOCK_TRADES = ['Heating and air', 'Plumbing', 'Electrical'];
 export const FILE = new URL('./data/zone-locks.json', import.meta.url);
-const STATES = { AL: 'alabama', AK: 'alaska', AZ: 'arizona', AR: 'arkansas', CA: 'california', CO: 'colorado', CT: 'connecticut', DE: 'delaware',
-  DC: 'district of columbia', FL: 'florida', GA: 'georgia', HI: 'hawaii', ID: 'idaho', IL: 'illinois', IN: 'indiana', IA: 'iowa', KS: 'kansas',
-  KY: 'kentucky', LA: 'louisiana', ME: 'maine', MD: 'maryland', MA: 'massachusetts', MI: 'michigan', MN: 'minnesota', MS: 'mississippi',
-  MO: 'missouri', MT: 'montana', NE: 'nebraska', NV: 'nevada', NH: 'new hampshire', NJ: 'new jersey', NM: 'new mexico', NY: 'new york',
-  NC: 'north carolina', ND: 'north dakota', OH: 'ohio', OK: 'oklahoma', OR: 'oregon', PA: 'pennsylvania', RI: 'rhode island', SC: 'south carolina',
-  SD: 'south dakota', TN: 'tennessee', TX: 'texas', UT: 'utah', VT: 'vermont', VA: 'virginia', WA: 'washington', WV: 'west virginia',
-  WI: 'wisconsin', WY: 'wyoming' };
-// Short state forms people type (AP style and common ones), compared with dots removed and in lower case.
-const STATE_SHORT = ['ala', 'ariz', 'ark', 'calif', 'cal', 'colo', 'conn', 'del', 'fla', 'ga', 'ill', 'ind', 'kan', 'kans', 'ky', 'md', 'mass',
-  'mich', 'minn', 'miss', 'mo', 'mont', 'neb', 'nebr', 'nev', 'okla', 'ore', 'oreg', 'pa', 'penn', 'penna', 'tenn', 'tex', 'vt', 'va', 'wash',
-  'wis', 'wisc', 'wyo', 'wva'];
-const TAIL_ONE = new Set([...Object.keys(STATES).map((x) => x.toLowerCase()), ...STATE_SHORT, 'usa', 'us', 'america']);
-const TAIL_MULTI = [...Object.values(STATES), 'united states', 'united states of america', 'w va', 'n c', 's c', 'n d', 's d', 'n h', 'n j', 'n m', 'n y', 'r i']
-  .map((x) => x.split(' ')).sort((a, b) => b.length - a.length);
-const CANON = { mt: 'mount', mount: 'mount', st: 'saint', saint: 'saint', ste: 'sainte', ft: 'fort', fort: 'fort', pt: 'point' };
-
 // The day in Smyrna (America/Chicago), YYYY-MM-DD: lock dates are Central days, not UTC days.
 export function chicagoDay(d = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
@@ -33,31 +20,6 @@ export function realDate(s) {
   return !isNaN(d) && d.toISOString().slice(0, 10) === s;
 }
 
-// "Smyrna, TN 37167, USA" / "Smyrna, Tenn." / "Smyrna-TN" / "  smyrna  " -> {display: "Smyrna", key: "smyrna", words: ["smyrna"]}.
-// key: canonical words (Mt = Mount, St = Saint) joined with no spaces, so "LaVergne" = "La Vergne". null = cannot read it.
-export function townKey(raw) {
-  let t = String(raw == null ? '' : raw).normalize('NFKC').replace(/[\p{Cf}​-‏﻿]/gu, '')
-    .replace(/[‐-―−-]/g, ' ').replace(/[(),;:!]/g, ' ').replace(/\s+/g, ' ').trim();
-  let words = t.split(' ').filter(Boolean);
-  const bare = (w) => w.toLowerCase().replace(/\./g, '');
-  // drop trailing ZIP codes, country names and state names or short forms (never the last word left)
-  for (let again = true; again && words.length > 1;) {
-    again = false;
-    const last = bare(words[words.length - 1]);
-    if (/^\d{4,5}$/.test(last) || /^\d{9}$/.test(last) || !last) { words.pop(); again = true; continue; }
-    // "T.N." -> "tn"; multi-word state names
-    if (TAIL_ONE.has(last)) { words.pop(); again = true; continue; }
-    for (const m of TAIL_MULTI) {
-      if (words.length > m.length && words.slice(-m.length).map(bare).join(' ') === m.join(' ')) { words.splice(-m.length); again = true; break; }
-    }
-  }
-  if (words.length) words[words.length - 1] = words[words.length - 1].replace(/\.+$/, '');
-  words = words.filter(Boolean);
-  const display = words.join(' ');
-  if (!display || display.length > 40 || !/^[A-Za-z][A-Za-z .']*$/.test(display)) return null;
-  const canon = words.map((w) => { const b = bare(w).replace(/'/g, ''); return CANON[b] || b; });
-  return { display: words.map((w) => w[0].toUpperCase() + w.slice(1)).join(' '), key: canon.join(''), words: canon };
-}
 // edit distance, stops early above 1
 function within1(a, b) {
   if (a === b) return true;
@@ -78,6 +40,7 @@ const activeOn = (l, day) => l.since <= day && (!l.until || l.until >= day);
 export function checkLocks(doc) {
   const problems = [];
   if (!doc || typeof doc !== 'object' || !Array.isArray(doc.locks)) throw new Error('zone-locks: "locks" must be a list');
+  if (doc.version != null && !(Number.isInteger(doc.version) && doc.version >= 1)) throw new Error('zone-locks: "version" must be a whole number from 1');
   const byKey = new Map(); // trade|town -> every lock on it (past, current and future)
   doc.locks.forEach((l, i) => {
     const at = `zone-locks: locks[${i}]`;
@@ -102,10 +65,17 @@ export function checkLocks(doc) {
     }
   });
   if (problems.length) throw new Error(problems.join('; '));
-  return doc.locks;
+  const out = [...doc.locks];
+  out.version = doc.version || 1; // the list version; every spot fill carries it (lock_version)
+  return out;
 }
 
-export function loadZoneLocks(file = FILE) { return checkLocks(JSON.parse(readFileSync(file, 'utf8'))); }
+export function loadZoneLocks(file = FILE) {
+  const doc = JSON.parse(readFileSync(file, 'utf8'));
+  if (!Number.isInteger(doc.version)) throw new Error('zone-locks: the list file needs a "version"');
+  return checkLocks(doc);
+}
+const versionOf = (locks) => (Number.isInteger(locks && locks.version) ? locks.version : 1);
 
 // The spot for one request: {zone, open}; null for "Something else" (no zone locks, no spot line);
 // {hold: reason} when his town cannot be read cleanly (nothing is filled; a person looks at it).
@@ -117,7 +87,8 @@ export function spotFor(item, locks, day = chicagoDay()) {
   for (const l of active) {
     for (const t of [l.zone, ...(l.towns || [])]) {
       const lk = townKey(t); if (!lk) continue;
-      if (lk.key === tk.key) return { zone: townKey(l.zone).display, open: false };
+      if (lk.key === tk.key) return { zone: townKey(l.zone).display, open: false, lock_version: versionOf(locks),
+        zone_towns: [l.zone, ...(l.towns || [])].map((x) => (townKey(x) || {}).display).filter(Boolean) };
     }
   }
   // close to a locked town but not the same: never "open"; a person decides
@@ -129,5 +100,5 @@ export function spotFor(item, locks, day = chicagoDay()) {
         return { hold: `the town "${tk.display}" is close to the locked zone "${townKey(l.zone).display}" (${l.trade}); check it by hand` };
     }
   }
-  return { zone: tk.display, open: true };
+  return { zone: tk.display, open: true, lock_version: versionOf(locks) };
 }
