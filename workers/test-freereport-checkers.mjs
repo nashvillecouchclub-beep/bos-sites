@@ -591,5 +591,51 @@ await test('Review 3 items 5+6: emails are plain ASCII; control characters never
   assert.equal(seen.length, 2); for (const x of seen) assert.match(x, /^=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=$/);
 });
 
+// ---------- item 9 (write lock, one agent per version) ----------
+const slowKV = (env) => { const m = env.KV, oget = m.get.bind(m); m.get = async (k) => { const v = await oget(k); await new Promise((r) => setTimeout(r, 5)); return v; }; return () => { m.get = oget; }; };
+await test('Item 9: one agent posting to both slots at once (W3b) leaves the report NOT sendable, in either order', async () => {
+  for (const order of ['1 first', '2 first']) {
+    const b = await ready(REALSHOP, LIVEENV); const sends = [];
+    await P(b.env, b.id, b.hash)(1, 'sub-a', 'pass');
+    const orig = globalThis.fetch; globalThis.fetch = async (u) => { sends.push(String(u)); return new Response(JSON.stringify({ access_token: 't', id: 'm', threadId: 'th' })); };
+    const undo = slowKV(b.env);
+    const calls = [() => P(b.env, b.id, b.hash)(1, 'sub-x', 'pass'), () => P(b.env, b.id, b.hash)(2, 'sub-x', 'pass')];
+    const res = await Promise.all(order === '1 first' ? calls.map((c) => c()) : calls.reverse().map((c) => c()));
+    undo();
+    assert.ok(res.some((r) => r.status === 409), order + ': ' + JSON.stringify(res));
+    assert.match(T.agentsClash(await T.agentsMap(b.env, b.id), b.hash), /both checker slots/, order);
+    await T.tick(b.env, at('2026-11-20T16:00:00-06:00'), async (u) => { sends.push(String(u)); return new Response(JSON.stringify({ access_token: 't', id: 'm', threadId: 'th' })); });
+    globalThis.fetch = orig;
+    assert.deepEqual(sends, [], order + ': nothing sent'); assert.notEqual(b.rec().status, 'sent');
+    const item = await findItem({ base: BASE, key: KEY, id: b.id, fetch: local(b.env) });
+    assert.match(item.needs, /^fix first .*both checker slots/, order);
+  }
+});
+await test('Item 9: the same agent on the other slot of a version is refused even later (not only in a race)', async () => {
+  const b = await ready(); const p = P(b.env, b.id, b.hash);
+  assert.equal((await p(1, 'sub-a', 'fail')).status, 200);
+  const b2 = await ready(); const p2 = P(b2.env, b2.id, b2.hash);
+  assert.equal((await p2(1, 'sub-a', 'pass')).status, 200);
+  assert.equal((await p2(1, 'sub-b', 'pass')).status, 200, 'slot 1 may be posted again by another agent');
+  const r = await p2(2, 'SUB-A', 'pass'); assert.equal(r.status, 409); assert.match(r.error, /both slots/);
+  assert.equal((await p2(2, 'sub-c', 'pass')).status, 200, 'a third agent is fine');
+});
+await test('Item 9: checks and fills take a per-report lock; a held lock makes a write wait, then 409; the lock is released', async () => {
+  const b = await ready();
+  b.env.KV.m.set('lock:' + b.id, 'someone-else');
+  const r1 = await P(b.env, b.id, b.hash)(1, 'sub-a', 'pass'); assert.equal(r1.status, 409); assert.match(r1.error, /busy/);
+  const r2 = await fillX(b, 'booking', { score: 3, fixes: ['Put your phone number at the top of the home page.'] }); assert.equal(r2.status, 409);
+  assert.equal(b.rec().hash, b.hash); assert.deepEqual(b.rec().checks || {}, {});
+  b.env.KV.m.delete('lock:' + b.id);
+  assert.equal((await P(b.env, b.id, b.hash)(1, 'sub-a', 'pass')).status, 200);
+  assert.ok(!b.env.KV.m.has('lock:' + b.id) && !b.env.KV.m.has('lockwait:' + b.id), 'released');
+  // two fills at once are serialized: both land, one after the other
+  const undo = slowKV(b.env);
+  const [x, y] = await Promise.all([fillX(b, 'booking', { score: 4, fixes: ['Put your phone number at the top of the home page.'] }), fillX(b, 'category', { ...RESEARCH.category, match: false })]);
+  undo();
+  assert.equal(x.status, 200); assert.equal(y.status, 200);
+  assert.equal(b.rec().sections.booking.score, 4); assert.equal(b.rec().sections.category.match, false, 'neither write lost');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

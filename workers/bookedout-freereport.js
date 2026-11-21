@@ -1197,6 +1197,7 @@ async function trySend(env, rec, now, f) {
       if (a && a.hash === rec.hash && (!b || cleanAgent(a.agent) !== cleanAgent(b.agent) || a.result !== b.result || a.hash !== b.hash)) why = 'the check marks changed while sending; the next run tries again';
     }
   }
+  if (!why) why = agentsClash(await agentsMap(env, rec.id), rec.hash);
   if (!why) why = sendBlock(env, { ...rec, fails });
   if (why) {
     if (rec.send_blocked === why) return { changed: false, log: '' };
@@ -1241,7 +1242,7 @@ function reviewItem(r) {
     received: r.received, due: r.due, due_text: chicagoText(r.due), complete: !!r.complete, pending: r.pending || [],
     report: `${SITE}/r/${r.token}/`, hash: r.hash || '', sections: r.sections || {}, lookup_error: r.lookup_error || '',
     checks: { 1: c['1'] || null, 2: c['2'] || null },
-    needs: !r.complete ? 'fill pending sections first' : failedNow(r) ? 'fix first (a checker failed this version)' : !(c['1'] && c['1'].result === 'pass' && c['1'].hash === r.hash) ? 'checker 1'
+    needs: !r.complete ? 'fill pending sections first' : failedNow(r) ? 'fix first (a checker failed this version)' : r.agent_clash ? `fix first (${r.agent_clash})` : !(c['1'] && c['1'].result === 'pass' && c['1'].hash === r.hash) ? 'checker 1'
       : !(c['2'] && c['2'].result === 'pass' && c['2'].hash === r.hash) ? 'checker 2' : 'send' };
 }
 async function review(u, env) {
@@ -1251,14 +1252,57 @@ async function review(u, env) {
     const r = await getJ(env, 'req:' + k.name.slice(5));
     if (!r || !['built', 'held', 'checked'].includes(r.status)) continue;
     r.fails = [...new Set([...(Array.isArray(r.fails) ? r.fails : []), ...(await failList(env, r.id))])];
+    r.agent_clash = agentsClash(await agentsMap(env, r.id), r.hash);
     list.push(reviewItem(r));
   }
   list.sort((a, b) => a.due.localeCompare(b.due));
   return json({ waiting: list, count: list.length, live: isLive(env) });
 }
+// ---------- one writer at a time per report (check and fill) ----------
+// lock:<id> is put and read back (KV has no compare-and-set); a held lock is waited on a few times, then 409.
+const LOCK_SETTLE_MS = 30;
+const LOCK_TTL = 60; // seconds (the KV minimum); the lock is deleted as soon as the write is done
+async function withLock(env, id, fn) {
+  const k = 'lock:' + id, mine = rand(8), wk = 'lockwait:' + id;
+  let got = false, waited = false;
+  for (let i = 0; i < 8 && !got; i++) {
+    if (i) {
+      // tell the holder someone is waiting: it then leaves the send to the cron, so the waiting check is never too late
+      if (!waited) { await env.KV.put(wk, mine, { expirationTtl: LOCK_TTL }); waited = true; }
+      await new Promise((r) => setTimeout(r, 15 * i));
+    }
+    if (await env.KV.get(k)) continue;
+    await env.KV.put(k, mine, { expirationTtl: LOCK_TTL });
+    // settle, then read back: a writer that put at about the same time has overwritten us by now, and backs off
+    await new Promise((r) => setTimeout(r, LOCK_SETTLE_MS));
+    got = (await env.KV.get(k)) === mine;
+  }
+  if (!got) {
+    if (waited && (await env.KV.get(wk)) === mine) await env.KV.delete(wk);
+    return json({ ok: false, error: 'busy: another check or fill is being saved for this report; try again' }, 409);
+  }
+  try { return await fn(); } finally {
+    if ((await env.KV.get(k)) === mine) await env.KV.delete(k);
+    if (waited && (await env.KV.get(wk)) === mine) await env.KV.delete(wk);
+  }
+}
+// agents:<id> = {hash: {"1": [agents], "2": [agents]}}: every agent that ever posted to each slot of each version (last 50
+// versions). One agent can never hold both slots of one version, even across races or re-posts.
+async function agentsMap(env, id) { const j = await getJ(env, 'agents:' + id); return j && typeof j === 'object' && !Array.isArray(j) ? j : {}; }
+function agentsClash(map, hash) {
+  const h = map && Object.hasOwn(map, hash) ? map[hash] : null;
+  if (!h) return '';
+  const a = new Set((h['1'] || []).map(cleanAgent)), both = (h['2'] || []).map(cleanAgent).filter((x) => a.has(x));
+  return both.length ? `agent ${both[0]} posted to both checker slots of this version` : '';
+}
+
 async function check(req, env, now = new Date(), f) {
   let b; try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
   if (!keyOk(env, b && b.k)) return json({ ok: false, error: 'no' }, 403);
+  if (!ID.test(String(b.id || ''))) return json({ ok: false, error: 'bad check' }, 400);
+  return withLock(env, b.id, () => checkLocked(b, env, now, f));
+}
+async function checkLocked(b, env, now, f) {
   const slot = String(b.checker);
   const agent = cleanAgent(b.agent);
   if (!ID.test(String(b.id || '')) || !['1', '2'].includes(slot) || !agent || !['pass', 'fail'].includes(b.result)) return json({ ok: false, error: 'bad check' }, 400);
@@ -1272,6 +1316,14 @@ async function check(req, env, now = new Date(), f) {
   if (String(b.hash || '') !== rec.hash) return json({ ok: false, error: 'report changed; read it again', hash: rec.hash }, 409);
   rec.checks = rec.checks || {};
   const other = rec.checks[slot === '1' ? '2' : '1'];
+  // the agent may not have posted to the OTHER slot of this version, ever (pass or fail)
+  const amap = await agentsMap(env, rec.id), seen = (amap[rec.hash] && amap[rec.hash][slot === '1' ? '2' : '1']) || [];
+  if (seen.map(cleanAgent).includes(agent)) {
+    // the attempt itself is recorded: this version now has one agent on both slots and can never be sent
+    const e = amap[rec.hash] || { 1: [], 2: [] }; e[slot] = [...new Set([...(e[slot] || []), agent])].slice(-20); amap[rec.hash] = e;
+    await putJ(env, 'agents:' + rec.id, amap, KEEP);
+  }
+  if (seen.map(cleanAgent).includes(agent)) return json({ ok: false, error: `agent ${agent} already posted to checker ${slot === '1' ? 2 : 1} of this version; one agent can never hold both slots` }, 409);
   if (b.result === 'pass' && scriptAgent(agent)) return json({ ok: false, error: 'a script may only fail a report; a pass must come from a sub-agent' }, 409);
   if (b.result === 'pass') rec.fails = [...new Set([...(Array.isArray(rec.fails) ? rec.fails : []), ...(await failList(env, rec.id))])].slice(-FAILS_KEEP);
   if (b.result === 'pass' && failedNow(rec)) return json({ ok: false, error: 'a checker failed this version; fill the fix first (a new version), then both check again' }, 409);
@@ -1280,6 +1332,12 @@ async function check(req, env, now = new Date(), f) {
     return json({ ok: false, error: 'checker 1 must pass first' }, 409);
   if (b.result === 'pass' && !rec.complete) return json({ ok: false, error: 'report has pending sections; it cannot pass' }, 409);
   const notes = String(b.notes || '').slice(0, 2000);
+  // record the agent on this slot of this version before anything else is written
+  const entry = amap[rec.hash] || { 1: [], 2: [] };
+  entry[slot] = [...new Set([...(entry[slot] || []), agent])].slice(-20);
+  amap[rec.hash] = entry;
+  const keepH = Object.keys(amap).slice(-50); for (const h of Object.keys(amap)) if (!keepH.includes(h)) delete amap[h];
+  await putJ(env, 'agents:' + rec.id, amap, KEEP);
   rec.checks[slot] = { agent, result: b.result, hash: rec.hash, at: now.toISOString(), notes };
   let sent = false;
   if (b.result === 'fail') {
@@ -1288,7 +1346,9 @@ async function check(req, env, now = new Date(), f) {
     await sendAlert(env, `Free report failed check ${slot}: ${rec.business_name}`, alertText(rec, `Checker ${slot} (${agent}) failed this report: ${notes || 'no notes'}. Fix it (fill the section again), then both checkers read it again.`), f, rec.test ? 'test' : 'problem', rec.id);
   } else if (rec.checks['1'] && rec.checks['2'] && rec.checks['1'].result === 'pass' && rec.checks['2'].result === 'pass') {
     rec.status = 'checked';
-    if (!rec.test) { const r = await trySend(env, rec, now, f); sent = rec.status === 'sent'; }
+    // another check or fill is waiting for this report: never send under its nose; the cron sends after it (if still OK)
+    if (!rec.test && (await env.KV.get('lockwait:' + rec.id))) rec.send_blocked = 'another check is waiting; the cron sends after it';
+    else if (!rec.test) { const r = await trySend(env, rec, now, f); sent = rec.status === 'sent'; }
   }
   await putJ(env, 'req:' + rec.id, rec, KEEP);
   // a fail written by another check while this one ran: the version stays held whatever this copy said
@@ -1426,6 +1486,9 @@ async function fill(req, env) {
   let b; try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
   if (!keyOk(env, b && b.k)) return json({ ok: false, error: 'no' }, 403);
   if (!ID.test(String(b.id || '')) || !FILL.includes(b.section) || !b.data || typeof b.data !== 'object') return json({ ok: false, error: 'bad fill' }, 400);
+  return withLock(env, b.id, () => fillLocked(b, env));
+}
+async function fillLocked(b, env) {
   const rec = await getJ(env, 'req:' + b.id);
   if (!rec) return json({ ok: false, error: 'not found' }, 404);
   if (rec.status === 'sent') return json({ ok: false, error: 'already sent; the owner has this version' }, 409);
@@ -1588,7 +1651,7 @@ export default {
     sendAlert, isTestRequest, plain, ownerEmail, mime, sendMail, sendBlock, check, review, trySend, sha, budgetLine, renderReport, submit, build, tick, TRADES, REVENUE,
     fuTick, followup, startFollowups, fuHelpers, gmailThread, allowed, pickFixes,
     diagnose, speedFinding, FIVE_MIN_TEST: FU.FIVE_MIN_TEST, bookingList: FU.bookingList, bookingFixOk: FU.bookingFixOk, knownFor, competitorView, refreshReport, speedEstimate, fillProblem, fill, rerender, SOURCES, FEW_REVIEWS, FILL,
-    shot, shotUrl, pngBytes, SHOT_ENGINES, townState, cleanAgent, townKey, addFail, failList },
+    shot, shotUrl, pngBytes, SHOT_ENGINES, townState, cleanAgent, townKey, addFail, failList, withLock, agentsClash, agentsMap },
 };
 
 const GONE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Report not found | Booked Out Solutions</title><style>body{margin:0;font:18px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#F6F1E7;color:#0A0F26}main{max-width:34rem;margin:0 auto;padding:3rem 1.2rem}</style></head><body><main><h1>This report is not here</h1><p>The link may be old or mistyped. Reply to the email it came in and we will send it again, or write to hello@getbookedoutsolutions.com.</p><p>Booked Out Solutions</p></main></body></html>';

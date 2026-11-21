@@ -178,6 +178,13 @@ worker. Tests: `node workers/test-freereport-fill.mjs`.
   `fails:<id>` fresh, runs every send rule on that copy (same hash, no fail mark, same marks as in hand), then takes the claim
   `sendclaim:<id>` (put, read back; kept 1 hour after an unsure failure so a 5xx can't become a double email).
 - A sent report takes no more fills (409).
+- One writer at a time (item 9): every check and fill takes `lock:<id>` (put, wait 30 ms, read back; up to 8 tries, then 409
+  "busy"; 60 s expiry; deleted when done). A waiting writer leaves `lockwait:<id>`; a check that completes the second pass while
+  someone waits does not send in that request (the cron sends later, after every rule is checked again). `agents:<id>` records every
+  agent that posted (or tried to post) to each slot of each version; one agent can never hold both slots of a version: the second
+  slot is refused (409), the attempt is recorded, and that version is never sent (`trySend`, and `/review` shows "fix first").
+  Limit: KV is eventually consistent across Cloudflare locations, so this lock is best effort; the fail list, the agent record, the
+  fresh re-read and the send claim are the backstops. A Durable Object would make it exact (Workers Paid).
 - Spot: the runner recomputes the spot from the zone-lock list on every run, right before any pass; when it differs it fills it again
   (a new version to check), and a held town fails checker 1. The worker refuses a spot whose zone is not his town (an open spot is
   always his own town; a taken one may name the lock zone only when its `zone_towns` list his town). The list file carries a
