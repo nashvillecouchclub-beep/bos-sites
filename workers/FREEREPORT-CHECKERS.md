@@ -32,8 +32,9 @@ Fail the report if any of these is not true:
   - The "In one line" diagnosis matches the data: no profile (`has_google_profile` false) or not in the first 20 (rank null AND
     `rank_checked` true) = "Not found"; number 4 or lower = "Found but not chosen"; top 3 with no answer, or an unanswered after-hours
     test = "Chosen but never followed up"; an answer over 60 minutes = "Chosen but slow to follow up"; 6 to 60 minutes = "Found and
-    chosen, but slow to answer". The minutes or hours match the speed section word for word. The three fixes are always three, and
-    an unanswered after-hours test has the after-hours fix. Every number in it (rank, top 3 average, his reviews, hours waited) is in `sections`.
+    chosen, but slow to answer". The minutes or hours match the speed section word for word. The three fixes are always three, none twice.
+    The fix that matches his speed result is always among them: no answer or a slow answer has the 5-minute fix; a fast answer
+    with an unanswered after-hours test has the after-hours fix for that channel. A fast answerer never gets the 5-minute fix. Every number in it (rank, top 3 average, his reviews, hours waited) is in `sections`.
   - The answer speed line (channel, when, minutes or hours waited, after-hours result) is in `sections.speed`. Each estimate is
     labeled as an estimate and has its source line; the after-hours estimate shows only for heating and air, and a calls-a-month
     number only when `leads_source` is "owner".

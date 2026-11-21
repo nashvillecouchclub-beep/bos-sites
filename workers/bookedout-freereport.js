@@ -379,33 +379,57 @@ function budgetLine(revenue) {
   return `Shops your size spend 6 to 8% of revenue to grow; for you that's ${x}. Core is $997.`;
 }
 
-const AFTER_HOURS_FIX = 'Make sure every after-hours call reaches a person or gets a call back first thing the next morning.';
+const SPEED_FIX = 'Call or text back every new lead within 5 minutes, even after hours.';
+function afterHoursFix(ch) {
+  const c = own(CHANNEL, ch) || 'call';
+  return `Make sure every after-hours ${c} reaches a person or gets ${c === 'call' ? 'a call back' : 'an answer'} first thing the next morning.`;
+}
+const normFix = (x) => plain(x).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+// The three fixes. The fix that matches his own answer speed result (no answer, slow answer, or an unanswered after-hours
+// test) always has a place among the three: it takes the place of the last other fix. No fix twice. Always three.
 function pickFixes(rec) {
-  const s = rec.sections || {}, g = s.google, rv = s.reviews, bk = s.booking, ct = s.category, ai = s.ai, out = [];
-  if (g && !g.has_google_profile) out.push('Set up your free Google Business Profile with your real address or service area, hours and phone number. Without it, you do not show on the Google map.');
+  const s = rec.sections || {}, g = s.google, rv = s.reviews, bk = s.booking, ct = s.category, ai = s.ai, sp = s.speed;
+  const tested = !!(sp && sp.tested === true);
+  const fast = tested && sp.minutes != null && +sp.minutes <= 5;
+  const ahNo = tested && sp.after_hours && sp.after_hours.tested === true && sp.after_hours.answered === false;
+  const out = [];
+  const add = (x, list = out) => {
+    x = plain(x);
+    if (!x || (fast && /within 5 minutes/i.test(x))) return; // he already answers that fast
+    if ([...out, ...list].some((y) => normFix(y) === normFix(x))) return;
+    list.push(x);
+  };
+  if (g && !g.has_google_profile) add('Set up your free Google Business Profile with your real address or service area, hours and phone number. Without it, you do not show on the Google map.');
   if (g && g.has_google_profile && g.top3 && g.top3.length && g.review_count != null) {
     const avg = Math.round(g.top3.reduce((a, x) => a + (+x.review_count || 0), 0) / g.top3.length);
-    if (avg > g.review_count) out.push(`Ask every happy customer for a Google review the day the job is done. The top 3 near you average ${avg} reviews; you have ${g.review_count}.`);
+    if (avg > g.review_count) add(`Ask every happy customer for a Google review the day the job is done. The top 3 near you average ${avg} reviews; you have ${g.review_count}.`);
   }
   // Item 211: a shop with few Google reviews always gets the review fix, even when the top 3 are small too.
   if (fewReviews(g) && !out.some((x) => /^Ask every happy customer for a Google review/.test(x)))
-    out.push(`Ask every happy customer for a Google review the day the job is done. You have ${g.review_count} Google ${g.review_count === 1 ? 'review' : 'reviews'} so far, and the next customer reads them before they call.`);
-  if (rv && rv.newest_review && !rv.owner_reply_on_newest) out.push('Reply to your newest Google review today, and to every new review within a day from now on. The next customer reads those replies.');
-  if (ct && ct.match === false) out.push(`Change your Google main category to the one that fits ${plain(ct.big_job || 'the big-ticket job you want most')}, so Google shows you for that work.`);
-  if (bk && Array.isArray(bk.fixes) && bk.fixes[0]) out.push(plain(bk.fixes[0]));
-  if (slowAnswer(s.speed) && out.length < 3) out.push('Call or text back every new lead within 5 minutes, even after hours.');
-  const ahNo = s.speed && s.speed.tested === true && s.speed.after_hours && s.speed.after_hours.tested === true && s.speed.after_hours.answered === false;
-  if (ahNo && out.length < 3) out.push(AFTER_HOURS_FIX);
-  if (ai && ai.chatgpt && ai.chatgpt.named === false) out.push('Put your town, your main services and your best reviews in plain words on your website, so ChatGPT and Gemini have something to say about you.');
+    add(`Ask every happy customer for a Google review the day the job is done. You have ${g.review_count} Google ${g.review_count === 1 ? 'review' : 'reviews'} so far, and the next customer reads them before they call.`);
+  if (rv && rv.newest_review && !rv.owner_reply_on_newest) add('Reply to your newest Google review today, and to every new review within a day from now on. The next customer reads those replies.');
+  if (ct && ct.match === false) add(`Change your Google main category to the one that fits ${plain(ct.big_job || 'the big-ticket job you want most')}, so Google shows you for that work.`);
+  if (bk && Array.isArray(bk.fixes) && bk.fixes[0]) add(bk.fixes[0]);
+  if (ai && ai.chatgpt && ai.chatgpt.named === false) add('Put your town, your main services and your best reviews in plain words on your website, so ChatGPT and Gemini have something to say about you.');
+  // the speed fixes: the one matching the diagnosis is reserved; the other one only if there is room
+  const speed = [];
+  if (tested && (sp.minutes == null || +sp.minutes > 5)) add(SPEED_FIX, speed);
+  if (ahNo) add(afterHoursFix(sp.after_hours.channel), speed);
+  const keep = speed.slice(0, 1);
+  const pick = out.filter((x) => !keep.some((k) => normFix(k) === normFix(x))).slice(0, 3 - keep.length).concat(keep);
+  for (const x of speed.slice(1)) if (pick.length < 3 && !pick.some((y) => normFix(y) === normFix(x))) pick.push(x);
   const base = [
     'Put your phone number and a clear "Get a quote" button at the top of every page of your website.',
-    'Call or text back every new lead within 5 minutes, even after hours.',
+    SPEED_FIX,
     'Follow up on every quote you send: a short note 2 days later, then again a week later.',
     'Keep your hours, phone number and service area the same on your website and your Google profile, so no customer calls a wrong number.',
   ];
-  const fast = s.speed && s.speed.tested !== false && s.speed.minutes != null && +s.speed.minutes <= 5;
-  for (const b of base) if (out.length < 3 && !out.includes(b) && !(fast && /within 5 minutes/.test(b))) out.push(b);
-  return out.slice(0, 3);
+  for (const b of base) {
+    if (pick.length >= 3) break;
+    if (fast && /within 5 minutes/.test(b)) continue;
+    if (!pick.some((y) => normFix(y) === normFix(b))) pick.push(b);
+  }
+  return pick.slice(0, 3);
 }
 
 // ---------- item 215 / 211 / Nov 19 additions (Nov 20 2026) ----------
@@ -428,7 +452,8 @@ function slowAnswer(sp) { return !!(sp && sp.tested !== false && (sp.minutes == 
 function speedEstimate(sp) {
   if (!sp || sp.tested === false) return null;
   const m = sp.minutes == null ? null : +sp.minutes;
-  if (m != null && m <= 5) return { text: 'In the research on lead speed, answering within 5 minutes is the fastest group there is. Keep it up, after hours too.', src: 'mit' };
+  const ahNo = sp.after_hours && sp.after_hours.tested === true && sp.after_hours.answered === false;
+  if (m != null && m <= 5) return { text: `In the research on lead speed, answering within 5 minutes is the fastest group there is.${ahNo ? '' : ' Keep it up, after hours too.'}`, src: 'mit' };
   if (m != null && m <= 60) return { text: 'One study found the odds of qualifying a lead (a real talk about a real job) fell about 21 times between a 5 minute answer and a 30 minute answer.', src: 'mit' };
   if (m != null && m < 1440) return { text: 'A Harvard Business Review study found companies that answered within an hour were nearly 7 times as likely to qualify the lead as companies that answered an hour or more later.', src: 'hbr' };
   return { text: 'A Harvard Business Review study found companies that answered within an hour were more than 60 times as likely to qualify the lead as companies that waited 24 hours or longer.', src: 'hbr' };
@@ -887,6 +912,15 @@ async function sha(str) {
   return Array.from(new Uint8Array(d), (x) => x.toString(16).padStart(2, '0')).join('').slice(0, 32);
 }
 
+// Renders and hashes first; writes to KV only when the page changed (the cron calls this every 15 minutes).
+// Returns true when the page changed.
+async function refreshReport(env, rec) {
+  const r = renderReport(rec);
+  const h = await sha(r.html);
+  if (h === rec.hash) { rec.pending = r.pending; rec.complete = r.complete; return false; }
+  await saveReport(env, rec);
+  return true;
+}
 async function saveReport(env, rec) {
   const r = renderReport(rec);
   rec.pending = r.pending; rec.complete = r.complete;
@@ -957,9 +991,7 @@ async function tick(env, now = new Date(), f) {
     if (rec.status === 'checked' && !rec.test) {
       // Re-render first: if the current code makes a different page (old record, new sections), the old marks are cleared
       // and nothing is sent until both checkers pass the new version.
-      const before = rec.hash;
-      await saveReport(env, rec);
-      if (rec.hash !== before) { changed = true; log.push('rerendered ' + id); }
+      if (await refreshReport(env, rec)) { changed = true; log.push('rerendered ' + id); }
     }
     if (rec.status === 'checked' && !rec.test) {
       const r = await trySend(env, rec, now, f);
@@ -1039,9 +1071,7 @@ async function check(req, env, now = new Date(), f) {
   if (!['built', 'held', 'checked'].includes(rec.status)) return json({ ok: false, error: 'not built yet' }, 409);
   // Always judge the page as the CURRENT code renders it: an old record (saved by older code) can carry a stale
   // complete flag and hash. A re-render that changes the page clears the old marks and makes a new version.
-  const before = rec.hash;
-  await saveReport(env, rec);
-  if (rec.hash !== before) await putJ(env, 'req:' + rec.id, rec, KEEP);
+  if (await refreshReport(env, rec)) await putJ(env, 'req:' + rec.id, rec, KEEP);
   if (String(b.hash || '') !== rec.hash) return json({ ok: false, error: 'report changed; read it again', hash: rec.hash }, 409);
   rec.checks = rec.checks || {};
   const other = rec.checks[slot === '1' ? '2' : '1'];
@@ -1220,8 +1250,7 @@ async function rerender(req, env) {
     if (!rec || rec.status === 'sent' || rec.status === 'new') continue;
     out.checked++;
     const before = rec.hash, hadMarks = !!(rec.checks && Object.keys(rec.checks).length);
-    await saveReport(env, rec);
-    if (rec.hash !== before) {
+    if (await refreshReport(env, rec)) {
       out.changed++; if (hadMarks) out.marks_cleared++;
       await putJ(env, 'req:' + rec.id, rec, KEEP);
     }
@@ -1287,7 +1316,7 @@ export default {
   _t: { validate, businessClock, federalHolidays, isBusinessDay, local, fromLocal, chicagoText, isLive, deliverToOwner,
     sendAlert, isTestRequest, plain, ownerEmail, mime, sendMail, sendBlock, check, review, trySend, sha, budgetLine, renderReport, submit, build, tick, TRADES, REVENUE,
     fuTick, followup, startFollowups, fuHelpers, gmailThread, allowed, pickFixes,
-    diagnose, knownFor, competitorView, speedEstimate, fillProblem, fill, rerender, SOURCES, FEW_REVIEWS, FILL },
+    diagnose, knownFor, competitorView, refreshReport, speedEstimate, fillProblem, fill, rerender, SOURCES, FEW_REVIEWS, FILL },
 };
 
 const GONE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Report not found | Booked Out Solutions</title><style>body{margin:0;font:18px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#F6F1E7;color:#0A0F26}main{max-width:34rem;margin:0 auto;padding:3rem 1.2rem}</style></head><body><main><h1>This report is not here</h1><p>The link may be old or mistyped. Reply to the email it came in and we will send it again, or write to hello@getbookedoutsolutions.com.</p><p>Booked Out Solutions</p></main></body></html>';
