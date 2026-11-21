@@ -1,6 +1,7 @@
 // The fill job's one door into the free report worker (Nov 20 2026). Every job that fills a report section
 // (the AI check, the booking test, the category check, the review texts, the competitor rows, the listing check,
-// the zone status, and later the answer speed result) posts through here, so the data is checked BEFORE it is sent,
+// the zone status, and the answer speed result; the jobs themselves are in freereport-jobs.mjs, run by
+// freereport-checkers.mjs) posts through here, so the data is checked BEFORE it is sent,
 // in the right order (google first), with the same rules the worker uses.
 //
 //   node workers/freereport-fill.mjs <fr-id> <data.json> [--dry-run] [--after-go-live]
@@ -30,6 +31,9 @@ export function prepareFills(item, data, opts = {}) {
       { problems.push('speed: a tested result for a real shop means we contacted it; not before GO LIVE (use --after-go-live once live)'); continue; }
     const why = T.fillProblem(rec, section, d);
     if (why) { problems.push(`${section}: ${why}`); continue; }
+    // screenshots must be this report's own hosted images (POST /api/free-report/shot first; the worker checks the image is there)
+    if (section === 'ai' && Array.isArray(d.screenshots) && item.report && d.screenshots.some((x) => x.url !== `${item.report.replace(/\/$/, '')}/ai-${x.engine}.png`))
+      { problems.push('ai: screenshots must be hosted for this report first (postShot)'); continue; }
     rec.sections[section] = d; // later sections (competitor) are checked against the google data in this same batch
     fills.push({ section, data: d });
   }
@@ -47,6 +51,14 @@ export async function postFills({ base, key, id, fills, fetch: f = fetch }) {
     if (!r.ok) return { ok: false, results, error: `${x.section}: ${j.error || r.status}` };
   }
   return { ok: true, results };
+}
+
+// Hosts one AI answer screenshot (a PNG, as base64) for a report. Returns {ok, url?, status, error?}. Never throws on HTTP.
+export async function postShot({ base, key, id, engine, png, fetch: f = fetch }) {
+  const r = await f(`${base}/api/free-report/shot`, { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id, k: key, engine, png }) });
+  const j = await r.json().catch(() => ({}));
+  return { ok: r.ok && !!j.url, status: r.status, url: j.url, error: j.error };
 }
 
 export async function findItem({ base, key, id, fetch: f = fetch }) {

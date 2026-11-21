@@ -17,7 +17,10 @@
 //                                         section: "google" | "reviews" | "ai" | "booking" | "category" |
 //                                         "speed" | "known_for" | "competitor" | "listings" | "spot" (Nov 20; shapes in DEPLOY.md)
 //   POST /api/free-report/rerender        {k} -> every open report rendered again with the current code (once after a deploy)
+//   POST /api/free-report/shot            {id, k, engine: "chatgpt"|"gemini"|"google_ai", png: "<base64>"} -> {url}
+//                                         hosts one AI answer screenshot in KV (PNG only, up to 1 MB) for the ai fill
 //   GET  /r/<token>/                      the report page (noindex, no-store, no-referrer)
+//   GET  /r/<token>/ai-<engine>.png       a hosted AI answer screenshot (same token as the page)
 // Cron (every 15 minutes): build new reports; send reports that have two pass marks (only when LIVE is on);
 // put clock trouble (75% of the clock, overdue), failed checks and failed sends on the watch list.
 // Rickey is out of the workflow (Nov 16 4:46 pm): no per-report emails to him, no "check and send", no 75% or overdue
@@ -31,6 +34,7 @@
 //   open:<id>     marker while the request is not sent (the cron reads these)
 //   tok:<token>   report token -> id
 //   rep:<id>      the report page HTML
+//   shot:<id>:<engine>  one AI answer screenshot (PNG, base64), kept as long as the report
 //   rl:<email>    one request per email per 10 minutes
 //   lead:<id>     every lead, kept for good (no expiry): name, business, contact, trade, town, when, page
 //   watch:<time>:<id>  a problem for the watchdog (warn = 75% of the clock, problem = overdue, failed check or failed send), 30 days
@@ -1252,6 +1256,13 @@ async function fill(req, env) {
   if (!rec) return json({ ok: false, error: 'not found' }, 404);
   const why = fillProblem(rec, b.section, b.data);
   if (why) return json({ ok: false, error: 'bad fill: ' + why }, 400);
+  // Screenshots: only ones hosted for THIS report through /shot (so the page never points at a missing or foreign image).
+  if (b.section === 'ai' && Array.isArray(b.data.screenshots)) {
+    for (const x of b.data.screenshots) {
+      if (x.url !== shotUrl(rec, x.engine) || !(await env.KV.get(`shot:${rec.id}:${x.engine}`)))
+        return json({ ok: false, error: `bad fill: screenshot for ${x.engine} is not hosted for this report (POST /api/free-report/shot first)` }, 400);
+    }
+  }
   // A tested answer speed result means someone contacted a real business. Refused for real requests until SPEED_TEST_LIVE is on.
   if (b.section === 'speed' && b.data.tested !== false && !rec.test && !speedLive(env))
     return json({ ok: false, error: 'speed test results for a real shop are refused until SPEED_TEST_LIVE is on (after GO LIVE)' }, 403);
@@ -1259,6 +1270,38 @@ async function fill(req, env) {
   const r = await saveReport(env, rec);
   await putJ(env, 'req:' + rec.id, rec, KEEP);
   return json({ ok: true, id: rec.id, complete: r.complete, pending: r.pending, diagnosis: r.diagnosis });
+}
+
+// AI answer screenshots, hosted in the same KV namespace (free; no new storage). PNG only, up to 1 MB each, one per engine.
+const SHOT_ENGINES = ['chatgpt', 'gemini', 'google_ai'];
+const SHOT_MAX = 1024 * 1024;
+const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+function shotUrl(rec, engine) { return `${SITE}/r/${rec.token}/ai-${engine}.png`; }
+function pngBytes(b64) {
+  if (typeof b64 !== 'string' || !b64.length || b64.length > Math.ceil(SHOT_MAX / 3) * 4 + 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) return null;
+  let bin; try { bin = atob(b64); } catch { return null; }
+  if (bin.length < 16 || bin.length > SHOT_MAX) return null;
+  const by = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) by[i] = bin.charCodeAt(i);
+  return PNG_MAGIC.every((x, i) => by[i] === x) ? by : null;
+}
+async function shot(req, env) {
+  let b; try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
+  if (!keyOk(env, b && b.k)) return json({ ok: false, error: 'no' }, 403);
+  if (!ID.test(String(b.id || '')) || !SHOT_ENGINES.includes(b.engine)) return json({ ok: false, error: 'bad shot' }, 400);
+  if (!pngBytes(b.png)) return json({ ok: false, error: 'bad shot: png must be a base64 PNG image of 1 MB or less' }, 400);
+  const rec = await getJ(env, 'req:' + b.id);
+  if (!rec) return json({ ok: false, error: 'not found' }, 404);
+  if (rec.status === 'sent') return json({ ok: false, error: 'already sent' }, 409);
+  await env.KV.put(`shot:${rec.id}:${b.engine}`, b.png, { expirationTtl: KEEP });
+  return json({ ok: true, id: rec.id, engine: b.engine, url: shotUrl(rec, b.engine) });
+}
+async function shotGet(token, engine, env) {
+  const id = await env.KV.get('tok:' + token);
+  const by = id ? pngBytes(await env.KV.get(`shot:${id}:${engine}`)) : null;
+  if (!by) return new Response('not found', { status: 404, headers: { 'x-robots-tag': 'noindex, nofollow', 'cache-control': 'no-store' } });
+  return new Response(by, { status: 200, headers: { 'content-type': 'image/png', 'cache-control': 'private, max-age=300',
+    'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff' } });
 }
 
 // POST /api/free-report/rerender {k}: renders every open request again with the current code (run once after a deploy that
@@ -1331,8 +1374,11 @@ export default {
       if (p === '/api/free-report/fill' && req.method === 'POST') return await fill(req, env);
       if (p === '/api/free-report/rerender' && req.method === 'POST') return await rerender(req, env);
       if (p === '/api/free-report/followup' && req.method === 'POST') return await followup(req, env);
+      if (p === '/api/free-report/shot' && req.method === 'POST') return await shot(req, env);
       const m = p.match(/^\/r\/([a-f0-9]{48})$/);
       if (m && req.method === 'GET') return await report(m[1], u, env);
+      const ms = p.match(/^\/r\/([a-f0-9]{48})\/ai-(chatgpt|gemini|google_ai)\.png$/);
+      if (ms && req.method === 'GET') return await shotGet(ms[1], ms[2], env);
       return new Response('Booked Out free report', { status: 200, headers: { 'x-robots-tag': 'noindex' } });
     } catch (e) {
       return json({ saved: false, error: 'server' }, 500);
@@ -1345,7 +1391,8 @@ export default {
   _t: { validate, businessClock, federalHolidays, isBusinessDay, local, fromLocal, chicagoText, isLive, deliverToOwner,
     sendAlert, isTestRequest, plain, ownerEmail, mime, sendMail, sendBlock, check, review, trySend, sha, budgetLine, renderReport, submit, build, tick, TRADES, REVENUE,
     fuTick, followup, startFollowups, fuHelpers, gmailThread, allowed, pickFixes,
-    diagnose, speedFinding, FIVE_MIN_TEST: FU.FIVE_MIN_TEST, bookingList: FU.bookingList, bookingFixOk: FU.bookingFixOk, knownFor, competitorView, refreshReport, speedEstimate, fillProblem, fill, rerender, SOURCES, FEW_REVIEWS, FILL },
+    diagnose, speedFinding, FIVE_MIN_TEST: FU.FIVE_MIN_TEST, bookingList: FU.bookingList, bookingFixOk: FU.bookingFixOk, knownFor, competitorView, refreshReport, speedEstimate, fillProblem, fill, rerender, SOURCES, FEW_REVIEWS, FILL,
+    shot, shotUrl, pngBytes, SHOT_ENGINES, townState },
 };
 
 const GONE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Report not found | Booked Out Solutions</title><style>body{margin:0;font:18px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#F6F1E7;color:#0A0F26}main{max-width:34rem;margin:0 auto;padding:3rem 1.2rem}</style></head><body><main><h1>This report is not here</h1><p>The link may be old or mistyped. Reply to the email it came in and we will send it again, or write to hello@getbookedoutsolutions.com.</p><p>Booked Out Solutions</p></main></body></html>';

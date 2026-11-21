@@ -78,6 +78,13 @@ Fail the report if any of these is not true:
   business or personal address.
 - Then re-check checker 1's two riskiest facts yourself (rank and review gap) against `sections`.
 
+## Running it by hand (Nov 21 2026)
+Until the scheduled task exists, a live chat runs `workers/freereport-checkers.mjs` (dry run first, then `--apply`). It fills what it
+can (answer speed is always "not tested"; the spot comes from `workers/data/zone-locks.json`; the rest from the research file the
+chat gathers from public pages), runs the checker 1 and checker 2 lists above as script checks, and posts both marks. For the two
+separate Claude checkers, the chat starts two sub-agents (checker 2 never sees checker 1's notes) and passes their verdicts with
+`--verdicts`; a script fail always wins. Details: DEPLOY.md, "The Free report checkers runner".
+
 ## Timing (scheduled task, created only when GO LIVE is near)
 - One cloud scheduled task, "Free report checkers", runs every hour from 7 am to 7 pm Central on weekdays, plus once at
   9 pm, 5 am and 7 am. The clock is 1 business day and the cron builds a report within 15 minutes, so a request is checked
@@ -86,7 +93,7 @@ Fail the report if any of these is not true:
   checker 1's notes). The run itself sends nothing. The worker sends after the second pass.
 - If an item is past 75% of its clock and still needs a fill, the run fills it first (AI test with ChatGPT, Gemini and Google AI,
   booking test, category, known_for with stars, competitor, listings, spot), always through `workers/freereport-fill.mjs`
-  (see DEPLOY.md, "Free report fill jobs"). It never runs the answer speed test before GO LIVE.
+  (see DEPLOY.md, "Free report fill jobs"), by running `node workers/freereport-checkers.mjs --apply`. It never runs the answer speed test.
   If it can't, it writes the problem to the watchdog inbox. Overdue items show as `problems` in `/status`, and the
   watchdog picks them up.
 - The prompt must include: "Never ask Rickey for an Allow: if a step needs one, skip it and list it at the end."
