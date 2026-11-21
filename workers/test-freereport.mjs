@@ -3,6 +3,7 @@
 import W0 from './bookedout-freereport.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import * as FU from './freereport-followups.js';
 // BUNDLE=1 runs the same tests against the one-file dashboard bundle (node workers/build-freereport-bundle.mjs first).
 const W = process.env.BUNDLE ? (await import('./dist/bookedout-freereport.bundle.js')).default : W0;
 
@@ -916,7 +917,7 @@ await test('Fourth review regressions: reserved fix wins over a duplicate, every
   assert.match(page, /5 out of 10 One fix: Put your phone number at the top\./);
   assert.doesNotMatch(page.split('Booking test from a phone')[1].split('Your Google main category')[0], /under 5 minutes|five minutes/);
   const slowPage = visible(rr({ booking: { score: 5, fixes: fiveWays.slice(0, 2) }, speed: { ...fastSp, minutes: 40 } }).html);
-  assert.match(slowPage, /under 5 minutes/, 'a slow answerer still sees them');
+  assert.doesNotMatch(slowPage, /under 5 minutes|five minutes/, 'only the one standard 5-minute sentence is ever shown, to any shop');
   // 3. a 6 to 60 minute answer with an unanswered after-hours test: the diagnosis talks about after hours, so the picker keeps the after-hours fix
   const sp3 = { tested: true, channel: 'call', when: 'Mon', minutes: 30, after_hours: ah(false) };
   assert.match(T.diagnose({ ...base, sections: { ...weak, speed: sp3 } }).line, /after-hours test call got no answer/);
@@ -973,8 +974,32 @@ await test('Sixth review: at most one 5-minute fix ever; decimals are not five m
   assert.equal(T.plain('a 5‑minute rule'), 'a 5-minute rule');
   assert.equal(T.plain('fast — and fair'), 'fast, and fair');
   assert.equal(T.plain('Great work—fast'), 'Great work-fast');
-  const page = visible(rr({ booking: { score: 4, fixes: ['Answer within 5–minutes.'] }, speed: { tested: true, channel: 'call', when: 'Mon', minutes: 40 } }).html);
-  assert.match(page, /Answer within 5-minutes\./); assert.doesNotMatch(page, DASH);
+  const page = visible(rr({ booking: { score: 4, fixes: ['Use a call\u2013back list.', 'Answer within 5\u2013minutes.'] }, speed: { tested: true, channel: 'call', when: 'Mon', minutes: 40 } }).html);
+  assert.match(page, /Use a call-back list\./); assert.doesNotMatch(page, DASH);
+  assert.doesNotMatch(page, /Answer within 5-minutes/, 'a non-standard 5-minute wording is dropped for every shop');
+});
+
+await test('Seventh review: other 5-minute wordings dropped for every shop; ranges, Unicode digits; plain() trims; no raw HTML in follow-ups', async () => {
+  const slow = { tested: true, channel: 'call', when: 'Mon', minutes: 30 };
+  const SF = 'Call or text back every new lead within 5 minutes, even after hours.';
+  for (const x of ['Answer within five minutes.', 'ANSWER EVERY CALL WITHIN 5 MINUTES!!!']) {
+    const page = visible(rr({ booking: { score: 4, fixes: [x, 'Shorten the form.'] }, speed: slow }).html).replace(/\s+/g, ' ');
+    const s4 = page.split('Booking test from a phone')[1].split('Your Google main category')[0];
+    assert.doesNotMatch(s4, /five minutes|5 MINUTES/i, x); assert.match(s4, /One fix: Shorten the form\./);
+    assert.equal(FU.values({ ...base, sections: { booking: { score: 4, fixes: [x] }, speed: slow } }, { ...T.fuHelpers(), now: new Date() }).booking_fix_1, undefined, x);
+  }
+  assert.equal(FU.values({ ...base, sections: { booking: { score: 4, fixes: [SF] }, speed: slow } }, { ...T.fuHelpers(), now: new Date() }).booking_fix_1, SF);
+  // a dropped first booking fix: the picker, the page and the follow-ups all use the next one ("Shorten the form.")
+  const two = { ...base, sections: { booking: { score: 4, fixes: ['Answer within five minutes.', 'Shorten the form.'] }, speed: slow } };
+  assert.ok(T.pickFixes(two).includes('Shorten the form.'), T.pickFixes(two).join(' | '));
+  assert.equal(FU.values(two, { ...T.fuHelpers(), now: new Date() }).booking_fix_1, 'Shorten the form.');
+  for (const x of ['Respond within 3-5 minutes', 'Respond within 3–5 minutes', 'Reply in 1-5 min', 'Answer within ٥ minutes.', 'Answer within ５ minutes.', '5 MINUTES!!!'])
+    assert.equal(T.FIVE_MIN_TEST(x), true, x);
+  for (const x of ['1.5 minutes', '2,5 minutes', '0.5 min', '15 minutes', 'Answer within ١٥ minutes.'])
+    assert.equal(T.FIVE_MIN_TEST(x), false, x);
+  assert.equal(T.plain('— Shorten the form —'), 'Shorten the form');
+  assert.equal(T.plain(', , Shorten the form ,'), 'Shorten the form');
+  assert.ok(FU.bodyProblems('Hi,\n<img src=x> Add a <b>Book now</b> button\nWant it?', 'https://getbookedoutsolutions.com/r/x/').includes('angle bracket (raw HTML)'));
 });
 
 await test('E2E mirror of fr-20261120-vbukvz: fill all, checker 1 + checker 2 pass; LIVE off sends nothing; LIVE on sends once; TEST never', async () => {

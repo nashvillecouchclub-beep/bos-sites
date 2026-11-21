@@ -34,14 +34,31 @@ function fixLine(s, max = 25) {
   return x.charAt(0).toUpperCase() + x.slice(1);
 }
 
-// "5 minutes", "five minutes", "5-minute", "5 mins", "under 5 min": a fix about answering within 5 minutes. A shop that already
-// answered our test that fast never gets one (report fixes, booking test list, follow-ups). Shared with the worker.
-// The text is lower-cased and every run of other characters (any hyphen or dash, brackets, commas) becomes one space first,
-// so "5-minute", "5\u2011minute", "5\u2013minute", "five (5) minutes" and "5 or fewer minutes" all count.
-export function FIVE_MIN_TEST(x) {
-  // (?<!\d ) : "1.5 minutes" becomes "1 5 minutes" here, and a digit right before the 5 means it was a decimal, not five minutes
-  return /(?<!\d )\b(5|five)( 5)? ?(or (fewer|less) )?min(ute)?s?\b/.test(String(x == null ? '' : x).toLowerCase().replace(/[^a-z0-9]+/g, ' '));
+// "5 minutes", "five minutes", "5-minute", "5 mins", "under 5 min", "3-5 minutes": a fix about answering within 5 minutes.
+// Only one wording of it is ever shown (SPEED_FIX, in the three fixes), and never to a shop that already answered that fast.
+// Shared with the worker. The text is NFKC-normalized and every Unicode digit becomes 0-9 ("٥", "５"); a real decimal
+// ("1.5", "2,5") is read as one number; then every run of other characters (any dash, brackets, commas) becomes one space,
+// so a range ending in 5 ("3-5 minutes") counts.
+export const SPEED_FIX = 'Call or text back every new lead within 5 minutes, even after hours.';
+const isNd = (ch) => /\p{Nd}/u.test(ch);
+function asciiDigits(str) {
+  return [...str].map((ch) => {
+    if (/[0-9]/.test(ch) || !isNd(ch)) return ch;
+    // Unicode decimal digits come in runs of ten starting at zero: count the digit code points just below this one
+    const cp = ch.codePointAt(0);
+    let k = 0;
+    while (k < 60 && isNd(String.fromCodePoint(cp - k - 1))) k++;
+    return String(k % 10);
+  }).join('');
 }
+export function FIVE_MIN_TEST(x) {
+  let s = asciiDigits(String(x == null ? '' : x).normalize('NFKC')).toLowerCase();
+  s = s.replace(/(\d)[.,](\d)/g, '$1$2'); // 1.5 -> 15, 2,5 -> 25: not five
+  return /\b(5|five)( 5)? ?(or (fewer|less) )?min(ute)?s?\b/.test(s.replace(/[^a-z0-9]+/g, ' '));
+}
+const normWords = (x) => String(x == null ? '' : x).normalize('NFKC').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+// A 5-minute fix in any wording other than the one standard sentence (dropped everywhere, for every shop).
+export function otherFiveMin(x) { return FIVE_MIN_TEST(x) && normWords(x) !== normWords(SPEED_FIX); }
 export function answeredFast(sp) { return !!(sp && sp.tested === true && sp.minutes != null && +sp.minutes <= 5); }
 
 // Every placeholder value, from the owner's own report only. A missing value is left out (never guessed).
@@ -76,8 +93,9 @@ export function values(rec, h) {
   }
   if (rv && rv.newest_review) set('newest_review_replied', rv.owner_reply_on_newest ? 'yes' : 'no');
   if (bk && bk.score != null) set('booking_score', Math.max(0, Math.min(10, +bk.score)));
-  const bfix = bk && Array.isArray(bk.fixes) ? bk.fixes.find((x) => x && !(answeredFast(s.speed) && FIVE_MIN_TEST(x))) : null;
-  if (bfix && bfix === bk.fixes[0] && words(bfix) <= 45) set('booking_fix_1', h.plain(bfix));
+  const bfix = bk && Array.isArray(bk.fixes) ? bk.fixes.find((x) => x && h.plain(x) && !otherFiveMin(x) && !(answeredFast(s.speed) && FIVE_MIN_TEST(x))) : null;
+  // the first booking fix as the report page lists it (the same filter as the page's booking test list)
+  if (bfix && words(bfix) <= 45) set('booking_fix_1', h.plain(bfix));
   if (ai && ai.chatgpt && ai.gemini) {
     const named = !!(ai.chatgpt.named || ai.gemini.named), both = !!(ai.chatgpt.named && ai.gemini.named);
     // "yes" only when both named it, "no" only when neither did; a split answer is left out (the step uses its fallback).
@@ -111,6 +129,7 @@ export function bodyProblems(body, reportLink) {
   if (words(body) >= 120) p.push('120 words or more');
   if ((body.match(/\?/g) || []).length !== 1 || !lines[lines.length - 1].trim().endsWith('?')) p.push('not exactly one question on the last line');
   if (/\$/.test(body)) p.push('dollar sign');
+  if (/[<>]/.test(body)) p.push('angle bracket (raw HTML)');
   if (/[‒-―]/.test(body)) p.push('long dash');
   if (/[\p{Extended_Pictographic}]/u.test(body)) p.push('emoji');
   if (/\{[a-z_0-9]+\}/.test(body)) p.push('placeholder left');

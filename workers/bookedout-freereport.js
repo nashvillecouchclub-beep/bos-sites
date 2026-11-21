@@ -364,7 +364,8 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':
 // Visitor text rules: no long dashes, no emojis (also cleans text that comes from Google reviews).
 function plain(s) {
   // a dash joining two words ("5\u2013minute") becomes a plain hyphen; a dash used as a pause ("fast \u2014 fair") becomes a comma
-  return String(s == null ? '' : s).replace(/([\p{L}\p{N}])[\u2010-\u2015\u2212]([\p{L}\p{N}])/gu, '$1-$2').replace(/\s*[\u2012-\u2015]\s*/g, ', ').replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, '').replace(/\s{2,}/g, ' ').trim();
+  return String(s == null ? '' : s).replace(/([\p{L}\p{N}])[\u2010-\u2015\u2212]([\p{L}\p{N}])/gu, '$1-$2').replace(/\s*[\u2012-\u2015]\s*/g, ', ').replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, '').replace(/\s{2,}/g, ' ').trim()
+    .replace(/^[\s,]+|[\s,]+$/g, '');
 }
 const t = (s) => esc(plain(s));
 const money = (n) => '$' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -380,7 +381,7 @@ function budgetLine(revenue) {
   return `Shops your size spend 6 to 8% of revenue to grow; for you that's ${x}. Core is $997.`;
 }
 
-const SPEED_FIX = 'Call or text back every new lead within 5 minutes, even after hours.';
+const SPEED_FIX = FU.SPEED_FIX; // the one 5-minute wording (freereport-followups.js)
 function afterHoursFix(ch) {
   const c = own(CHANNEL, ch) || 'call';
   return `Make sure every after-hours ${c} reaches a person or gets ${c === 'call' ? 'a call back' : 'an answer'} first thing the next morning.`;
@@ -433,7 +434,8 @@ function pickFixes(rec) {
     add(`Ask every happy customer for a Google review the day the job is done. You have ${g.review_count} Google ${g.review_count === 1 ? 'review' : 'reviews'} so far, and the next customer reads them before they call.`);
   if (rv && rv.newest_review && !rv.owner_reply_on_newest) add('Reply to your newest Google review today, and to every new review within a day from now on. The next customer reads those replies.');
   if (ct && ct.match === false) add(`Change your Google main category to the one that fits ${plain(ct.big_job || 'the big-ticket job you want most')}, so Google shows you for that work.`);
-  if (bk && Array.isArray(bk.fixes) && bk.fixes[0]) add(bk.fixes[0]);
+  // the first booking fix the page's booking test list shows (other 5-minute wordings, and 5-minute fixes for a fast shop, are skipped)
+  if (bk && Array.isArray(bk.fixes)) { const b0 = bk.fixes.find((x) => plain(x) && !FU.otherFiveMin(x) && !(fast && FU.FIVE_MIN_TEST(x))); if (b0) add(b0); }
   if (ai && ai.chatgpt && ai.chatgpt.named === false) add('Put your town, your main services and your best reviews in plain words on your website, so ChatGPT and Gemini have something to say about you.');
   const pick = out.slice(0, 3 - keep.length).concat(keep);
   const base = [
@@ -752,7 +754,8 @@ function renderReport(rec) {
   let b4 = '';
   if (bk && bk.score != null) {
     // a shop that already answered our test within 5 minutes is not told to answer within 5 minutes
-    const list = (bk.fixes || []).filter((x) => plain(x) && !(FU.answeredFast(s.speed) && FU.FIVE_MIN_TEST(x))).slice(0, 3);
+    // only the standard 5-minute sentence may appear, and not at all for a shop that answered within 5 minutes
+    const list = (bk.fixes || []).filter((x) => plain(x) && !FU.otherFiveMin(x) && !(FU.answeredFast(s.speed) && FU.FIVE_MIN_TEST(x))).slice(0, 3);
     const fx = list.map((x) => `<li>${t(x)}</li>`).join('');
     b4 = `<p class="score"><b>${t(Math.max(0, Math.min(10, +bk.score)))}</b> out of 10</p>${fx ? `<p>${['', 'One fix', 'Two fixes', 'Three fixes'][list.length]}:</p><ol class="plainlist">${fx}</ol>` : ''}`;
   } else { b4 = PENDING; pending.push('4 Booking test'); }
