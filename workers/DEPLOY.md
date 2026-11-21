@@ -154,7 +154,7 @@ worker. Tests: `node workers/test-freereport-fill.mjs`.
 | known_for | `JOBS.known_for` | the research file: his public Google reviews, text AND stars (`{scanned, reviews:[{text, rating}]}`) | Built (Nov 21). Not needed without a Google profile. If the lookup worker learns to return reviews with stars, move this to `lookup()`. |
 | competitor | `JOBS.competitor` | the research file: the public Google listing of the top 3 shop above him (photos, reply_pct, posts_90d, website, hours) | Built (Nov 21). `name` is optional: the job picks the highest top 3 shop above him. Stars and review counts are always taken from google. Not needed at number 1, with no profile, or with no top 3. |
 | listings | `JOBS.listings` | the research file: public searches of Google, Yelp, BBB, Facebook, Nextdoor and the local chamber directory | Built (Nov 21). The Google row can come from the google section (found only; "complete" is never guessed). All six needed. |
-| spot | `JOBS.spot` | `workers/data/zone-locks.json` via `workers/zone-locks.mjs` (never the research file) | Built (Nov 21). The list is empty, so every zone reads open. Zone = his town, read the same however it is typed (ZIP, state code or full state name, punctuation), or the lock's zone when his town is in its `towns`. A town that can't be read as a plain town name is held (no spot filled). A bad list stops the run (never a quiet "open"): real dates only, `until` not before `since`, and no two locks for the same trade and town whose dates overlap (past, current or future). Not used for "Something else". |
+| spot | `JOBS.spot` | `workers/data/zone-locks.json` via `workers/zone-locks.mjs` (never the research file) | Built (Nov 21). The list is empty, so every zone reads open. Zone = his town, read the same however it is typed (ZIP or ZIP+4, state code, full or short state name like Tenn., USA/US, "-" for a space, Mt = Mount, St = Saint, LaVergne = La Vergne), or held when it is close to a locked town of his trade (one letter off, like Smryna, or a locked town followed by more words) - never "open". Lock dates are Central (America/Chicago) days, or the lock's zone when his town is in its `towns`. A town that can't be read as a plain town name is held (no spot filled). A bad list stops the run (never a quiet "open"): real dates only, `until` not before `since`, and no two locks for the same trade and town whose dates overlap (past, current or future). Not used for "Something else". |
 | speed | `JOBS.speed` | nothing: always `{"tested":false,"reason":"we do not call, text or email your business for this report."}` | Built (Nov 21) as the "We did not run this test for you" result only. Rickey has not picked a test method, so nothing contacts a shop. Research files cannot change it. The two locks (fill door `--after-go-live`, worker `SPEED_TEST_LIVE`) stay. |
 
 ### The "Free report checkers" runner (Nov 21 2026, run by hand from a live chat; no scheduled task)
@@ -168,7 +168,13 @@ worker. Tests: `node workers/test-freereport-fill.mjs`.
 - The script checks may only post FAILS (agents `checker-<slot>-script-<run id>`). A pass is posted only from `--verdicts FILE`
   (`{"fr-...":{"1":{"agent","result","notes","hash"},"2":{...}}}`, the live chat's two checker sub-agents), and only when BOTH slots
   have a `pass` with a non-script agent name and `hash` equal to the report's current hash (the run logs the hash to read). Same agent
-  name in both slots = held and logged (never renamed). A script fail always wins; a sub-agent fail is posted with its own name.
+  name in both slots = held and logged (never renamed). A fail on any slot always wins: a script fail, or a sub-agent fail on the current
+  hash (posted even when that slot already has a pass).
+- The worker enforces the same rules on `/check` (Nov 21, second review): agent names are cleaned one way everywhere (NFKC, no format or
+  zero-width characters, plain spaces and hyphens, squeezed, lower case) and stored cleaned; a PASS from any name containing "script"
+  is refused (409); once any fail is on record for the current version (`fails` list), every pass is refused (409) until a fill makes
+  a new version (which clears the list); `sendBlock` refuses the same cases. The POST-only endpoints answer 405 to other methods, and
+  any unknown path under `/r/` answers 404.
 - Never sends: no mark-sent, no send route. The run stops unless `/review` gives `live` as true or false. Right before every checker 2
   pass it reads `/ping` again and holds if LIVE is on (or unclear) unless `--allow-send`. A report whose last check failed on the same
   version is skipped until a fill changes it.

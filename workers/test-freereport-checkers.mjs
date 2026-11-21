@@ -5,7 +5,7 @@
 import W from './bookedout-freereport.js';
 import { prepareFills, findItem } from './freereport-fill.mjs';
 import { planFills, researchTemplate, pendingSections, SPEED_UNTESTED, JOBS } from './freereport-jobs.mjs';
-import { loadZoneLocks, checkLocks, spotFor, townKey, realDate, FILE } from './zone-locks.mjs';
+import { loadZoneLocks, checkLocks, spotFor, townKey, realDate, chicagoDay, FILE } from './zone-locks.mjs';
 import { run, checker1, checker2, args } from './freereport-checkers.mjs';
 import { baseFromEnv } from './freereport-fill.mjs';
 import assert from 'node:assert/strict';
@@ -91,7 +91,7 @@ await test('Zone locks: towns are read the same however they are typed (ZIP, ful
   assert.deepEqual(spotFor({ trade: 'Plumbing', town: 'Mt. Juliet, Tennessee' }, locks, '2026-11-21'), { zone: 'Mt. Juliet', open: true });
   for (const town of ['37167', '<b>x</b>', 'Smyrna 2', ''])
     assert.ok(spotFor({ trade: 'Plumbing', town }, locks, '2026-11-21').hold, JSON.stringify(town));
-  assert.equal(townKey('La Vergne, TN').key, 'la vergne');
+  assert.equal(townKey('La Vergne, TN').key, 'lavergne');
 });
 await test('Open-spot line on the page: open zone shows "Your spot is open", a taken zone does not (the guarantee stays)', async () => {
   const { rec } = await built();
@@ -247,7 +247,7 @@ await test('Runner: script checks alone NEVER post a pass; passes need two sub-a
   const r2 = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, verdicts: { [id]: { 1: { agent: 'sub1', result: 'pass', hash: h } } }, out: quiet, runId: 'x4' });
   assert.match(steps(r2), /waiting for a sub-agent pass verdict from checker 2/); assert.deepEqual(rec().checks || {}, {});
   // script-named sub-agents are not accepted
-  const r3 = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, verdicts: goodVerdicts(id, h, 'checker-1-script-x', 'checker-2-script-x'), out: quiet, runId: 'x5' });
+  const r3 = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, verdicts: goodVerdicts(id, h, 'checker-1-SCRIPT-x', 'checker-2-scr\u200bipt-x'), out: quiet, runId: 'x5' });
   assert.match(steps(r3), /not a script name/); assert.deepEqual(rec().checks || {}, {});
   // two real verdicts on this hash: checked (LIVE off: not sent)
   const r4 = await run({ base: BASE, key: KEY, fetch: local(env), research: dir, locks: [], apply: true, verdicts: goodVerdicts(id, h), out: quiet, runId: 'x6' });
@@ -392,6 +392,91 @@ await test('Checkers catch wording and fact problems on a page', async () => {
   for (const re of [/locked wording/, /long dash/, /emoji/, /tools/, /promises/]) assert.match(p2, re);
   assert.match((await checker1(item, bad)).problems.join(' | '), /not what the current code renders/);
   assert.match(checker2(item, r.html.replace('Number 9', 'Number 2')).problems.join(' | '), /rank on the page/);
+});
+
+// ---------- second review ----------
+const P = (env, id, hash) => (slot, agent, result, h = hash) => local(env)(BASE + '/api/free-report/check', { method: 'POST', body: JSON.stringify({ id, k: KEY, checker: slot, agent, result, hash: h }) }).then(async (r) => ({ ...(await r.json()), status: r.status }));
+async function ready(shop = FAKE, env0 = {}) {
+  const b = await built(shop, env0); const dir = rdir(b.id, withId(b.id));
+  await run({ base: BASE, key: KEY, fetch: local(b.env), research: dir, locks: [], apply: true, out: quiet, runId: 'rd' });
+  return { ...b, dir, hash: b.rec().hash };
+}
+await test('Review 2 item 1: a fresh sub-agent FAIL on this hash is posted even when checker 1 already passed, and nothing is sent later', async () => {
+  const b = await ready({ ...FAKE, business_name: 'Checker Run Heating', email: 'owner@checkerrun-heating.com' }, { LIVE: 'off', SEND_ROUTE: 'gmail', GMAIL_CLIENT_ID: 'x', GMAIL_CLIENT_SECRET: 'y', GMAIL_REFRESH_TOKEN: 'z' });
+  assert.equal((await P(b.env, b.id, b.hash)(1, 'sub-A-run1', 'pass')).status, 200);
+  const v = { [b.id]: { 1: { agent: 'sub-A-run2', result: 'fail', hash: b.hash, notes: 'rank is wrong' }, 2: { agent: 'sub-B-run2', result: 'pass', hash: b.hash } } };
+  const r = await run({ base: BASE, key: KEY, fetch: local(b.env), research: b.dir, locks: [], apply: true, verdicts: v, out: quiet, runId: 'r2' });
+  assert.equal(b.rec().status, 'held', steps(r)); assert.equal(b.rec().checks['1'].result, 'fail'); assert.equal(b.rec().checks['2'], undefined);
+  b.env.LIVE = 'on'; const out = [];
+  await T.tick(b.env, at('2026-11-20T15:30:00-06:00'), async (u) => { out.push(String(u)); return new Response(JSON.stringify({ access_token: 't', id: 'm1', threadId: 'th' })); });
+  assert.deepEqual(out, []); assert.equal(b.rec().status, 'held');
+});
+await test('Review 2 item 2: once a fail is on record for this version the worker refuses any pass, and sendBlock refuses too, until a fill', async () => {
+  const b = await ready(); const p = P(b.env, b.id, b.hash);
+  assert.equal((await p(1, 'A', 'pass')).status, 200);
+  assert.equal((await p(2, 'B', 'fail')).status, 200);
+  const r = await p(2, 'B', 'pass'); assert.equal(r.status, 409); assert.match(r.error, /failed this version/);
+  const b2 = await ready(); const p2 = P(b2.env, b2.id, b2.hash);
+  await p2(1, 'A', 'fail'); assert.equal((await p2(1, 'A', 'pass')).status, 409); assert.equal((await p2(2, 'B', 'pass')).status, 409);
+  // sendBlock: a record that claims two passes but has a fail on this hash is never sent
+  const rec = { ...b.rec(), status: 'checked', checks: { 1: { agent: 'a', result: 'pass', hash: b.hash }, 2: { agent: 'b', result: 'pass', hash: b.hash } } };
+  assert.match(T.sendBlock({ LIVE: 'on' }, { ...rec, test: false }), /failed this version/);
+  // a fill makes a new version: the fail list is cleared and passes are taken again
+  await local(b2.env)(BASE + '/api/free-report/fill', { method: 'POST', body: JSON.stringify({ id: b2.id, k: KEY, section: 'booking', data: { score: 7, fixes: ['Put your phone number at the top of the home page.'] } }) });
+  const nh = b2.rec().hash; assert.notEqual(nh, b2.hash); assert.deepEqual(b2.rec().fails, []);
+  assert.equal((await P(b2.env, b2.id, nh)(1, 'A', 'pass')).status, 200);
+  assert.equal((await P(b2.env, b2.id, nh)(2, 'B', 'pass')).status, 200);
+  assert.equal(b2.rec().status, 'checked');
+});
+await test('Review 2 items 3+4: agent names are cleaned the same way everywhere; look-alike names are one agent; script names never pass', async () => {
+  const c = T.cleanAgent;
+  for (const [a, x] of [['Checker-A', 'checker-a'], ['checker a', 'checker  a'], ['checker-a', 'checker-a​'], ['checker a', 'checker a'], ['checker-a', 'checker‐a'], ['checker-a', ' checker-a  '], ['checker-a', 'ｃｈｅｃｋｅｒ-ａ']])
+    assert.equal(c(a), c(x), JSON.stringify([a, x]));
+  for (const [n, a, x] of [['case', 'Checker-A', 'checker-a'], ['zwsp', 'checker-a', 'checker-a​'], ['nbsp', 'checker a', 'checker a'], ['hyphen', 'checker-a', 'checker‐a']]) {
+    const b = await ready();
+    const r = await run({ base: BASE, key: KEY, fetch: local(b.env), research: b.dir, locks: [], apply: true, verdicts: goodVerdicts(b.id, b.hash, a, x), out: quiet, runId: 'n' });
+    assert.match(r.summary[0].result, /held: .*same agent/, n); assert.deepEqual(b.rec().checks || {}, {}, n);
+    // and the worker on its own
+    const p = P(b.env, b.id, b.hash);
+    assert.equal((await p(1, a, 'pass')).status, 200); assert.equal((await p(2, x, 'pass')).status, 409, n);
+    assert.equal(b.rec().checks['1'].agent, c(a), 'stored cleaned');
+  }
+  const b = await ready(); const p = P(b.env, b.id, b.hash);
+  for (const a of ['checker-1-script-1', 'SCRIPT', 'scr​ipt-x']) assert.equal((await p(1, a, 'pass')).status, 409, a);
+  assert.equal((await p(1, 'checker-1-script-1', 'fail')).status, 200, 'a script may fail it');
+});
+await test('Review 2 item 5: zone towns typed every which way read the same; close or longer names are HELD, never open', () => {
+  const L = checkLocks({ locks: [{ trade: 'Plumbing', zone: 'Smyrna', business_name: 'A', since: '2026-01-01' }, { trade: 'Plumbing', zone: 'Mount Juliet', towns: ['La Vergne', 'Saint Paul'], business_name: 'B', since: '2026-01-01' }] });
+  const sp = (town) => spotFor({ trade: 'Plumbing', town }, L, '2026-11-21');
+  for (const t of ['Smyrna TN USA', 'Smyrna, Tenn.', 'Smyrna Tenn', 'Smyrna, TN, USA', 'Smyrna Tennessee USA', 'Smyrna TN 37167-1234', 'Smyrna  ,  TN', 'Smyrna (TN)', 'Smyrna-TN', 'Smyrna, T.N.', 'Smyrna, TN 37167, US', 'Smyrna Ｔｎ'])
+    assert.deepEqual(sp(t), { zone: 'Smyrna', open: false }, t);
+  for (const t of ['Mt. Juliet', 'Mt Juliet', 'LaVergne', 'Lavergne', 'La Vergne TN', 'St. Paul', 'St Paul']) assert.deepEqual(sp(t), { zone: 'Mount Juliet', open: false }, t);
+  for (const t of ['Smryna', 'Smyrna Rutherford County', 'Smyrnaa', 'Smyna TN', 'La Vergne Heights']) assert.ok(sp(t).hold, t);
+  assert.deepEqual(sp('Murfreesboro TN'), { zone: 'Murfreesboro', open: true });
+  assert.deepEqual(spotFor({ trade: 'Electrical', town: 'Smryna' }, L, '2026-11-21'), { zone: 'Smryna', open: true }, 'other trades are not near a lock');
+});
+await test('Review 2 item 6: lock dates use the Central (America/Chicago) day', () => {
+  assert.equal(chicagoDay(new Date('2026-11-22T03:30:00Z')), '2026-11-21', '9:30 pm Central on the 21st is still the 21st');
+  assert.equal(chicagoDay(new Date('2026-11-22T06:30:00Z')), '2026-11-22');
+  const L = checkLocks({ locks: [{ trade: 'Plumbing', zone: 'Smyrna', business_name: 'A', since: '2026-11-22' }] });
+  assert.deepEqual(spotFor({ trade: 'Plumbing', town: 'Smyrna' }, L, chicagoDay(new Date('2026-11-22T03:30:00Z'))), { zone: 'Smyrna', open: true }, 'not started yet in Smyrna');
+  assert.deepEqual(spotFor({ trade: 'Plumbing', town: 'Smyrna' }, L, chicagoDay(new Date('2026-11-22T06:30:00Z'))), { zone: 'Smyrna', open: false });
+});
+await test('POST-only endpoints answer 405 to a GET', async () => {
+  const { env } = await built();
+  for (const u of ['shot', 'check', 'fill', 'mark-sent', 'rerender', 'followup']) assert.equal((await local(env)(BASE + '/api/free-report/' + u)).status, 405, u);
+  assert.equal((await local(env)(BASE + '/api/free-report/ping')).status, 200);
+});
+await test('Review 2 item 7: names with angle brackets, quotes and & are compared as the page shows them (no false fail, no raw HTML)', async () => {
+  const X = '<i>Z</i>"\'&';
+  for (const [shop, rs] of [[{ ...FAKE, business_name: 'Acme ' + X + ' (FAKE)' }, RESEARCH], [FAKE, { ...RESEARCH, google: { ...RESEARCH.google, keyword: 'hvac ' + X } }],
+    [FAKE, { ...RESEARCH, category: { main_category: 'HVAC ' + X, big_job: 'big ' + X, match: false, note: 'n ' + X } }]]) {
+    const b = await built(shop);
+    const r = await run({ base: BASE, key: KEY, fetch: local(b.env), research: rdir(b.id, withId(b.id, rs)), locks: [], apply: true, out: quiet, runId: 'e' });
+    const h = b.env.KV.m.get('rep:' + b.id);
+    assert.equal(r.summary[0].result, 'waiting for verdicts', steps(r));
+    assert.ok(!h.includes('<i>Z</i>') && h.includes('&lt;i&gt;Z') && !h.includes('&amp;lt;'), 'escaped exactly once');
+  }
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

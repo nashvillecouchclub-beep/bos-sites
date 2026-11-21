@@ -276,6 +276,16 @@ async function gmailThread(env, threadId, f) {
   } catch (e) { return { ok: false, error: String((e && e.message) || e).slice(0, 200) }; }
 }
 
+// One cleaned form of a checker's agent name, stored and compared everywhere (worker and runner): NFKC, no format or
+// zero-width characters, every kind of space and hyphen made plain, spaces squeezed, lower case, at most 80 characters.
+function cleanAgent(x) {
+  return String(x == null ? '' : x).normalize('NFKC').replace(/[\p{Cf}\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff\u180e]/gu, '')
+    .replace(/[\u00a0\u1680\u2000-\u200a\u205f\u3000\s]+/g, ' ').replace(/[\u2010-\u2015\u2212\u2043\ufe58\ufe63\uff0d\u00ad]/g, '-')
+    .replace(/ +/g, ' ').trim().toLowerCase().slice(0, 80);
+}
+const scriptAgent = (a) => /script/.test(cleanAgent(a));
+const failedNow = (rec) => Array.isArray(rec.fails) && rec.fails.includes(rec.hash);
+
 // Every check that must be true before a report goes to an owner. Returns '' when it may go, else the reason.
 function sendBlock(env, rec) {
   if (!isLive(env)) return 'LIVE is off: nothing goes to a business before GO LIVE';
@@ -285,7 +295,9 @@ function sendBlock(env, rec) {
   if (!rec.complete || (rec.pending || []).length) return 'report still has pending sections';
   const c = rec.checks || {}, c1 = c['1'], c2 = c['2'];
   if (!c1 || !c2 || c1.result !== 'pass' || c2.result !== 'pass') return 'needs two pass marks';
-  if (!c1.agent || !c2.agent || c1.agent === c2.agent) return 'the two checks must come from two different agents';
+  if (!cleanAgent(c1.agent) || !cleanAgent(c2.agent) || cleanAgent(c1.agent) === cleanAgent(c2.agent)) return 'the two checks must come from two different agents';
+  if (scriptAgent(c1.agent) || scriptAgent(c2.agent)) return 'a pass from a script is never enough; two sub-agents must pass it';
+  if (failedNow(rec)) return 'a checker failed this version; it needs a fill (a new version) first';
   if (c1.hash !== rec.hash || c2.hash !== rec.hash) return 'report changed after it was checked';
   if (!validate({ ...rec, consent: rec.consent }).ok) return 'contact details no longer valid';
   return '';
@@ -739,8 +751,8 @@ function renderReport(rec) {
     if (g.review_count != null) rows.push(['Reviews', t(g.review_count)]);
     const kw = g.keyword || (trade.kw ? `${trade.kw} ${townState(rec.town).town}` : '');
     if (!kw) { pending.push('1 Google (search to check)'); }
-    else if (g.rank_for_keyword) rows.push([`Where you show for "${t(kw)}"`, `Number ${t(g.rank_for_keyword)}`]);
-    else if (g.rank_checked === true) rows.push([`Where you show for "${t(kw)}"`, 'Not in the first 20 results']);
+    else if (g.rank_for_keyword) rows.push([`Where you show for "${plain(kw)}"`, `Number ${t(g.rank_for_keyword)}`]);
+    else if (g.rank_checked === true) rows.push([`Where you show for "${plain(kw)}"`, 'Not in the first 20 results']);
     else pending.push('1 Google (search not run)');
     b1 = '<div class="rows">' + rows.map(([a, v]) => `<div><span>${esc(a)}</span><b>${v}</b></div>`).join('') + '</div>';
     if (!kw) b1 += PENDING;
@@ -983,6 +995,7 @@ async function saveReport(env, rec) {
     // A new version of the report: any earlier check marks were for the old version, so they no longer count.
     if (rec.checks && Object.keys(rec.checks).length) rec.checks_cleared = (rec.checks_cleared || 0) + 1;
     rec.checks = {};
+    rec.fails = []; // a new version starts clean; fails were for the old one
     if (rec.status === 'checked' || rec.status === 'held') rec.status = 'built';
     rec.hash = h;
   }
@@ -1117,7 +1130,7 @@ async function check(req, env, now = new Date(), f) {
   let b; try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
   if (!keyOk(env, b && b.k)) return json({ ok: false, error: 'no' }, 403);
   const slot = String(b.checker);
-  const agent = String(b.agent || '').trim().slice(0, 80);
+  const agent = cleanAgent(b.agent);
   if (!ID.test(String(b.id || '')) || !['1', '2'].includes(slot) || !agent || !['pass', 'fail'].includes(b.result)) return json({ ok: false, error: 'bad check' }, 400);
   const rec = await getJ(env, 'req:' + b.id);
   if (!rec) return json({ ok: false, error: 'not found' }, 404);
@@ -1129,7 +1142,9 @@ async function check(req, env, now = new Date(), f) {
   if (String(b.hash || '') !== rec.hash) return json({ ok: false, error: 'report changed; read it again', hash: rec.hash }, 409);
   rec.checks = rec.checks || {};
   const other = rec.checks[slot === '1' ? '2' : '1'];
-  if (other && other.agent === agent) return json({ ok: false, error: 'checker 1 and checker 2 must be different agents' }, 409);
+  if (b.result === 'pass' && scriptAgent(agent)) return json({ ok: false, error: 'a script may only fail a report; a pass must come from a sub-agent' }, 409);
+  if (b.result === 'pass' && failedNow(rec)) return json({ ok: false, error: 'a checker failed this version; fill the fix first (a new version), then both check again' }, 409);
+  if (other && cleanAgent(other.agent) === agent) return json({ ok: false, error: 'checker 1 and checker 2 must be different agents' }, 409);
   if (slot === '2' && b.result === 'pass' && !(rec.checks['1'] && rec.checks['1'].result === 'pass' && rec.checks['1'].hash === rec.hash))
     return json({ ok: false, error: 'checker 1 must pass first' }, 409);
   if (b.result === 'pass' && !rec.complete) return json({ ok: false, error: 'report has pending sections; it cannot pass' }, 409);
@@ -1138,6 +1153,8 @@ async function check(req, env, now = new Date(), f) {
   let sent = false;
   if (b.result === 'fail') {
     rec.status = 'held';
+    rec.fails = Array.isArray(rec.fails) ? rec.fails : [];
+    if (!rec.fails.includes(rec.hash)) rec.fails.push(rec.hash);
     await sendAlert(env, `Free report failed check ${slot}: ${rec.business_name}`, alertText(rec, `Checker ${slot} (${agent}) failed this report: ${notes || 'no notes'}. Fix it (fill the section again), then both checkers read it again.`), f, rec.test ? 'test' : 'problem', rec.id);
   } else if (rec.checks['1'] && rec.checks['2'] && rec.checks['1'].result === 'pass' && rec.checks['2'].result === 'pass') {
     rec.status = 'checked';
@@ -1417,6 +1434,8 @@ export default {
       if (m && req.method === 'GET') return await report(m[1], u, env);
       const ms = p.match(/^\/r\/([a-f0-9]{48})\/ai-(chatgpt|gemini|google_ai)\.png$/);
       if (ms && req.method === 'GET') return await shotGet(ms[1], ms[2], env);
+      // the POST-only endpoints answer 405 to any other method (never the generic 200 page)
+      if (/^\/api\/free-report\/(check|mark-sent|fill|rerender|followup|shot)$/.test(p)) return json({ ok: false, error: 'POST only' }, 405);
       // anything else under /r/ is not a page we serve
       if (p.startsWith('/r/')) return new Response(GONE, { status: 404, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow' } });
       return new Response('Booked Out free report', { status: 200, headers: { 'x-robots-tag': 'noindex' } });
@@ -1432,7 +1451,7 @@ export default {
     sendAlert, isTestRequest, plain, ownerEmail, mime, sendMail, sendBlock, check, review, trySend, sha, budgetLine, renderReport, submit, build, tick, TRADES, REVENUE,
     fuTick, followup, startFollowups, fuHelpers, gmailThread, allowed, pickFixes,
     diagnose, speedFinding, FIVE_MIN_TEST: FU.FIVE_MIN_TEST, bookingList: FU.bookingList, bookingFixOk: FU.bookingFixOk, knownFor, competitorView, refreshReport, speedEstimate, fillProblem, fill, rerender, SOURCES, FEW_REVIEWS, FILL,
-    shot, shotUrl, pngBytes, SHOT_ENGINES, townState },
+    shot, shotUrl, pngBytes, SHOT_ENGINES, townState, cleanAgent },
 };
 
 const GONE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Report not found | Booked Out Solutions</title><style>body{margin:0;font:18px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#F6F1E7;color:#0A0F26}main{max-width:34rem;margin:0 auto;padding:3rem 1.2rem}</style></head><body><main><h1>This report is not here</h1><p>The link may be old or mistyped. Reply to the email it came in and we will send it again, or write to hello@getbookedoutsolutions.com.</p><p>Booked Out Solutions</p></main></body></html>';

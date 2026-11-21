@@ -12,7 +12,19 @@ const STATES = { AL: 'alabama', AK: 'alaska', AZ: 'arizona', AR: 'arkansas', CA:
   NC: 'north carolina', ND: 'north dakota', OH: 'ohio', OK: 'oklahoma', OR: 'oregon', PA: 'pennsylvania', RI: 'rhode island', SC: 'south carolina',
   SD: 'south dakota', TN: 'tennessee', TX: 'texas', UT: 'utah', VT: 'vermont', VA: 'virginia', WA: 'washington', WV: 'west virginia',
   WI: 'wisconsin', WY: 'wyoming' };
-const STATE_RE = new RegExp(`(?:[\\s,]+)(?:${[...Object.keys(STATES), ...Object.values(STATES)].sort((a, b) => b.length - a.length).map((x) => x.replace(/ /g, '\\s+')).join('|')})\\.?$`, 'i');
+// Short state forms people type (AP style and common ones), compared with dots removed and in lower case.
+const STATE_SHORT = ['ala', 'ariz', 'ark', 'calif', 'cal', 'colo', 'conn', 'del', 'fla', 'ga', 'ill', 'ind', 'kan', 'kans', 'ky', 'md', 'mass',
+  'mich', 'minn', 'miss', 'mo', 'mont', 'neb', 'nebr', 'nev', 'okla', 'ore', 'oreg', 'pa', 'penn', 'penna', 'tenn', 'tex', 'vt', 'va', 'wash',
+  'wis', 'wisc', 'wyo', 'wva'];
+const TAIL_ONE = new Set([...Object.keys(STATES).map((x) => x.toLowerCase()), ...STATE_SHORT, 'usa', 'us', 'america']);
+const TAIL_MULTI = [...Object.values(STATES), 'united states', 'united states of america', 'w va', 'n c', 's c', 'n d', 's d', 'n h', 'n j', 'n m', 'n y', 'r i']
+  .map((x) => x.split(' ')).sort((a, b) => b.length - a.length);
+const CANON = { mt: 'mount', mount: 'mount', st: 'saint', saint: 'saint', ste: 'sainte', ft: 'fort', fort: 'fort', pt: 'point' };
+
+// The day in Smyrna (America/Chicago), YYYY-MM-DD: lock dates are Central days, not UTC days.
+export function chicagoDay(d = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
 
 // A real calendar date in YYYY-MM-DD.
 export function realDate(s) {
@@ -21,15 +33,42 @@ export function realDate(s) {
   return !isNaN(d) && d.toISOString().slice(0, 10) === s;
 }
 
-// "Smyrna, TN 37167." / "Smyrna, Tennessee" / "  smyrna  " -> "Smyrna" (display) and "smyrna" (key). null = cannot read it.
+// "Smyrna, TN 37167, USA" / "Smyrna, Tenn." / "Smyrna-TN" / "  smyrna  " -> {display: "Smyrna", key: "smyrna", words: ["smyrna"]}.
+// key: canonical words (Mt = Mount, St = Saint) joined with no spaces, so "LaVergne" = "La Vergne". null = cannot read it.
 export function townKey(raw) {
-  let t = String(raw == null ? '' : raw).normalize('NFKC').replace(/\s+/g, ' ').trim();
-  t = t.replace(/[\s,.;:!]+$/, '');
-  t = t.replace(/[\s,]*\b\d{5}(?:-\d{4})?$/, '').replace(/[\s,.;:!]+$/, '');
-  t = t.replace(STATE_RE, '').replace(/[\s,.;:!]+$/, '').trim();
-  if (!t || t.length > 40 || !/^[A-Za-z][A-Za-z .'-]*$/.test(t) || /\d/.test(t)) return null;
-  const display = t.split(' ').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ');
-  return { display, key: t.toLowerCase().replace(/[^a-z]+/g, ' ').trim() };
+  let t = String(raw == null ? '' : raw).normalize('NFKC').replace(/[\p{Cf}​-‏﻿]/gu, '')
+    .replace(/[‐-―−-]/g, ' ').replace(/[(),;:!]/g, ' ').replace(/\s+/g, ' ').trim();
+  let words = t.split(' ').filter(Boolean);
+  const bare = (w) => w.toLowerCase().replace(/\./g, '');
+  // drop trailing ZIP codes, country names and state names or short forms (never the last word left)
+  for (let again = true; again && words.length > 1;) {
+    again = false;
+    const last = bare(words[words.length - 1]);
+    if (/^\d{4,5}$/.test(last) || /^\d{9}$/.test(last) || !last) { words.pop(); again = true; continue; }
+    // "T.N." -> "tn"; multi-word state names
+    if (TAIL_ONE.has(last)) { words.pop(); again = true; continue; }
+    for (const m of TAIL_MULTI) {
+      if (words.length > m.length && words.slice(-m.length).map(bare).join(' ') === m.join(' ')) { words.splice(-m.length); again = true; break; }
+    }
+  }
+  if (words.length) words[words.length - 1] = words[words.length - 1].replace(/\.+$/, '');
+  words = words.filter(Boolean);
+  const display = words.join(' ');
+  if (!display || display.length > 40 || !/^[A-Za-z][A-Za-z .']*$/.test(display)) return null;
+  const canon = words.map((w) => { const b = bare(w).replace(/'/g, ''); return CANON[b] || b; });
+  return { display: words.map((w) => w[0].toUpperCase() + w.slice(1)).join(' '), key: canon.join(''), words: canon };
+}
+// edit distance, stops early above 1
+function within1(a, b) {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else if (a[i + 1] === b[j] && a[i] === b[j + 1]) { i += 2; j += 2; } else { i++; j++; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
 }
 
 const overlap = (a, b) => a.since <= (b.until || '9999-12-31') && b.since <= (a.until || '9999-12-31');
@@ -70,10 +109,25 @@ export function loadZoneLocks(file = FILE) { return checkLocks(JSON.parse(readFi
 
 // The spot for one request: {zone, open}; null for "Something else" (no zone locks, no spot line);
 // {hold: reason} when his town cannot be read cleanly (nothing is filled; a person looks at it).
-export function spotFor(item, locks, day = new Date().toISOString().slice(0, 10)) {
+export function spotFor(item, locks, day = chicagoDay()) {
   if (!LOCK_TRADES.includes(item.trade)) return null;
   const tk = townKey(item.town);
   if (!tk) return { hold: `cannot read the town "${String(item.town || '').slice(0, 80)}" as a plain town name; fill the spot by hand` };
-  const hit = locks.find((l) => l.trade === item.trade && activeOn(l, day) && [l.zone, ...(l.towns || [])].some((t) => (townKey(t) || {}).key === tk.key));
-  return hit ? { zone: townKey(hit.zone).display, open: false } : { zone: tk.display, open: true };
+  const active = locks.filter((l) => l.trade === item.trade && activeOn(l, day));
+  for (const l of active) {
+    for (const t of [l.zone, ...(l.towns || [])]) {
+      const lk = townKey(t); if (!lk) continue;
+      if (lk.key === tk.key) return { zone: townKey(l.zone).display, open: false };
+    }
+  }
+  // close to a locked town but not the same: never "open"; a person decides
+  for (const l of active) {
+    for (const t of [l.zone, ...(l.towns || [])]) {
+      const lk = townKey(t); if (!lk) continue;
+      const startsWith = tk.words.length > lk.words.length && lk.words.every((w, i) => tk.words[i] === w);
+      if (startsWith || tk.key.startsWith(lk.key) || within1(tk.key, lk.key))
+        return { hold: `the town "${tk.display}" is close to the locked zone "${townKey(l.zone).display}" (${l.trade}); check it by hand` };
+    }
+  }
+  return { zone: tk.display, open: true };
 }

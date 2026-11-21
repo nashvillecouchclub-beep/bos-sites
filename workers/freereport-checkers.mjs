@@ -33,8 +33,12 @@ import { homedir } from 'node:os';
 
 const T = W._t;
 const SITE = 'https://getbookedoutsolutions.com';
+const ENT = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };
+// The visible page text: tags removed first, then entities decoded in ONE pass (so "&amp;lt;" stays "&lt;"), spaces squeezed.
 const text = (html) => String(html).replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')
-  .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
+  .replace(/&(amp|lt|gt|quot|#39);/g, (m) => ENT[m]).replace(/\s+/g, ' ').trim();
+// A form answer as the page shows it once decoded (plain() as the worker does; no tag stripping: the page escapes it).
+const shown = (x) => T.plain(x).replace(/\s+/g, ' ').trim();
 const LOCKED = [
   'Built from your real Google listing and a few quick checks. It is yours to keep.',
   'Start your free 30 days',
@@ -61,7 +65,7 @@ export async function checker1(item, html) {
   if (junk) p.push(`the page contains "${junk[0]}" (bad data reached the page)`);
   if (html.length > MAX_PAGE) p.push(`the page is ${html.length} characters, over the ${MAX_PAGE} limit (something oversized got in)`);
   if (s.speed && !(s.speed.tested === false || item.test)) p.push('speed: a tested result on a real report (no speed test is run before GO LIVE)');
-  for (const [k, label] of [['business_name', 'business name'], ['town', 'town']]) if (!v.includes(text(T.plain(item[k])))) p.push(`the ${label} "${item[k]}" is not on the page as written on the form`);
+  for (const [k, label] of [['business_name', 'business name'], ['town', 'town']]) if (!v.includes(shown(item[k]))) p.push(`the ${label} "${item[k]}" is not on the page as written on the form`);
   const bl = T.budgetLine(item.revenue);
   if (bl && !v.includes(bl)) p.push('budget line missing or wrong for the revenue range');
   if (!bl && /Shops your size spend/.test(v)) p.push('budget line shown without a revenue range');
@@ -75,7 +79,7 @@ export async function checker1(item, html) {
   if (cv && cv.name && !(g.top3 || []).some((x) => x.name === cv.name)) p.push('the competitor is not in the google top 3');
   if (s.spot && trade.slug === 'other') p.push('a spot for "Something else"');
   if (/Your spot is open/.test(v) !== !!(s.spot && s.spot.open && trade.slug !== 'other')) p.push('the open-spot line does not match the zone lock list');
-  if (s.spot && s.spot.open && !v.includes(`The ${T.plain(s.spot.zone)} zone is open`)) p.push('the open-spot line names the wrong zone');
+  if (s.spot && s.spot.open && !v.includes(`The ${shown(s.spot.zone)} zone is open`)) p.push('the open-spot line names the wrong zone');
   return { pass: !p.length, problems: p };
 }
 
@@ -223,16 +227,16 @@ export async function run(opts) {
     log('checker 2', { id: item.id, msg: c2.pass ? 'pass' : 'FAIL: ' + c2.problems.join(' | ') });
     // 4. marks. The script may only post FAILS. A pass is posted only from a sub-agent verdict that says pass, names a
     // non-script agent, and read this exact version (hash). Both slots need one before any pass is posted.
-    const v = (verdicts && verdicts[item.id]) || {};
+    const v = (verdicts && Object.hasOwn(verdicts, item.id) && verdicts[item.id]) || {};
     const have1 = !!(item.checks && item.checks['1'] && item.checks['1'].result === 'pass' && item.checks['1'].hash === target.hash);
     const verdict = (slot) => {
-      const sub = v[slot];
-      if (!sub) return { state: 'missing' };
+      const sub = Object.hasOwn(v, slot) ? v[slot] : null;
+      if (!sub || typeof sub !== 'object') return { state: 'missing' };
       if (!['pass', 'fail'].includes(sub.result)) return { state: 'bad', why: `checker ${slot} verdict has no pass/fail result` };
-      const agent = String(sub.agent || '').trim();
-      if (!agent || /script/i.test(agent)) return { state: 'bad', why: `checker ${slot} verdict needs a real sub-agent name (not a script name)` };
-      if (sub.hash !== target.hash) return { state: 'bad', why: `checker ${slot} verdict read version ${String(sub.hash || 'none').slice(0, 12)}, the report is now ${target.hash.slice(0, 12)}; read it again` };
-      return { state: 'ok', result: sub.result, agent: agent.slice(0, 80), notes: String(sub.notes || '').slice(0, 1900) };
+      const agent = T.cleanAgent(sub.agent);
+      if (!agent || /script/.test(agent)) return { state: 'bad', why: `checker ${slot} verdict needs a real sub-agent name (not a script name)` };
+      if (typeof sub.hash !== 'string' || sub.hash !== target.hash) return { state: 'bad', why: `checker ${slot} verdict read version ${String(sub.hash || 'none').slice(0, 12)}, the report is now ${target.hash.slice(0, 12)}; read it again` };
+      return { state: 'ok', result: sub.result, agent, notes: String(sub.notes || '').slice(0, 1900) };
     };
     const v1 = verdict('1'), v2 = verdict('2');
     for (const x of [v1, v2]) if (x.state === 'bad') log('verdict', { id: item.id, msg: 'ignored: ' + x.why });
@@ -242,22 +246,22 @@ export async function run(opts) {
     const ok = (x, r) => x.state === 'ok' && x.result === r;
     if (!c1.pass) marks.push(['1', scriptFail('1', c1)]);               // a script fail always wins
     else if (!c2.pass) marks.push(['2', scriptFail('2', c2)]);
-    else if (!have1 && ok(v1, 'fail')) marks.push(['1', v1]);           // a sub-agent fail is posted with its own name
+    else if (ok(v1, 'fail')) marks.push(['1', v1]);                     // a sub-agent fail on this hash always wins, whatever is on record
     else if (ok(v2, 'fail')) marks.push(['2', v2]);
     else {
       const need = [];
       if (!have1 && !ok(v1, 'pass')) need.push('checker 1');
       if (!ok(v2, 'pass')) need.push('checker 2');
-      const first = have1 ? item.checks['1'].agent : v1.agent;
+      const first = T.cleanAgent(have1 ? item.checks['1'].agent : v1.agent);
       if (need.length) hold = `script checks passed; waiting for a sub-agent pass verdict from ${need.join(' and ')} on version ${target.hash} (--verdicts)`;
       else if (first === v2.agent) hold = `checker 1 and checker 2 name the same agent (${v2.agent}); they must be two different agents`;
       else { if (!have1) marks.push(['1', v1]); marks.push(['2', v2]); }
     }
     // a fail and a pass from the same agent name in both slots is refused by the worker too; hold instead of renaming
-    if (!hold && marks.length === 2 && marks[0][1].agent === marks[1][1].agent) { hold = `the same agent name in both slots (${marks[0][1].agent})`; marks.length = 0; }
+    if (!hold && marks.length === 2 && T.cleanAgent(marks[0][1].agent) === T.cleanAgent(marks[1][1].agent)) { hold = `the same agent name in both slots (${marks[0][1].agent})`; marks.length = 0; }
     if (hold) {
       log('hold', { id: item.id, msg: hold });
-      summary.push({ id: item.id, result: 'waiting for verdicts', hash: target.hash });
+      summary.push({ id: item.id, result: /^script checks passed; waiting/.test(hold) ? 'waiting for verdicts' : 'held: ' + hold, hash: target.hash });
       continue;
     }
     if (!apply) {
