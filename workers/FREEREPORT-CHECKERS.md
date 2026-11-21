@@ -75,7 +75,9 @@ Fail the report if any of these is not true:
   within about 1 to 2 hours on a weekday and long before 75% of its clock.
 - Each run starts two fresh sub-agents one after the other: checker 1, then checker 2 (a new agent that does not see
   checker 1's notes). The run itself sends nothing. The worker sends after the second pass.
-- If an item is past 75% of its clock and still needs a fill, the run fills it first (AI test, booking test, category).
+- If an item is past 75% of its clock and still needs a fill, the run fills it first (AI test with ChatGPT, Gemini and Google AI,
+  booking test, category, known_for with stars, competitor, listings, spot), always through `workers/freereport-fill.mjs`
+  (see DEPLOY.md, "Free report fill jobs"). It never runs the answer speed test before GO LIVE.
   If it can't, it writes the problem to the watchdog inbox. Overdue items show as `problems` in `/status`, and the
   watchdog picks them up.
 - The prompt must include: "Never ask Rickey for an Allow: if a step needs one, skip it and list it at the end."

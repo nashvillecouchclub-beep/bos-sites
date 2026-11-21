@@ -16,6 +16,7 @@
 //   POST /api/free-report/fill            {id, k, section, data} -> a later job fills a pending section
 //                                         section: "google" | "reviews" | "ai" | "booking" | "category" |
 //                                         "speed" | "known_for" | "competitor" | "listings" | "spot" (Nov 20; shapes in DEPLOY.md)
+//   POST /api/free-report/rerender        {k} -> every open report rendered again with the current code (once after a deploy)
 //   GET  /r/<token>/                      the report page (noindex, no-store, no-referrer)
 // Cron (every 15 minutes): build new reports; send reports that have two pass marks (only when LIVE is on);
 // put clock trouble (75% of the clock, overdue), failed checks and failed sends on the watch list.
@@ -570,7 +571,8 @@ function fillProblem(rec, section, d) {
     }
   }
   if (section === 'ai') {
-    if (d.google_ai != null && (typeof d.google_ai !== 'object' || !bool(d.google_ai.named))) return 'google_ai needs {named: true|false}';
+    if (!d.chatgpt || !bool(d.chatgpt.named) || !d.gemini || !bool(d.gemini.named)) return 'ai needs chatgpt {named} and gemini {named}';
+    if (!d.google_ai || typeof d.google_ai !== 'object' || !bool(d.google_ai.named)) return 'ai needs google_ai {named: true|false} (the AI fill job asks Google too)';
     for (const e of ['chatgpt', 'gemini', 'google_ai']) if (d[e] && d[e].top != null && (!Array.isArray(d[e].top) || d[e].top.length > 5 || !d[e].top.every((x) => str(x, 120)))) return e + '.top must be a list of up to 5 names';
     if (d.screenshots != null && (!Array.isArray(d.screenshots) || d.screenshots.length > 3 || !d.screenshots.every((x) => x && ['chatgpt', 'gemini', 'google_ai'].includes(x.engine) && shotOk(x.url))))
       return 'screenshots: up to 3 of {engine: chatgpt|gemini|google_ai, url: https://getbookedoutsolutions.com/....png}';
@@ -1177,6 +1179,27 @@ async function fill(req, env) {
   return json({ ok: true, id: rec.id, complete: r.complete, pending: r.pending, diagnosis: r.diagnosis });
 }
 
+// POST /api/free-report/rerender {k}: renders every open request again with the current code (run once after a deploy that
+// changes the report). A page that changes gets a new hash and loses its old check marks. Sends nothing, calls nothing.
+async function rerender(req, env) {
+  let b; try { b = await req.json(); } catch { return json({ ok: false, error: 'bad json' }, 400); }
+  if (!keyOk(env, b && b.k)) return json({ ok: false, error: 'no' }, 403);
+  const out = { ok: true, checked: 0, changed: 0, marks_cleared: 0, items: [] };
+  for (const k of (await env.KV.list({ prefix: 'open:' })).keys) {
+    const rec = await getJ(env, 'req:' + k.name.slice(5));
+    if (!rec || rec.status === 'sent' || rec.status === 'new') continue;
+    out.checked++;
+    const before = rec.hash, hadMarks = !!(rec.checks && Object.keys(rec.checks).length);
+    await saveReport(env, rec);
+    if (rec.hash !== before) {
+      out.changed++; if (hadMarks) out.marks_cleared++;
+      await putJ(env, 'req:' + rec.id, rec, KEEP);
+    }
+    out.items.push({ id: rec.id, status: rec.status, changed: rec.hash !== before, complete: rec.complete, pending: rec.pending });
+  }
+  return json(out);
+}
+
 async function status(u, env) {
   if (!keyOk(env, u.searchParams.get('k'))) return json({ error: 'no' }, 403);
   const keys = (await env.KV.list({ prefix: 'open:' })).keys;
@@ -1218,6 +1241,7 @@ export default {
       if (p === '/api/free-report/check' && req.method === 'POST') return await check(req, env);
       if (p === '/api/free-report/mark-sent' && req.method === 'POST') return await markSent(req, env);
       if (p === '/api/free-report/fill' && req.method === 'POST') return await fill(req, env);
+      if (p === '/api/free-report/rerender' && req.method === 'POST') return await rerender(req, env);
       if (p === '/api/free-report/followup' && req.method === 'POST') return await followup(req, env);
       const m = p.match(/^\/r\/([a-f0-9]{48})$/);
       if (m && req.method === 'GET') return await report(m[1], u, env);
@@ -1233,7 +1257,7 @@ export default {
   _t: { validate, businessClock, federalHolidays, isBusinessDay, local, fromLocal, chicagoText, isLive, deliverToOwner,
     sendAlert, isTestRequest, plain, ownerEmail, mime, sendMail, sendBlock, check, review, trySend, sha, budgetLine, renderReport, submit, build, tick, TRADES, REVENUE,
     fuTick, followup, startFollowups, fuHelpers, gmailThread, allowed, pickFixes,
-    diagnose, knownFor, competitorView, speedEstimate, fillProblem, fill, SOURCES, FEW_REVIEWS },
+    diagnose, knownFor, competitorView, speedEstimate, fillProblem, fill, rerender, SOURCES, FEW_REVIEWS, FILL },
 };
 
 const GONE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Report not found | Booked Out Solutions</title><style>body{margin:0;font:18px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#F6F1E7;color:#0A0F26}main{max-width:34rem;margin:0 auto;padding:3rem 1.2rem}</style></head><body><main><h1>This report is not here</h1><p>The link may be old or mistyped. Reply to the email it came in and we will send it again, or write to hello@getbookedoutsolutions.com.</p><p>Booked Out Solutions</p></main></body></html>';

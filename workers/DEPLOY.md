@@ -128,3 +128,25 @@ Endpoints for later jobs (all need `k` = STATUS_KEY):
 - Deploy: the dashboard editor takes one file, so run `node workers/build-freereport-bundle.mjs` and paste
   `workers/dist/bookedout-freereport.bundle.js`. Tests: `node workers/test-freereport.mjs`, `node workers/test-freereport-followups.mjs`,
   and the same two with `BUNDLE=1` against the bundle.
+
+## Free report fill jobs (Nov 20 2026, PR 30): who fills each section
+
+Every fill goes through `workers/freereport-fill.mjs` (`STATUS_KEY=... node workers/freereport-fill.mjs <fr-id> <data.json> [--dry-run]`).
+It checks the data with the worker's own rules first, posts google first, and stops at the first refusal. It only talks to our
+worker. Tests: `node workers/test-freereport-fill.mjs`.
+
+| Section | Who fills it | Where the data comes from | Built? |
+|---|---|---|---|
+| google, reviews | the worker itself at build time (`lookup()`) | the lookup worker at `LOOKUP_URL` | The lookup worker's code is NOT in this repo or in the Mac mini engine folder (`~/.bookedout/engine`, searched Nov 20), and `LOOKUP_URL`/`LOOKUP_KEY` are not set. Until they are, the fill job sends google and reviews (with `rank_checked`) through the door. |
+| ai (ChatGPT, Gemini AND google_ai) | the "Free report checkers" scheduled task (FREEREPORT-CHECKERS.md, Timing), before checker 1 | asking each engine the customer's question | Not built (the task is created when GO LIVE is near). Its prompt must send `google_ai {named}`; the worker now refuses an ai fill without it. |
+| booking, category | the same task | his website on a phone (never sending the form), his public Google listing | Not built (same task). |
+| known_for | the same task | his public Google reviews: text AND stars (`{scanned, reviews:[{text, rating}]}`) | Not built. If the lookup worker learns to return reviews with stars, move this to `lookup()`. |
+| competitor | the same task | the public Google listing of the top 3 shop above him (photos, replies, posts, website, hours) | Not built. |
+| listings | the same task | public searches of Google, Yelp, BBB, Facebook, Nextdoor and the local chamber directory | Not built. |
+| spot | the same task | the list of zone locks we have sold (one shop per trade per zone) | Not built, and there is no zone lock list in this repo yet: one is needed before deploy (until a lock is sold, every zone is open). Not used for "Something else". |
+| speed | a separate answer speed job, AFTER GO LIVE only | one test call, text or email to the shop | NOT built on purpose: it contacts a real business. The fill door refuses a real shop's tested speed result unless `--after-go-live` is given. Before GO LIVE the job can only send `{"tested":false,"reason":"..."}`, which shows on the page, so no real report should be checked before this is settled. |
+
+After the deploy that brings these sections (one time): `POST /api/free-report/rerender {"k":"..."}` renders every open report
+with the new code. Every report built before it goes back to "fill pending sections first" and loses any old check marks. The test
+request fr-20261120-vbukvz (two passes on the old page) will show `changed: true` and lose both marks. check() and the cron
+also re-render on their own before a pass or a send, so an old page can never be passed or sent even if this step is missed.
