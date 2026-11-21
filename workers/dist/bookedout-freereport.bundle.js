@@ -550,7 +550,11 @@ function fixLine(s, max = 25) {
 
 // "5 minutes", "five minutes", "5-minute", "5 mins", "under 5 min": a fix about answering within 5 minutes. A shop that already
 // answered our test that fast never gets one (report fixes, booking test list, follow-ups). Shared with the worker.
-const FIVE_MIN = /\b(5|five)\s*(-\s*)?min(ute)?s?\b/i;
+// The text is lower-cased and every run of other characters (any hyphen or dash, brackets, commas) becomes one space first,
+// so "5-minute", "5\u2011minute", "5\u2013minute", "five (5) minutes" and "5 or fewer minutes" all count.
+function FIVE_MIN_TEST(x) {
+  return /\b(5|five)( 5)? ?(or (fewer|less) )?min(ute)?s?\b/.test(String(x == null ? '' : x).toLowerCase().replace(/[^a-z0-9]+/g, ' '));
+}
 function answeredFast(sp) { return !!(sp && sp.tested === true && sp.minutes != null && +sp.minutes <= 5); }
 
 // Every placeholder value, from the owner's own report only. A missing value is left out (never guessed).
@@ -585,7 +589,7 @@ function values(rec, h) {
   }
   if (rv && rv.newest_review) set('newest_review_replied', rv.owner_reply_on_newest ? 'yes' : 'no');
   if (bk && bk.score != null) set('booking_score', Math.max(0, Math.min(10, +bk.score)));
-  const bfix = bk && Array.isArray(bk.fixes) ? bk.fixes.find((x) => x && !(answeredFast(s.speed) && FIVE_MIN.test(x))) : null;
+  const bfix = bk && Array.isArray(bk.fixes) ? bk.fixes.find((x) => x && !(answeredFast(s.speed) && FIVE_MIN_TEST(x))) : null;
   if (bfix && bfix === bk.fixes[0] && words(bfix) <= 45) set('booking_fix_1', h.plain(bfix));
   if (ai && ai.chatgpt && ai.gemini) {
     const named = !!(ai.chatgpt.named || ai.gemini.named), both = !!(ai.chatgpt.named && ai.gemini.named);
@@ -741,7 +745,7 @@ function readThread(t, ourAddress) {
 }
 const CLEAR_WINDOW_MS = CLEAR_MS;
 
-return { FU_SEQ, FIVE_MIN, answeredFast, values, whenOk, bodyProblems, resolveStep, footerKind, composeText, addBusinessDays, slide, plan, next, readThread, CLEAR_WINDOW_MS };
+return { FU_SEQ, FIVE_MIN_TEST, answeredFast, values, whenOk, bodyProblems, resolveStep, footerKind, composeText, addBusinessDays, slide, plan, next, readThread, CLEAR_WINDOW_MS };
 })();
 // ---- end inlined ----
 
@@ -1102,8 +1106,9 @@ function pickFixes(rec) {
   const seen = (x, list) => list.some((y) => normFix(y) === normFix(x));
   const add = (x) => {
     x = plain(x);
-    if (!x || (fast && FU.FIVE_MIN.test(x))) return; // he already answers that fast
+    if (!x || (fast && FU.FIVE_MIN_TEST(x))) return; // he already answers that fast
     if ((reserved && normFix(x) === normFix(reserved)) || seen(x, out)) return;
+    if (reserved === SPEED_FIX && FU.FIVE_MIN_TEST(x)) return; // the kept 5-minute fix already says it; no second fix saying the same
     out.push(x);
   };
   if (g && !g.has_google_profile) add('Set up your free Google Business Profile with your real address or service area, hours and phone number. Without it, you do not show on the Google map.');
@@ -1133,7 +1138,7 @@ function pickFixes(rec) {
   ];
   for (const b of base) {
     if (pick.length >= 3) break;
-    if (fast && FU.FIVE_MIN.test(b)) continue;
+    if (fast && FU.FIVE_MIN_TEST(b)) continue;
     if (!seen(b, pick)) pick.push(b);
   }
   // the reserved fix keeps its place even when the fill-up above came before it in the list order
@@ -1440,7 +1445,7 @@ function renderReport(rec) {
   let b4 = '';
   if (bk && bk.score != null) {
     // a shop that already answered our test within 5 minutes is not told to answer within 5 minutes
-    const list = (bk.fixes || []).filter((x) => plain(x) && !(FU.answeredFast(s.speed) && FU.FIVE_MIN.test(x))).slice(0, 3);
+    const list = (bk.fixes || []).filter((x) => plain(x) && !(FU.answeredFast(s.speed) && FU.FIVE_MIN_TEST(x))).slice(0, 3);
     const fx = list.map((x) => `<li>${t(x)}</li>`).join('');
     b4 = `<p class="score"><b>${t(Math.max(0, Math.min(10, +bk.score)))}</b> out of 10</p>${fx ? `<p>${['', 'One fix', 'Two fixes', 'Three fixes'][list.length]}:</p><ol class="plainlist">${fx}</ol>` : ''}`;
   } else { b4 = PENDING; pending.push('4 Booking test'); }
@@ -2025,7 +2030,7 @@ export default {
   _t: { validate, businessClock, federalHolidays, isBusinessDay, local, fromLocal, chicagoText, isLive, deliverToOwner,
     sendAlert, isTestRequest, plain, ownerEmail, mime, sendMail, sendBlock, check, review, trySend, sha, budgetLine, renderReport, submit, build, tick, TRADES, REVENUE,
     fuTick, followup, startFollowups, fuHelpers, gmailThread, allowed, pickFixes,
-    diagnose, speedFinding, FIVE_MIN: FU.FIVE_MIN, knownFor, competitorView, refreshReport, speedEstimate, fillProblem, fill, rerender, SOURCES, FEW_REVIEWS, FILL },
+    diagnose, speedFinding, FIVE_MIN_TEST: FU.FIVE_MIN_TEST, knownFor, competitorView, refreshReport, speedEstimate, fillProblem, fill, rerender, SOURCES, FEW_REVIEWS, FILL },
 };
 
 const GONE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Report not found | Booked Out Solutions</title><style>body{margin:0;font:18px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#F6F1E7;color:#0A0F26}main{max-width:34rem;margin:0 auto;padding:3rem 1.2rem}</style></head><body><main><h1>This report is not here</h1><p>The link may be old or mistyped. Reply to the email it came in and we will send it again, or write to hello@getbookedoutsolutions.com.</p><p>Booked Out Solutions</p></main></body></html>';

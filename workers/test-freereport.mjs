@@ -907,9 +907,9 @@ await test('Fourth review regressions: reserved fix wins over a duplicate, every
   // 2. every way of writing "5 minutes" is filtered for a shop that answered within 5 minutes: picker, booking list, follow-ups
   const fiveWays = ['Answer every new call in under 5 minutes.', 'Reply to every lead within five minutes.', 'Set a 5-minute callback rule for the office.', 'Call back in 5 mins.', 'Put your phone number at the top.'];
   const fastSp = { tested: true, channel: 'call', when: 'Mon', minutes: 2 };
-  for (const x of fiveWays.slice(0, 4)) assert.match(x, T.FIVE_MIN, x);
+  for (const x of fiveWays.slice(0, 4)) assert.ok(T.FIVE_MIN_TEST(x), x);
   fx = T.pickFixes({ ...base, sections: { booking: { score: 5, fixes: fiveWays }, speed: fastSp } });
-  assert.ok(!fx.some((x) => T.FIVE_MIN.test(x)), fx.join(' | ')); assert.equal(fx.length, 3);
+  assert.ok(!fx.some((x) => T.FIVE_MIN_TEST(x)), fx.join(' | ')); assert.equal(fx.length, 3);
   const page = visible(rr({ booking: { score: 5, fixes: fiveWays.slice(0, 2).concat(fiveWays[4]) }, speed: fastSp }).html).replace(/\s+/g, ' ');
   assert.match(page, /5 out of 10 One fix: Put your phone number at the top\./);
   assert.doesNotMatch(page.split('Booking test from a phone')[1].split('Your Google main category')[0], /under 5 minutes|five minutes/);
@@ -928,6 +928,24 @@ await test('Fourth review regressions: reserved fix wins over a duplicate, every
     assert.equal(p3[2], f.fix === 'after hours' ? T.pickFixes({ ...base, sections: { speed: sp } }).find((x) => /after-hours/.test(x)) : SPEED, JSON.stringify(sp));
     assert.equal(/after-hours/.test(d.line), f.fix === 'after hours', d.line);
   }
+});
+
+await test('Five-minute test: any hyphen or dash, "five (5) minutes", "5 or fewer minutes"; the kept 5-minute fix is never said twice', () => {
+  const yes = ['Use a 5‑minute callback rule.', 'Use a 5–minute callback rule.', 'Use a 5—minute callback rule.', 'Reply within five (5) minutes.',
+    'Answer in 5 or fewer minutes.', 'Answer in 5 or less minutes.', 'Call back in 5 mins.', 'Under 5 min, every time.', 'Within FIVE MINUTES.', 'A 5-minute rule.'];
+  const no = ['Answer within 15 minutes.', 'Five stars on Google.', 'Post 5 photos a month.', 'Reply in 25 minutes.', 'A 5 star review.', ''];
+  for (const x of yes) assert.equal(T.FIVE_MIN_TEST(x), true, x);
+  for (const x of no) assert.equal(T.FIVE_MIN_TEST(x), false, x);
+  const fastSp = { tested: true, channel: 'call', when: 'Mon', minutes: 2 };
+  // fast answerer: every one of these is filtered in the picker and the booking list
+  let fx = T.pickFixes({ ...base, sections: { booking: { score: 5, fixes: [yes[0]] }, speed: fastSp } });
+  assert.ok(!fx.some((x) => T.FIVE_MIN_TEST(x)), fx.join(' | ')); assert.equal(fx.length, 3);
+  const page = visible(rr({ booking: { score: 5, fixes: [yes[0], yes[1], yes[3], 'Put your phone number at the top.'] }, speed: fastSp }).html).replace(/\s+/g, ' ');
+  assert.match(page, /5 out of 10 One fix: Put your phone number at the top\./);
+  // slow answerer: the kept 5-minute fix shows once, and a booking fix saying the same thing in other words is dropped
+  fx = T.pickFixes({ ...base, sections: { booking: { score: 5, fixes: ['Reply to every lead within five (5) minutes.'] }, speed: { ...fastSp, minutes: null, waited_hours: 48 } } });
+  assert.equal(fx.length, 3);
+  assert.deepEqual(fx.filter((x) => T.FIVE_MIN_TEST(x)), ['Call or text back every new lead within 5 minutes, even after hours.'], fx.join(' | '));
 });
 
 await test('E2E mirror of fr-20261120-vbukvz: fill all, checker 1 + checker 2 pass; LIVE off sends nothing; LIVE on sends once; TEST never', async () => {

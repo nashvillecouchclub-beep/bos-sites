@@ -36,7 +36,11 @@ function fixLine(s, max = 25) {
 
 // "5 minutes", "five minutes", "5-minute", "5 mins", "under 5 min": a fix about answering within 5 minutes. A shop that already
 // answered our test that fast never gets one (report fixes, booking test list, follow-ups). Shared with the worker.
-export const FIVE_MIN = /\b(5|five)\s*(-\s*)?min(ute)?s?\b/i;
+// The text is lower-cased and every run of other characters (any hyphen or dash, brackets, commas) becomes one space first,
+// so "5-minute", "5\u2011minute", "5\u2013minute", "five (5) minutes" and "5 or fewer minutes" all count.
+export function FIVE_MIN_TEST(x) {
+  return /\b(5|five)( 5)? ?(or (fewer|less) )?min(ute)?s?\b/.test(String(x == null ? '' : x).toLowerCase().replace(/[^a-z0-9]+/g, ' '));
+}
 export function answeredFast(sp) { return !!(sp && sp.tested === true && sp.minutes != null && +sp.minutes <= 5); }
 
 // Every placeholder value, from the owner's own report only. A missing value is left out (never guessed).
@@ -71,7 +75,7 @@ export function values(rec, h) {
   }
   if (rv && rv.newest_review) set('newest_review_replied', rv.owner_reply_on_newest ? 'yes' : 'no');
   if (bk && bk.score != null) set('booking_score', Math.max(0, Math.min(10, +bk.score)));
-  const bfix = bk && Array.isArray(bk.fixes) ? bk.fixes.find((x) => x && !(answeredFast(s.speed) && FIVE_MIN.test(x))) : null;
+  const bfix = bk && Array.isArray(bk.fixes) ? bk.fixes.find((x) => x && !(answeredFast(s.speed) && FIVE_MIN_TEST(x))) : null;
   if (bfix && bfix === bk.fixes[0] && words(bfix) <= 45) set('booking_fix_1', h.plain(bfix));
   if (ai && ai.chatgpt && ai.gemini) {
     const named = !!(ai.chatgpt.named || ai.gemini.named), both = !!(ai.chatgpt.named && ai.gemini.named);

@@ -251,7 +251,8 @@ await test('Few reviews + slow answer: the three fixes on the sent page are save
 await test('Follow-ups: booking_fix_1 is never a "5 minutes" fix for a shop that answered within 5 minutes', () => {
   const h = { ...T.fuHelpers(), now: new Date('2026-11-18T17:15:00Z') };
   const rec = (minutes, fixes) => ({ ...SHOP, token: 'a'.repeat(48), sections: { ...FILLS, booking: { score: 5, fixes }, speed: { tested: true, channel: 'call', when: 'Mon', minutes } } });
-  for (const x of ['Answer every new call in under 5 minutes.', 'Reply within five minutes.', 'Use a 5-minute callback rule.'])
+  for (const x of ['Answer every new call in under 5 minutes.', 'Reply within five minutes.', 'Use a 5-minute callback rule.', 'Use a 5\u2011minute callback rule.',
+    'Use a 5\u2013minute callback rule.', 'Reply within five (5) minutes.', 'Answer in 5 or fewer minutes.'])
     assert.equal(FU.values(rec(2, [x, 'Make the quote button bigger.']), h).booking_fix_1, undefined, x);
   assert.equal(FU.values(rec(40, ['Reply within five minutes.']), h).booking_fix_1, 'Reply within five minutes.', 'a slow answerer still gets it');
   assert.equal(FU.values(rec(2, ['Make the quote button bigger.']), h).booking_fix_1, 'Make the quote button bigger.');
