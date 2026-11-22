@@ -1508,6 +1508,16 @@ async function markSent(req, env) {
   if (!ID.test(String(b.id || ''))) return json({ ok: false, error: 'bad id' }, 400);
   const rec = await getJ(env, 'req:' + b.id);
   if (!rec) return json({ ok: false, error: 'not found' }, 404);
+  // Weekly form test (Nov 22): the test job closes only its own FAKE entries. With test_only the machine refuses
+  // any record that is not a TEST, so a real request can never be closed by the test job, and the closed entry
+  // gets its own status so it never counts as a report sent.
+  if (b.test_only === true) {
+    if (rec.test !== true) return json({ ok: false, error: 'not a test request' }, 409);
+    rec.status = 'closed_test'; rec.closed = new Date().toISOString(); rec.closed_by = 'formtest';
+    await putJ(env, 'req:' + rec.id, rec, KEEP);
+    await env.KV.delete('open:' + rec.id);
+    return json({ ok: true, id: rec.id, status: 'closed_test' });
+  }
   rec.status = 'sent'; rec.sent = new Date().toISOString(); rec.sent_by = 'manual';
   await putJ(env, 'req:' + rec.id, rec, KEEP);
   await env.KV.delete('open:' + rec.id);

@@ -180,6 +180,24 @@ await test('Fake shops never use the paid lookup; mark-sent stops the clock', as
   assert.equal(st.count, 0);
 });
 
+await test('Form test close guard: test_only closes a TEST entry as closed_test and refuses a real one', async () => {
+  const env = { KV: kv(), STATUS_KEY: 'k'.repeat(32) };
+  const fake = await (await T.submit(post({ ...SHOP, business_name: '(FAKE) Booked Out weekly form test 2026-11-24', email: 'formtest-20261124-1@example.com' }), env, at('2026-11-24T10:00:00-06:00'))).json();
+  const real = await (await T.submit(post({ ...SHOP, business_name: 'Real Shop Heating', email: 'owner@realshop-test.com' }), env, at('2026-11-24T10:01:00-06:00'))).json();
+  const close = (id) => W.fetch(new Request('https://x/api/free-report/mark-sent', { method: 'POST', body: JSON.stringify({ id, k: env.STATUS_KEY, test_only: true }) }), env, {});
+  const r1 = await close(fake.id);
+  assert.equal(r1.status, 200); assert.equal((await r1.json()).status, 'closed_test');
+  const recF = JSON.parse(env.KV.m.get('req:' + fake.id));
+  assert.equal(recF.status, 'closed_test'); assert.equal(recF.sent, undefined, 'a closed test is never counted as sent');
+  assert.equal(env.KV.m.has('open:' + fake.id), false);
+  const r2 = await close(real.id);
+  assert.equal(r2.status, 409);
+  const recR = JSON.parse(env.KV.m.get('req:' + real.id));
+  assert.equal(recR.status, 'new'); assert.equal(env.KV.m.has('open:' + real.id), true, 'the real request stays open');
+  const st = await (await W.fetch(new Request('https://x/api/free-report/status?k=' + env.STATUS_KEY), env, {})).json();
+  assert.deepEqual(st.open.map((o) => o.id), [real.id]);
+});
+
 // ---------- the report ----------
 const base = { id: 'fr-20261117-abc123', token: 'a'.repeat(48), first_name: 'Testy', business_name: 'Test Shop Heating and Air (FAKE)',
   email: 'test@example.com', town: 'Smyrna TN', trade: 'Heating and air', revenue: '', received: '2026-11-17T16:30:00.000Z', sections: {} };
