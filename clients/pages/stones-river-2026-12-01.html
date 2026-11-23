@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Your posts for the week of Dec 1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#EFE8DF;--card:#F7F2EC;--sage:#6F8466;--plum:#4A2B40;--rose:#A9779A;--ink:#2E2629;--muted:#6B5F5A;--line:#D9CEC2;--display:"Cormorant Garamond",Georgia,serif;--body:"Jost","Helvetica Neue",Arial,sans-serif}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:300 17px/1.65 var(--body);-webkit-font-smoothing:antialiased}
+.wrap{max-width:40rem;margin:0 auto;padding:0 1.1rem}
+h1,h2,h3{font-family:var(--display);font-weight:500;line-height:1.15;margin:0}
+header{background:var(--plum);color:#F7F2EC;padding:2rem 0 2.2rem}
+.kick{font:500 .7rem/1.3 var(--body);letter-spacing:.18em;text-transform:uppercase;opacity:.8}
+header h1{font-size:2.5rem;font-weight:400;margin:.5rem 0 .6rem}
+header p{margin:.4rem 0 0;opacity:.92}
+.promise{margin-top:1rem;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);border-radius:12px;padding:.7rem .9rem;font-size:.95rem}
+.prog{position:sticky;top:0;z-index:5;background:rgba(247,242,236,.97);border-bottom:1px solid var(--line);padding:.6rem 0}
+.prog .wrap{display:flex;align-items:center;gap:.8rem}
+.prog b{font-weight:500}
+.track{flex:1;height:.5rem;background:var(--line);border-radius:99px;overflow:hidden}
+.track i{display:block;height:100%;width:0;background:var(--sage);transition:width .3s}
+section{margin:1.8rem 0 0}
+.sec-h{font-size:1.9rem;font-weight:400;margin:0 0 .3rem}
+.sec-p{color:var(--muted);margin:0 0 1rem;font-size:.95rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:1.2rem 1.15rem;margin:0 0 1.1rem;border-left:6px solid var(--line)}
+.card.todo{background:#fff}
+.card.ok{border-left-color:var(--sage)}
+.card.ch{border-left-color:var(--rose)}
+.meta{font:500 .72rem/1.3 var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.card h3{font-size:1.65rem;margin:.35rem 0 .5rem}
+.body p{margin:0 0 .75rem}
+.body ol,.body ul{margin:0 0 .8rem;padding-left:1.3rem}
+.body li{margin:.25rem 0}
+.body h4{font:500 1.3rem/1.2 var(--display);margin:1.1rem 0 .4rem}
+.body a{color:var(--plum)}
+.sig{font-size:.85rem;color:var(--muted);border-top:1px dashed var(--line);padding-top:.6rem;margin-top:.6rem;white-space:pre-line}
+details summary{cursor:pointer;color:var(--plum);font-weight:500;padding:.3rem 0;list-style:none}
+details summary::-webkit-details-marker{display:none}
+details[open] summary .o{display:none}
+details:not([open]) summary .c{display:none}
+.serp{background:#fff;border:1px solid var(--line);border-radius:10px;padding:.8rem .9rem;margin:.4rem 0 .9rem;font-family:Arial,sans-serif}
+.serp .u{font-size:.8rem;color:#2f6b3a}.serp .t{font-size:1.05rem;color:#1a0dab;margin:.15rem 0}.serp .d{font-size:.85rem;color:#4d5156;line-height:1.45}
+.note{background:#fff;border:1px solid var(--line);border-radius:10px;padding:.7rem .9rem;font-size:.92rem;color:var(--muted);margin:.4rem 0 .8rem}
+.btns{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem}
+.btn{appearance:none;border:2px solid transparent;border-radius:999px;min-height:3.2rem;padding:.6rem 1.2rem;font:500 1.05rem/1.2 var(--body);cursor:pointer;flex:1 1 9rem;text-align:center;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.btn.yes{background:var(--sage);color:#fff}
+.btn.chg{background:transparent;border-color:var(--plum);color:var(--plum)}
+.btn.pick{background:#fff;border-color:var(--line);color:var(--ink)}
+.btn.pick.on{background:var(--plum);border-color:var(--plum);color:#fff}
+.btn.big{background:var(--plum);color:#fff;width:100%}
+.btn.link{background:#fff;border-color:var(--line);color:var(--plum)}
+.btn:disabled{opacity:.55}
+.chbox{display:none;margin-top:.8rem}
+.chbox.show{display:block}
+label.l{display:block;font-weight:500;margin:.6rem 0 .35rem}
+textarea,input.in{width:100%;font:300 1rem/1.5 var(--body);border:1px solid #b9ab9c;border-radius:10px;padding:.7rem;background:#fff;color:var(--ink)}
+textarea{min-height:6rem}
+.state{margin-top:.9rem;font-weight:500;font-size:.98rem}
+.state.ok{color:var(--sage)}.state.ch{color:var(--plum)}
+.state small{display:block;font-weight:300;color:var(--muted);white-space:pre-wrap}
+.done-card{background:#E6EADF;border:1px solid #c7d0bf;border-radius:16px;padding:1.1rem 1.15rem;margin:0 0 1.1rem;border-left:6px solid var(--sage)}
+.done-card h3{font-size:1.5rem;margin:.3rem 0 .3rem}
+.finish{display:none;background:var(--sage);color:#fff;border-radius:16px;padding:1.2rem 1.15rem;margin:1.6rem 0 0}
+.finish.show{display:block}
+.finish h2{font-size:1.9rem;font-weight:400;margin:0 0 .3rem}
+.confirm{display:none;position:fixed;left:.8rem;right:.8rem;bottom:.9rem;z-index:20;max-width:38rem;margin:0 auto;background:var(--plum);color:#F7F2EC;border-radius:18px;padding:1.2rem 1.2rem 1.1rem;box-shadow:0 14px 40px rgba(0,0,0,.3)}
+.confirm.show{display:block}
+.confirm.err{background:#8a3b2e}
+.confirm.wait{background:var(--sage)}
+.confirm .bg{font:500 1.6rem/1.2 var(--display)}
+.confirm .sm{margin-top:.3rem;font-size:.95rem;opacity:.92}
+.confirm button{margin-top:.8rem;background:transparent;border:1px solid rgba(255,255,255,.5);color:#fff;border-radius:99px;padding:.45rem 1.1rem;font:inherit;cursor:pointer}
+/* questions (Nov 15 12:20 pm) */
+.btn.ask{background:transparent;border:2px dashed var(--line);color:var(--plum);flex:1 1 100%;min-height:2.9rem;font-size:1rem}
+.qlist{margin-top:.6rem}
+.qitem{background:#fff;border:1px solid var(--line);border-left:4px solid var(--rose);border-radius:10px;padding:.6rem .8rem;margin:.5rem 0 0;font-size:.95rem}
+.qitem b{font-weight:500;color:var(--plum);display:block;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase}
+.general{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:1.2rem 1.15rem;margin:1.8rem 0 0}
+.general h2{font-size:1.9rem;font-weight:400;margin:0 0 .3rem}
+footer{margin:2.4rem 0 7rem;color:var(--muted);font-size:.85rem}
+:focus-visible{outline:3px solid var(--rose);outline-offset:3px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="kick" id="kick"></div>
+    <h1 id="h1"></h1>
+    <p>Read each card, then tap <b style="font-weight:500">Approve</b>, or tap <b style="font-weight:500">Change this</b> and tell us what to change.</p>
+    <p>Each tap saves right away. You can stop and come back any time, on any device.</p>
+    <div class="promise">Nothing posts, sends or goes live from this page. It only saves your answers for Booked Out Solutions.</div>
+  </div>
+</header>
+<div class="prog" aria-label="Your progress"><div class="wrap"><span><b id="pn">0 of 0</b> answered</span><div class="track"><i id="pt"></i></div></div></div>
+<main class="wrap"><div id="main"></div>
+<section class="general" id="general"><h2>Have a question about anything?</h2><p class="sec-p" style="margin:0">Ask about anything on this page, or anything else. We will get back to you soon.</p><label class="l" for="qt-_general">Your question</label><textarea id="qt-_general"></textarea><div class="btns"><button class="btn big" type="button" data-act="sendq" data-id="_general">Send my question</button></div><div class="qlist" id="ql-_general"></div></section>
+<div class="finish" id="finish" role="status"><h2>All done. Thank you!</h2><p>Every answer is saved. We'll take it from here, and you'll get a short email confirming what happens next.</p></div></main>
+<footer class="wrap" id="foot"></footer>
+<div class="confirm" id="confirm" role="status" aria-live="assertive"><div class="bg" id="cbig"></div><div class="sm" id="csmall"></div><button type="button" id="cclose">OK</button></div>
+<script>
+var PAGE={"kick": "Stones River Therapy and Wellness", "heading": "Jamie, your posts for the week of Dec 1", "signoff": "Jamie Hallor, MSW, LCSW | Stones River Therapy and Wellness PLLC | 212 Heritage Park Drive, Murfreesboro, TN 37129 | (615) 200-0063 | stonesrivertherapy.com | Fees: stonesrivertherapy.com/fees", "footer": ["Three things this week, one tap each. We've already checked every word against your standards, so a quick look and a tap is all we need. Reading the full text is optional. Nothing posts or goes live from this page.", "Every piece follows your standards: no client stories or reviews, no promises, Tennessee adults only, and the 988 line on hard topics.", "If you or someone you know is in crisis, call or text 988."], "done_intro": "", "done": [], "sections": [{"key": "posts", "title": "Your posts for Dec 1 to 7", "desc": "Tap Approve on each one, or tap Change this and tell us what to change. Nothing posts until you approve it.", "items": [{"id": "facebook-dec1", "meta": "Facebook · 7 posts · Dec 1 to 7", "title": "Your 7 Facebook posts", "body": ["Seven posts, one a day from Tuesday, Dec 1 to Monday, Dec 7: Tue Dec 1: Feeling more like roommates?; Wed Dec 2: EMDR, explained without the jargon; Thu Dec 3: An apology without a \"but\"; Fri Dec 4: Make video therapy feel private; Sat Dec 5: Stress and sleep, a two-way street; Sun Dec 6: The money talk, without the fight; Mon Dec 7: Talk to yourself like a friend.", "Each one is written to sound like you, with your sign-off underneath. Tap \"Read all of it\" to see every word.", {"h": "Tue Dec 1: Feeling more like roommates?"}, "You talk every day. About the kids' schedules, the grocery list, who's picking up the dog. But when did you last really talk?", "A lot of couples slowly turn into roommates who run a household together. Nobody decides to. It happens through busy schedules, kids, work, screens, and being tired. It's very common, and it can change.", "What helps most isn't a big trip or a grand gesture. It's small rituals, done on purpose, again and again. Research by Drs. John and Julie Gottman points to rituals of connection as part of what keeps couples close.", "A few ideas to try:", {"ol": ["A real goodbye and hello. Six seconds of a hug or kiss when one of you leaves or comes home.", "A ten-minute check-in after work. Not about logistics. \"What was the best and worst part of your day?\"", "A weekly walk, phones in your pocket.", "Coffee together before the house wakes up, even twice a week."]}, "What it can sound like to start: \"I miss us. Could we try a short walk after dinner a couple nights a week?\"", "The common mistake: starting too big. A plan for a weekly three-hour date night often fades by February. Ten minutes that actually happens beats two hours that never does.", "Pick one small ritual and try it for two weeks. Notice what shifts, even a little.", "If you'd like help reconnecting, a free 15-minute phone consult is a good first step for adults in Tennessee: (615) 200-0063.", {"h": "Wed Dec 2: EMDR, explained without the jargon"}, "EMDR has a long name and a simple idea behind it.", "EMDR stands for Eye Movement Desensitization and Reprocessing. It's a well-researched therapy for memories that still feel too close, years after the event.", "Why some memories stay sharp: when something overwhelming happens, the brain doesn't always file it away like a normal memory. A smell, a tone of voice or a time of year can bring it right back, along with a belief like \"I'm not safe\" or \"It was my fault.\"", "What EMDR looks like, in order:", {"ol": ["Getting ready. We talk about your history and practice ways to calm your body first. No hard memories yet.", "Choosing a target. You pick one memory and the belief tied to it.", "Processing. You hold part of the memory in mind while following side-to-side eye movements or gentle tapping. Then we pause and I ask, \"What do you notice now?\"", "Closing. Every session ends with time to settle before you leave."]}, "You don't have to tell me every detail of the memory. You set the pace, and you can stop at any time.", "The common mistake is thinking EMDR means reliving the worst day of your life over and over. It's slower and steadier than that, and preparation comes first.", "I'm EMDR-trained, and EMDR sessions happen in person at my Murfreesboro office on Tuesdays.", "If you're in crisis, call or text 988, any time.", {"h": "Thu Dec 3: An apology without a \"but\""}, "\"I'm sorry, but...\" isn't an apology. It's a defense wearing an apology's clothes.", "Why apologies miss: when we've hurt someone, we feel guilty, and guilt makes us want to explain. The explaining feels fair to us. To the other person, it sounds like \"Here's why you shouldn't be upset.\"", "A short apology that lands has four parts:", {"ol": ["Name what you did. Be specific, not \"for whatever I did.\"", "Own it. No \"but,\" no \"if you were hurt.\"", "Show you get the impact. Say how it likely felt for them.", "Say what you'll do differently, if you know."]}, "Here's what that can sound like:", "\"I snapped at you in front of your sister. That was embarrassing for you, and it wasn't fair. I'm sorry. Next time I'm that stressed, I'll step out for a minute instead.\"", "That's it. Four sentences. Then stop talking.", "The common mistake is asking for forgiveness right away. \"So are we good?\" puts the hurt person on the spot. Give them room. Some people need an hour. Some need a night's sleep. Being patient after an apology is part of the apology.", "One more thing: if you want to explain your side, you can. Just save it for later, after the other person feels heard. Explanations go down much easier once the hurt has been named.", "Try the four parts the next time you owe someone a sorry, big or small.", {"h": "Fri Dec 4: Make video therapy feel private"}, "For many people, the hardest part of video therapy is simple: finding a spot where no one can hear you.", "Why it matters: if you're worried someone in the next room is listening, part of you stays on guard the whole hour. It's hard to say the real thing when you're also watching the door.", "A few ways to set up a private space:", {"ol": ["Pick the spot ahead of time. A bedroom with the door shut, a home office, even a closet works.", "Add sound cover. Run a fan or a white noise app outside the door. Wear headphones so my side stays private too.", "Tell the household. \"I'm on a call from 2 to 3. Please don't knock unless it's urgent.\"", "Give yourself buffer time. Five quiet minutes before and after helps you shift in and out."]}, "A parked car can work if it's the most private place you have. Please never join while driving.", "The common mistake is squeezing a session between meetings on a work laptop in a shared office. You'll spend the hour half-present. If work is your only option, find a room with a door that closes.", "A few details on how video sessions work with me: they're on Wednesdays, and Tennessee law means you need to be physically in Tennessee during each session. Adults 18 and up.", "Save this for the day you set up your first video session.", {"h": "Sat Dec 5: Stress and sleep, a two-way street"}, "Lying awake at 2 a.m. replaying the day? Stress and sleep are tied together, and each one can drag the other down.", "Why it happens: stress keeps the body a little on alert. That makes it harder to fall asleep and easier to wake up. Then a short night leaves you with less patience the next day, which makes stress hit harder. Round and round.", "You can interrupt the loop from either side. A few places to start:", {"ol": ["Keep the same wake-up time, even after a bad night. A steady wake time helps set your body clock.", "Give your worries a parking spot. Before bed, write them on paper with one next step for each. \"Call the insurance company, 10 a.m.\" Many people find a worry is easier to set down once it's on paper.", "Put the phone down 30 minutes before bed. News and email wake the mind back up.", "If you're awake for a long stretch, get up. Sit somewhere dim and do something dull until you feel sleepy."]}, "Something you can say to yourself at 2 a.m.: \"This is a nighttime thought. I'll look at it in daylight.\"", "The common mistake is trying hard to sleep. Effort is the opposite of rest. Lying there gritting your teeth tends to keep you up longer.", "If trouble sleeping goes on for weeks, or your mood is sliding with it, talk to your doctor. Sleep problems are worth taking seriously.", "If you're in crisis, call or text 988, any time.", "Try the worry list tonight.", {"h": "Sun Dec 6: The money talk, without the fight"}, "Money talks can go from calm to heated in about two sentences.", "Why it gets so heated: money carries big feelings. Safety. Fairness. Freedom. What you watched your parents go through. One partner may see a savings account as protection. The other may see it as a life never lived. Both make sense, and both feel personal.", "A calmer way to talk about it:", {"ol": ["Schedule it. Don't start a money talk at 10 p.m. or in the middle of a bill crisis. Pick a calm time, like Sunday afternoon.", "Start with your stories, not your numbers. Ask, \"What did money feel like in your house growing up?\"", "Name one shared goal before you name a problem. \"We both want less stress in January.\"", "Decide one small thing. Not the whole budget. One thing."]}, "An example of a gentle opening:", "\"I've been worried about holiday spending, and I don't want it to turn into a fight. Can we sit down Sunday and make a plan together?\"", "The common mistake is talking about money only when something has already gone wrong. Then every money talk feels like a crisis. Talking about money when things are fine can make the hard talks less tense.", "Another trap is scorekeeping. \"I paid for this, you paid for that.\" It turns partners into business rivals instead of teammates.", "Save this for your next Sunday check-in.", {"h": "Mon Dec 7: Talk to yourself like a friend"}, "Would you say to a friend what you said to yourself today?", "Many people, especially after hard experiences, are far harder on themselves than they would ever be on someone else. \"I'm so stupid.\" \"I should be over this by now.\" \"What's wrong with me?\"", "Why it happens: harsh self-talk often started as protection. If you criticize yourself first, maybe no one else can hurt you as much. Or you learned that being hard on yourself is how you stay in line. It made sense once. It usually costs more than it helps now.", "A simple practice:", {"ol": ["Notice the voice. Just catch it. \"There's that voice again.\"", "Ask the question. \"What would I say to a friend who went through this?\"", "Say that to yourself, even if it feels awkward. Out loud or on paper."]}, "Here's what that might sound like:", "\"Of course this is hard. You've been carrying a lot. You're doing the best you can with what you have right now.\"", "The common mistake is thinking self-compassion means letting yourself off the hook. It doesn't. You can still take responsibility. Kindness just makes it easier to look at a mistake without falling apart.", "It will probably feel strange at first. That's normal. Kindness toward yourself is a skill, and skills grow with practice.", "Try it once today, the next time you catch that harsh voice.", "If you're in crisis, call or text 988, any time."], "sign": true}, {"id": "linkedin-dec1", "meta": "LinkedIn · 3 posts · Dec 1, 3 and 7", "title": "Your 3 LinkedIn posts for referral partners", "body": ["Three posts for referral partners only (doctors, other therapists, pastors, attorneys and HR): Tue Dec 1: EMDR: what referrers should know; Thu Dec 3: Video therapy has a location rule; Mon Dec 7: Who I see, who I refer.", "Tap \"Read all of it\" to see every word.", {"h": "Tue Dec 1: EMDR: what referrers should know"}, "Colleagues sometimes ask what EMDR actually involves, and when it makes sense to suggest it. A plain overview:", "EMDR (Eye Movement Desensitization and Reprocessing) is a structured, well-researched therapy for distressing memories. The client briefly focuses on part of a memory while doing bilateral stimulation, like eye movements or tapping.", "Who it may fit:", {"ul": ["Adults with a specific hard event or series of events that still feel close.", "People who have done talk therapy and still feel stuck on certain memories.", "People who don't want to describe every detail out loud. EMDR doesn't require that."]}, "What it isn't: a quick fix, or something we start on day one. The early sessions are history, preparation and coping skills. The client sets the pace and can stop any time.", "My setup: I'm EMDR-trained, and I offer EMDR in person only, on Tuesdays at my Murfreesboro office. Not by video.", "If you're unsure whether EMDR fits someone, I'm glad to talk it through, no client details needed.", {"sig": "Jamie Hallor, MSW, LCSW | Stones River Therapy and Wellness PLLC | (615) 200-0063"}, {"h": "Thu Dec 3: Video therapy has a location rule"}, "A practical point for anyone referring to video therapy: location matters.", "Under Tennessee law, a client seeing a Tennessee-licensed clinician by video needs to be physically in Tennessee during each session. It doesn't matter where they live or where their employer is based. What matters is where they are sitting when the session happens.", "Why this comes up:", {"ul": ["Employees who travel for work, or live near a state line.", "College students who go home to another state over breaks.", "People who winter somewhere else."]}, "Clients need to be in Tennessee for each video session, so I plan ahead with anyone who travels. If someone will be out of state for a stretch, we talk about options, which can include a referral to a clinician licensed there.", "For HR and EAP partners especially, it helps to mention this up front so there are no surprises.", "I offer video sessions on Wednesdays for adults in Tennessee, and in-person sessions on Tuesdays in Murfreesboro.", {"sig": "Jamie Hallor, MSW, LCSW | Stones River Therapy and Wellness PLLC"}, {"h": "Mon Dec 7: Who I see, who I refer"}, "Clear referrals save people time. So here is who I see, and who I send elsewhere.", "I see:", {"ul": ["Adults 18 and up, individually and as couples.", "Couples dealing with repeated conflict, distance, or the aftermath of an affair.", "Adults working through trauma. EMDR is in person only."]}, "I refer out:", {"ul": ["Children and teens. Pediatricians and school counselors often know good child therapists locally.", "Anyone in crisis, or who needs more support than weekly outpatient therapy.", "People outside Tennessee."]}, "Right now my practice is private pay.", "If a person you're working with doesn't fit my practice, call me anyway. I'll try to point them somewhere that fits.", {"sig": "Jamie Hallor, MSW, LCSW | Stones River Therapy and Wellness PLLC | (615) 200-0063"}]}, {"id": "article-on-edge", "meta": "Website article · Dec 1", "title": "Why You Still Feel On Edge After Something Hard, and What Helps Your Body Settle", "serp": {"u": "stonesrivertherapy.com/articles/still-on-edge-after-something-hard", "t": "Still On Edge After Something Hard? | Trauma Therapy TN", "d": "Why the body can stay on alert after something overwhelming, simple ways to help it settle, and when trauma therapy or EMDR may fit. Murfreesboro, TN."}, "body": ["Something hard happened. Maybe it was months ago. Maybe it was years ago. You know it's over, and you know you're safe now. But your body didn't get the message. You still jump at loud sounds. You still lie awake. You snap at people you love, or you feel strangely numb when you want to feel close.", "If that's you, you're not weak and you're not broken. Your nervous system is doing its job a little too well. Here is what may be going on, and some things that can help your body settle.", {"h": "What's happening in your body"}, "Your body has a built-in alarm system. When it senses danger, it gets you ready to fight, run or freeze. Your heart speeds up. Your muscles tense. Your focus narrows. This is helpful in a real emergency.", "After something overwhelming, that alarm can stay turned up. It starts going off for things that aren't dangerous: a tone of voice, a smell, a crowded store, a certain time of year. Your thinking brain knows you're safe, but your body reacts first, faster than thought.", "Other people swing the other way. Instead of feeling on alert, they feel shut down, flat or far away from themselves. That's another way the body protects itself when something feels like too much.", "Both of these responses make sense. They started as ways to survive. The goal is to help your body learn it doesn't have to stay on high alert all the time.", {"h": "Signs your nervous system may be stuck on alert"}, {"ul": ["Trouble falling or staying asleep", "Being easily startled", "Feeling irritable or short-tempered more than you'd like", "Avoiding places, people or topics that remind you of what happened", "Feeling numb, foggy or detached", "Strong reactions that seem bigger than the moment", "Tight muscles, headaches or an upset stomach with no clear cause"]}, "Many of these can have other causes too, so it's worth talking with your doctor about physical symptoms.", {"h": "Simple ways to help your body settle"}, "These won't erase what happened, but they can give your body a moment of safety. Practice them on calm days, so they're easier to reach for on hard ones.", "1. Slow your breath out. Breathe in through your nose for about 4 counts, then breathe out slowly for about 6 counts. A longer out-breath can help tell your body it's okay to slow down. Try it for 1 or 2 minutes.", "2. Ground yourself with your senses. Name 5 things you can see, 4 things you can feel, 3 things you can hear, 2 things you can smell and 1 thing you can taste. This brings your attention back to right now.", "3. Feel your feet. Press your feet into the floor and notice the support under you. Some people like to say quietly, \"I'm here. It's today. I'm safe right now.\"", "4. Use temperature and movement. A warm drink, a short walk or stretching your arms over your head can help your body shift gears.", "5. Notice your early signs. Most people have early signals that stress is building, like a tight jaw or holding their breath. Catching it at a 4 is much easier than at a 9.", {"h": "Is this about right now, or something older?"}, "When you have a strong reaction, try asking yourself a gentle question: \"Is this about right now, or is something older showing up?\" You don't have to answer it perfectly. Just asking can create a little space between the trigger and your response.", "It can also help to tell the people close to you what your signs look like. You might say: \"When I go quiet and stare at my phone, it usually means I'm overwhelmed. It's not about you. A few minutes alone helps.\" That way they don't take it personally, and you don't have to explain in the middle of a hard moment.", {"h": "Common mistakes"}, "Being hard on yourself. Many people who've been through something hard are much tougher on themselves than they'd ever be on a friend. Try asking: \"What would I say to a friend who went through this?\"", "Waiting for it to pass on its own. Sometimes it does. But if it's been weeks or months and it's getting in the way of sleep, work or relationships, it's okay to get support.", "Pushing into the hardest memories alone. Healing usually starts with steadiness first. Going straight to the worst parts without support can leave you more stirred up.", "Thinking you have to tell every detail to get help. You don't. You set the pace.", "Numbing out to get through the day. Extra screen time, extra drinks or staying busy every minute can feel like relief. Over time, they can keep the alarm turned up. Gentle, steady habits like regular sleep, meals and a little movement give your body a better base to settle from.", {"h": "How therapy and EMDR can fit"}, "Trauma therapy often starts with getting steady: learning what helps your body settle and building skills you can use day to day. Only then, and only when you're ready, does the work move toward harder memories.", "EMDR is one well-researched approach for trauma. EMDR stands for Eye Movement Desensitization and Reprocessing. In EMDR, you briefly focus on part of a memory while doing something side to side, like following eye movements or gentle tapping. Many people find the memory feels less sharp over time, and the beliefs tied to it, like \"It was my fault\" or \"I'm not safe,\" start to loosen. It doesn't work the same way for everyone, and it isn't the right fit for everyone.", "I'm EMDR-trained. With me, EMDR starts with preparation and coping skills first. You stay in charge of what we work on and when, and you can pause or stop at any time. EMDR sessions are in person at my Murfreesboro office. I also offer talk therapy, in person or by video for adults in Tennessee.", "If you're in crisis, call or text 988, any time. You can also call the Tennessee Statewide Crisis Line at 855-274-7471, or 911 in an emergency.", {"h": "Getting started"}, "If you'd like to talk about whether therapy or EMDR could fit you, the first step is a free 15-minute phone consult. Call (615) 200-0063. You can ask anything, and you don't have to share details of what happened on that call.", "I see adults in person on Tuesdays at my office in Murfreesboro. EMDR is in person only. Talk therapy by video is available on Wednesdays for adults who are physically in Tennessee during the session. Fees are posted at stonesrivertherapy.com/fees.", {"sig": "Jamie Hallor, MSW, LCSW | Stones River Therapy and Wellness PLLC | 212 Heritage Park Drive, Murfreesboro, TN 37129 | Call (615) 200-0063 (texts for scheduling only) | jamie@stonesrivertherapy.com | Free 15-minute phone consult. Private pay, with superbills for out-of-network benefits. Fees are posted at stonesrivertherapy.com/fees. If you're paying privately, you'll get a written Good Faith Estimate before your first session. | If you are in crisis, call or text 988 (Suicide and Crisis Lifeline), call 911, or call the Tennessee Statewide Crisis Line at 855-274-7471. This article is general information, not therapy or medical advice."}]}]}]};
+var TOKEN=(location.pathname.match(/\/c\/([a-f0-9]{32,64})/)||[])[1]||"";
+var API="/api/client-answer";
+var ALL={},answers={},SECTIONS=PAGE.sections,LK="bo-answers-"+TOKEN;
+var questions=[],QK="bo-questions-"+TOKEN;
+function keepQ(){try{localStorage.setItem(QK,JSON.stringify(questions))}catch(e){}}
+function addQ(q){if(!q||!q.id||questions.some(function(x){return x.id===q.id}))return;questions.push(q)}
+function showQ(){var by={};questions.forEach(function(q){(by[q.item]=by[q.item]||[]).push(q)});document.querySelectorAll(".qlist").forEach(function(el){var id=el.id.slice(3),l=by[id]||[];el.innerHTML=l.map(function(q){return'<div class="qitem"><b>Your question, sent</b>'+esc(q.note)+"</div>"}).join("")})}
+function keep(){try{localStorage.setItem(LK,JSON.stringify(answers))}catch(e){}}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]})}
+function renderBody(b){var h="";(b||[]).forEach(function(x){if(typeof x==="string")h+="<p>"+esc(x)+"</p>";else if(x.ol)h+="<ol>"+x.ol.map(function(i){return"<li>"+esc(i)+"</li>"}).join("")+"</ol>";else if(x.ul)h+="<ul>"+x.ul.map(function(i){return"<li>"+esc(i)+"</li>"}).join("")+"</ul>";else if(x.h)h+="<h4>"+esc(x.h)+"</h4>";else if(x.sig)h+='<div class="sig">'+esc(x.sig)+"</div>";else if(x.note)h+='<div class="note">'+esc(x.note)+"</div>";else if(x.link)h+='<p><a href="'+esc(x.link)+'" target="_blank" rel="noopener">'+esc(x.text||x.link)+"</a></p>"});return h}
+function askHTML(id){
+  return '<div class="btns"><button class="btn ask" type="button" data-act="ask" data-id="'+id+'">Ask a question</button></div>'
+   +'<div class="chbox" id="qb-'+id+'"><label class="l" for="qt-'+id+'">Your question</label><textarea id="qt-'+id+'"></textarea><div class="btns"><button class="btn big" type="button" data-act="sendq" data-id="'+id+'">Send my question</button></div></div>'
+   +'<div class="qlist" id="ql-'+id+'"></div>';
+}
+function cardHTML(it){
+  var todo=it.kind==="todo",long=!todo&&it.body.length>4;
+  var first=long?it.body.slice(0,2):it.body,rest=long?it.body.slice(2):[];
+  var h='<article class="card'+(todo?' todo':'')+'" id="c-'+it.id+'"><div class="meta">'+esc(it.meta)+'</div><h3>'+esc(it.title)+'</h3>';
+  if(it.serp)h+='<div class="serp"><div class="u">'+esc(it.serp.u)+'</div><div class="t">'+esc(it.serp.t)+'</div><div class="d">'+esc(it.serp.d)+'</div></div>';
+  h+='<div class="body">'+renderBody(first);
+  if(rest.length)h+='<details><summary><span class="o">Read all of it ▾</span><span class="c">Show less ▴</span></summary>'+renderBody(rest)+(it.sign?'<div class="sig">'+esc(PAGE.signoff)+'</div>':'')+'</details>';
+  else if(it.sign)h+='<div class="sig">'+esc(PAGE.signoff)+'</div>';
+  h+='</div>';
+  if(todo){
+    if(it.guide)h+='<div class="btns"><a class="btn link" href="'+esc(it.guide)+'" target="_blank" rel="noopener">Open the step-by-step guide</a></div>';
+    if(it.input)h+='<label class="l" for="in-'+it.id+'">'+esc(it.input)+'</label><input class="in" id="in-'+it.id+'" type="text" maxlength="200" autocomplete="off">';
+    h+='<div class="btns"><button class="btn yes" type="button" data-act="done" data-id="'+it.id+'">Done</button><button class="btn chg" type="button" data-act="help" data-id="'+it.id+'">I need help</button></div>';
+    h+='<div class="chbox" id="cb-'+it.id+'"><label class="l" for="ta-'+it.id+'">What\'s getting in the way? (optional)</label><textarea id="ta-'+it.id+'"></textarea><div class="btns"><button class="btn big" type="button" data-act="sendhelp" data-id="'+it.id+'">Ask for help</button></div></div>';
+  }else{
+    h+='<div class="btns">';
+    if(it.choice)it.choice.forEach(function(c){h+='<button class="btn pick" type="button" data-act="pick" data-id="'+it.id+'" data-v="'+esc(c)+'">'+esc(c)+'</button>'});
+    else h+='<button class="btn yes" type="button" data-act="yes" data-id="'+it.id+'">Approve</button>';
+    h+='<button class="btn chg" type="button" data-act="chg" data-id="'+it.id+'">Change this</button></div>';
+    h+='<div class="chbox" id="cb-'+it.id+'"><label class="l" for="ta-'+it.id+'">What should we change?</label><textarea id="ta-'+it.id+'"></textarea><div class="btns"><button class="btn big" type="button" data-act="send" data-id="'+it.id+'">Send</button></div></div>';
+  }
+  h+='<div class="state" id="st-'+it.id+'" aria-live="polite"></div>';
+  h+=askHTML(it.id)+'</article>';
+  return h;
+}
+function render(){
+  document.getElementById("kick").textContent=PAGE.kick;document.getElementById("h1").textContent=PAGE.heading;
+  var h="";
+  SECTIONS.forEach(function(s){
+    h+='<section><h2 class="sec-h">'+esc(s.title)+'</h2><p class="sec-p">'+esc(s.desc)+'</p>';
+    if(s.batch)h+='<div class="btns" style="margin:0 0 1rem"><button class="btn yes" type="button" data-act="all" data-sec="'+esc(s.key)+'">'+esc(s.batch)+'</button></div>';
+    s.items.forEach(function(it){ALL[it.id]=it;it.sec=s.key;h+=cardHTML(it)});
+    h+='</section>';
+  });
+  if(PAGE.done&&PAGE.done.length){h+='<section><h2 class="sec-h">Already done</h2>'+(PAGE.done_intro?'<p class="sec-p">'+esc(PAGE.done_intro)+'</p>':'');PAGE.done.forEach(function(d){h+='<div class="done-card"><div class="meta">'+esc(d.meta)+' ✓</div><h3>'+esc(d.title)+'</h3><div>'+esc(d.text)+'</div></div>'});h+='</section>'}
+  document.getElementById("main").innerHTML=h;
+  document.getElementById("foot").innerHTML=(PAGE.footer||[]).map(function(p){return"<p>"+esc(p)+"</p>"}).join("");
+}
+function showState(id){
+  var a=answers[id],c=document.getElementById("c-"+id),st=document.getElementById("st-"+id);if(!c)return;
+  c.classList.remove("ok","ch");
+  c.querySelectorAll(".pick").forEach(function(b){b.classList.toggle("on",!!a&&a.answer===b.getAttribute("data-v"))});
+  if(!a){st.innerHTML="";st.className="state";return}
+  if(a.answer==="change"){c.classList.add("ch");st.className="state ch";st.innerHTML="You asked for a change.<small>"+esc(a.note||"")+"</small>"}
+  else if(a.answer==="help"){c.classList.add("ch");st.className="state ch";st.innerHTML="You asked for help. We'll reach out.<small>"+esc(a.note||"")+"</small>"}
+  else if(a.answer==="done"){c.classList.add("ok");st.className="state ok";st.innerHTML="✓ Done"+(a.note?"<small>"+esc(a.note)+"</small>":"")}
+  else{c.classList.add("ok");st.className="state ok";st.innerHTML=(a.answer==="approved"?"✓ Approved":"✓ Your answer: "+esc(a.answer))}
+}
+function progress(){var ids=Object.keys(ALL),n=ids.filter(function(i){return answers[i]}).length;document.getElementById("pn").textContent=n+" of "+ids.length;document.getElementById("pt").style.width=(ids.length?n/ids.length*100:0)+"%";document.getElementById("finish").classList.toggle("show",ids.length>0&&n===ids.length)}
+function box(kind,big,small){var c=document.getElementById("confirm");c.className="confirm show"+(kind?" "+kind:"");document.getElementById("cbig").textContent=big;document.getElementById("csmall").textContent=small||""}
+document.getElementById("cclose").onclick=function(){document.getElementById("confirm").className="confirm"};
+var FAIL="Not saved yet. Please tap again, or just reply to our email.",FAILS="Your answer didn't reach us. Check your internet and tap again, or just reply to our email.";
+function save(list,okBig){
+  box("wait","Saving...","One moment.");
+  var done=false,t=setTimeout(function(){if(!done){done=true;box("err",FAIL,FAILS)}},10000);
+  fetch(API,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:TOKEN,answers:list.map(function(r){return{item:r.item,answer:r.answer,note:r.note}})})})
+  .then(function(r){return r.json().then(function(j){if(!r.ok||!j.saved)throw new Error(j.error||"not saved");return j})})
+  .then(function(j){if(done)return;done=true;clearTimeout(t);list.forEach(function(r){r.time=j.time;answers[r.item]=r;showState(r.item)});keep();progress();
+    box("",j.finished?"Got it! That was the last one.":okBig,j.finished?"Every answer is saved. Thank you!":"Saved. Nothing posts or changes until we set it up.")})
+  .catch(function(){if(done)return;done=true;clearTimeout(t);box("err",FAIL,FAILS)});
+}
+function saveQ(id){
+  var ta=document.getElementById("qt-"+id),note=ta.value.trim();
+  if(!note){ta.focus();box("err","Please type your question first.","Then tap Send my question.");return}
+  box("wait","Sending...","One moment.");
+  var done=false,t=setTimeout(function(){if(!done){done=true;box("err",FAIL,FAILS)}},10000);
+  fetch(API,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:TOKEN,question:{item:id,note:note}})})
+  .then(function(r){return r.json().then(function(j){if(!r.ok||!j.saved)throw new Error(j.error||"not saved");return j})})
+  .then(function(j){if(done)return;done=true;clearTimeout(t);addQ({id:j.id,item:id,note:note,time:j.time});keepQ();showQ();ta.value="";var qb=document.getElementById("qb-"+id);if(qb)qb.classList.remove("show");
+    box("","Got it! Your question is sent.","We will get back to you soon.")})
+  .catch(function(){if(done)return;done=true;clearTimeout(t);box("err",FAIL,FAILS)});
+}
+function rec(id,answer,note){return{item:id,answer:answer,note:note||""}}
+document.addEventListener("click",function(e){
+  var b=e.target.closest("[data-act]");if(!b)return;var act=b.getAttribute("data-act"),id=b.getAttribute("data-id");
+  if(act==="ask"){var qb=document.getElementById("qb-"+id);qb.classList.toggle("show");if(qb.classList.contains("show"))document.getElementById("qt-"+id).focus();return}
+  if(act==="sendq"){saveQ(id);return}
+  if(act==="yes")save([rec(id,"approved")],"Got it! Approved: "+ALL[id].title);
+  else if(act==="pick"){var v=b.getAttribute("data-v");save([rec(id,v)],"Got it! Your answer: "+v)}
+  else if(act==="chg"||act==="help"){var cb=document.getElementById("cb-"+id);cb.classList.toggle("show");if(cb.classList.contains("show"))document.getElementById("ta-"+id).focus()}
+  else if(act==="send"){var note=document.getElementById("ta-"+id).value.trim();if(!note){document.getElementById("ta-"+id).focus();box("err","Please type what to change first.","Then tap Send.");return}
+    save([rec(id,"change",note)],"Got it! We'll change it: "+ALL[id].title);document.getElementById("cb-"+id).classList.remove("show")}
+  else if(act==="sendhelp"){save([rec(id,"help",document.getElementById("ta-"+id).value.trim())],"Got it! We'll help you with this one.");document.getElementById("cb-"+id).classList.remove("show")}
+  else if(act==="done"){var inp=document.getElementById("in-"+id);save([rec(id,"done",inp?inp.value.trim():"")],"Got it! Marked as done.")}
+  else if(act==="all"){var sec=SECTIONS.filter(function(s){return s.key===b.getAttribute("data-sec")})[0];
+    var list=sec.items.filter(function(it){return !answers[it.id]||answers[it.id].answer!=="change"}).map(function(it){return rec(it.id,"approved")});
+    if(!list.length){box("","Nothing left to approve here.","The ones you asked to change stay as they are.");return}
+    save(list,"Got it! Approved all "+list.length+(list.length<sec.items.length?" (the ones you asked to change stay as change requests)":"")+".")}
+});
+render();
+try{JSON.parse(localStorage.getItem(QK)||"[]").forEach(addQ);showQ()}catch(e){}
+try{var loc=JSON.parse(localStorage.getItem(LK)||"{}");Object.keys(loc).forEach(function(id){if(ALL[id]){answers[id]=loc[id];showState(id)}})}catch(e){}
+progress();
+fetch(API+"/state?t="+TOKEN,{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){Object.keys(j.answers||{}).forEach(function(id){if(ALL[id]&&(!answers[id]||!answers[id].time||answers[id].time<=j.answers[id].time)){answers[id]=j.answers[id];answers[id].item=id;showState(id)}});keep();(j.questions||[]).forEach(addQ);keepQ();showQ();progress()}).catch(function(){});
+</script>
+</body>
+</html>
