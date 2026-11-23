@@ -256,8 +256,10 @@ export async function run(opts) {
       const sub = Object.hasOwn(v, slot) ? v[slot] : null;
       if (!sub || typeof sub !== 'object') return { state: 'missing' };
       if (!['pass', 'fail'].includes(sub.result)) return { state: 'bad', why: `checker ${slot} verdict has no pass/fail result` };
-      const agent = T.cleanAgent(sub.agent);
-      if (!agent || /script/.test(agent)) return { state: 'bad', why: `checker ${slot} verdict needs a real sub-agent name (not a script name)` };
+      const an = T.agentName(sub.agent); // the same rule as the worker's /check and sendBlock: refused, never cleaned
+      if (!an.ok) return { state: 'bad', why: `checker ${slot} verdict: ${an.error}` };
+      if (an.script) return { state: 'bad', why: `checker ${slot} verdict needs a real sub-agent name (not a script name)` };
+      const agent = an.key;
       if (typeof sub.hash !== 'string' || sub.hash !== target.hash) return { state: 'bad', why: `checker ${slot} verdict read version ${String(sub.hash || 'none').slice(0, 12)}, the report is now ${target.hash.slice(0, 12)}; read it again` };
       return { state: 'ok', result: sub.result, agent, notes: String(sub.notes || '').slice(0, 1900) };
     };

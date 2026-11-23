@@ -430,22 +430,86 @@ await test('Review 2 item 2: once a fail is on record for this version the worke
   assert.equal((await P(b2.env, b2.id, nh)(2, 'B', 'pass')).status, 200);
   assert.equal(b2.rec().status, 'checked');
 });
-await test('Review 2 items 3+4: agent names are cleaned the same way everywhere; look-alike names are one agent; script names never pass', async () => {
+await test('Review 2 items 3+4 (Nov 23 rule): agent names are judged one way everywhere; odd characters are REFUSED, never cleaned', async () => {
   const c = T.cleanAgent;
-  for (const [a, x] of [['Checker-A', 'checker-a'], ['checker a', 'checker  a'], ['checker-a', 'checker-a​'], ['checker a', 'checker a'], ['checker-a', 'checker‐a'], ['checker-a', ' checker-a  '], ['checker-a', 'ｃｈｅｃｋｅｒ-ａ']])
-    assert.equal(c(a), c(x), JSON.stringify([a, x]));
-  for (const [n, a, x] of [['case', 'Checker-A', 'checker-a'], ['zwsp', 'checker-a', 'checker-a​'], ['nbsp', 'checker a', 'checker a'], ['hyphen', 'checker-a', 'checker‐a']]) {
+  // the same agent after NFKC + lower case (and space / _ / - read alike)
+  for (const [a, x] of [['Checker-A', 'checker-a'], ['checker a', 'checker\u00a0a'], ['checker-a', '\uff43\uff48\uff45\uff43\uff4b\uff45\uff52-\uff41'], ['checker-a', 'checker_a'], ['checker-a', 'checker a']])
+    assert.ok(c(a) && c(a) === c(x), JSON.stringify([a, x]));
+  // refused outright (cleanAgent gives '' and the worker answers 409)
+  for (const x of ['checker  a', 'checker-a\u200b', 'checker-a\u2010', 'checker\u2010a', ' checker-a  ', 'checker-a ', '-checker', '', 'a'.repeat(65)]) assert.equal(c(x), '', JSON.stringify(x));
+  for (const [n, a, x] of [['case', 'Checker-A', 'checker-a'], ['nbsp', 'checker a', 'checker\u00a0a'], ['underscore', 'checker-a', 'checker_a']]) {
     const b = await ready();
     const r = await run({ base: BASE, key: KEY, fetch: local(b.env), research: b.dir, locks: [], apply: true, verdicts: goodVerdicts(b.id, b.hash, a, x), out: quiet, runId: 'n' });
     assert.match(r.summary[0].result, /held: .*same agent/, n); assert.deepEqual(b.rec().checks || {}, {}, n);
-    // and the worker on its own
     const p = P(b.env, b.id, b.hash);
     assert.equal((await p(1, a, 'pass')).status, 200); assert.equal((await p(2, x, 'pass')).status, 409, n);
-    assert.equal(b.rec().checks['1'].agent, c(a), 'stored cleaned');
+    assert.equal(b.rec().checks['1'].agent, c(a), 'stored in the compare form');
+  }
+  for (const [n, a, x] of [['zwsp', 'checker-a', 'checker-a\u200b'], ['hyphen', 'checker-a', 'checker\u2010a']]) {
+    const b = await ready(); const p = P(b.env, b.id, b.hash);
+    assert.equal((await p(1, a, 'pass')).status, 200); const r = await p(2, x, 'pass');
+    assert.equal(r.status, 409, n); assert.match(r.error, /refused/, n); assert.equal(b.rec().checks['2'], undefined, n);
   }
   const b = await ready(); const p = P(b.env, b.id, b.hash);
-  for (const a of ['checker-1-script-1', 'SCRIPT', 'scr​ipt-x']) assert.equal((await p(1, a, 'pass')).status, 409, a);
+  for (const a of ['checker-1-script-1', 'SCRIPT', 'scr\u200bipt-x', 'scr ipt', 's_c-r i_pt']) assert.equal((await p(1, a, 'pass')).status, 409, a);
   assert.equal((await p(1, 'checker-1-script-1', 'fail')).status, 200, 'a script may fail it');
+});
+await test('Checker Nov 23 item 1: look-alike "script" names (Cyrillic, combining marks) are refused in /check, sendBlock and the runner', async () => {
+  const LOOK = ['checker-1-\u0455cript-x', 'scr\u0456pt', 's\u0337cript', '\u0455cript-1', '\u0455cript-2'];
+  assert.equal(LOOK.join('|'), 'checker-1-ѕcript-x|scrіpt|s̷cript|ѕcript-1|ѕcript-2', 'verbatim inputs');
+  for (const x of LOOK) { assert.equal(T.cleanAgent(x), '', x); assert.equal(T.agentName(x).ok, false, x); }
+  // worker /check: refused for a pass AND for a fail (a refused name is never stored)
+  const b = await ready(); const p = P(b.env, b.id, b.hash);
+  for (const x of LOOK) for (const res of ['pass', 'fail']) { const r = await p(1, x, res); assert.equal(r.status, 409, x + ' ' + res); assert.match(r.error, /refused/); }
+  assert.deepEqual(b.rec().checks || {}, {}); assert.equal(b.rec().status !== 'checked', true);
+  // runner --verdicts with "ѕcript-1" / "ѕcript-2" never ends "checked"
+  const r = await run({ base: BASE, key: KEY, fetch: local(b.env), research: b.dir, locks: [], apply: true, verdicts: goodVerdicts(b.id, b.hash, 'ѕcript-1', 'ѕcript-2'), out: quiet, runId: 'lk' });
+  assert.notEqual(b.rec().status, 'checked', steps(r)); assert.match(r.summary[0].result, /waiting for verdicts/); assert.deepEqual(b.rec().checks || {}, {});
+  // sendBlock: a record carrying look-alike names (old data or a bypass) is never sent
+  const b2 = await ready(); const p2 = P(b2.env, b2.id, b2.hash);
+  assert.equal((await p2(1, 'sub-a', 'pass')).status, 200); assert.equal((await p2(2, 'sub-b', 'pass')).status, 200);
+  const rec = { ...b2.rec(), test: false }; assert.equal(rec.status, 'checked');
+  for (const x of LOOK) {
+    assert.ok(T.sendBlock({ LIVE: 'on' }, { ...rec, checks: { ...rec.checks, 2: { ...rec.checks['2'], agent: x } } }), x);
+    assert.ok(T.sendBlock({ LIVE: 'on' }, { ...rec, checks: { ...rec.checks, 1: { ...rec.checks['1'], agent: x } } }), x);
+  }
+});
+await test('Checker Nov 23 item 2: invisible characters (U+034F, U+FE0F, U+3164, U+115F, U+17B4) are refused, so "agent-a" can never count twice', async () => {
+  const INV = ['agent-a\u034f', 'agent-a\ufe0f', 'agent-a\u3164', 'agent-a\u115f', 'agent-a\u17b4', '\u034fagent-a', 'agent\u3164-a'];
+  assert.equal(INV[0], 'agent-a͏', 'verbatim input');
+  for (const x of INV) assert.equal(T.cleanAgent(x), '', JSON.stringify(x));
+  for (const x of INV) {
+    const b = await ready(); const p = P(b.env, b.id, b.hash);
+    assert.equal((await p(1, 'agent-a', 'pass')).status, 200);
+    const r = await p(2, x, 'pass'); assert.equal(r.status, 409, JSON.stringify(x)); assert.match(r.error, /refused/);
+    assert.notEqual(b.rec().status, 'checked', JSON.stringify(x));
+    // runner: slot 1 "agent-a", slot 2 the invisible twin -> held, never two agents
+    const b2 = await ready();
+    const rr = await run({ base: BASE, key: KEY, fetch: local(b2.env), research: b2.dir, locks: [], apply: true, verdicts: goodVerdicts(b2.id, b2.hash, 'agent-a', x), out: quiet, runId: 'iv' });
+    assert.notEqual(b2.rec().status, 'checked', steps(rr)); assert.equal((b2.rec().checks || {})['2'], undefined);
+    // sendBlock on a record with the twin stored
+    const b3 = await ready(); const p3 = P(b3.env, b3.id, b3.hash);
+    assert.equal((await p3(1, 'agent-a', 'pass')).status, 200); assert.equal((await p3(2, 'agent-b', 'pass')).status, 200);
+    const rec = { ...b3.rec(), test: false };
+    assert.ok(T.sendBlock({ LIVE: 'on' }, { ...rec, checks: { ...rec.checks, 2: { ...rec.checks['2'], agent: x } } }), JSON.stringify(x));
+  }
+});
+await test('Checker Nov 23 nits: /r, /r/, /r/x/.., /r/<token>/%2e%2e/ and a trailing-slash screenshot are 404', async () => {
+  const { env, rec } = await built(); const f = local(env);
+  const t = rec().token;
+  for (const u of ['/r', '/r/', '/r/x/..', `/r/${t}/%2e%2e/`, `/r/${t}/ai-chatgpt.png/`, `/r/${t}/ai-chatgpt.png//`]) {
+    const g = await f(BASE + u); assert.equal(g.status, 404, u); assert.match(await g.text(), /This report is not here/, u);
+  }
+  assert.equal((await f(`${BASE}/r/${t}/`)).status, 200, 'the real page still works');
+});
+await test('Checker Nov 23 nit: the fill door refuses "[object Object]", "undefined" and "NaN" as text', async () => {
+  const { env, id } = await built(); const f = local(env);
+  const fill = (section, data) => f(BASE + '/api/free-report/fill', { method: 'POST', body: JSON.stringify({ id, k: KEY, section, data }) });
+  for (const bad of ['[object Object]', 'undefined', 'NaN', 'Plumber [object Object]', 'NaN reviews']) {
+    const r = await fill('category', { main_category: bad, match: true }); assert.equal(r.status, 400, bad); assert.match((await r.json()).error, /broken value/, bad);
+    assert.equal((await fill('booking', { score: 5, fixes: [bad] })).status, 400, 'nested ' + bad);
+  }
+  assert.equal((await fill('category', { main_category: 'Plumber', match: true })).status, 200, 'a real value is fine');
 });
 await test('Review 2 item 5: zone towns typed every which way read the same; close or longer names are HELD, never open', () => {
   const L = checkLocks({ locks: [{ trade: 'Plumbing', zone: 'Smyrna', business_name: 'A', since: '2026-01-01' }, { trade: 'Plumbing', zone: 'Mount Juliet', towns: ['La Vergne', 'Saint Paul'], business_name: 'B', since: '2026-01-01' }] });

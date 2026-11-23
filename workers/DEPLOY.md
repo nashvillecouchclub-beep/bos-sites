@@ -170,9 +170,13 @@ worker. Tests: `node workers/test-freereport-fill.mjs`.
   have a `pass` with a non-script agent name and `hash` equal to the report's current hash (the run logs the hash to read). Same agent
   name in both slots = held and logged (never renamed). A fail on any slot always wins: a script fail, or a sub-agent fail on the current
   hash (posted even when that slot already has a pass).
-- The worker enforces the same rules on `/check` (Nov 21, second review): agent names are cleaned one way everywhere (NFKC, no format or
-  zero-width characters, plain spaces and hyphens, squeezed, lower case) and stored cleaned; a PASS from any name containing "script"
-  is refused (409). Every version (hash) that ever got a fail is kept in its own KV key `fails:<id>` (last 50) and is NEVER cleared:
+- The worker enforces the same rules on `/check` (Nov 21, second review): agent names are judged one way everywhere
+  (`agentName`, Nov 23: NFKC, lower case, then it must match `^[a-z0-9][a-z0-9 _-]{0,63}$` with no trailing or double space, or
+  the post is REFUSED with 409; look-alike letters, invisible or combining characters are never cleaned into a valid name).
+  Names are compared with runs of space, `_` and `-` read as one. A PASS from any name containing "script" (spaces, `_`, `-`
+  ignored) is refused (409) in `/check`, `sendBlock` and the runner's `--verdicts`; a script name may still post a FAIL.
+  The fill door refuses any text value saying "[object Object]", "undefined" or "NaN" (400). `/r`, `/r/` and any other
+  path under `/r/` that is not a report page or an exact screenshot path (no trailing slash) answers 404. Every version (hash) that ever got a fail is kept in its own KV key `fails:<id>` (last 50) and is NEVER cleared:
   a version that failed once can never pass, even if a later fill makes the same page again; `sendBlock` refuses it too. A pass that
   races a fail re-reads `fails:<id>` after saving and holds the report. Right before sending, `trySend` re-reads `req:<id>` and
   `fails:<id>` fresh, runs every send rule on that copy (same hash, no fail mark, same marks as in hand), then takes the claim

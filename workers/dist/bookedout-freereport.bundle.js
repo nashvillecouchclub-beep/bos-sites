@@ -1048,14 +1048,23 @@ async function gmailThread(env, threadId, f) {
   } catch (e) { return { ok: false, error: String((e && e.message) || e).slice(0, 200) }; }
 }
 
-// One cleaned form of a checker's agent name, stored and compared everywhere (worker and runner): NFKC, no format or
-// zero-width characters, every kind of space and hyphen made plain, spaces squeezed, lower case, at most 80 characters.
-function cleanAgent(x) {
-  return String(x == null ? '' : x).normalize('NFKC').replace(/[\p{Cf}\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff\u180e]/gu, '')
-    .replace(/[\u00a0\u1680\u2000-\u200a\u205f\u3000\s]+/g, ' ').replace(/[\u2010-\u2015\u2212\u2043\ufe58\ufe63\uff0d\u00ad]/g, '-')
-    .replace(/ +/g, ' ').trim().toLowerCase().slice(0, 80);
+// A checker's agent name, judged the same way everywhere (worker /check, sendBlock and the runner): NFKC, then lower case,
+// then it must be plain ^[a-z0-9][a-z0-9 _-]{0,63}$ (no trailing or double space) or it is REFUSED. A name is never cleaned
+// into a valid one: look-alike letters, invisible or combining characters, odd spaces and odd hyphens are all refused.
+// script: true when the name says "script" (spaces, _ and - ignored); a script name may only post a fail.
+// key: the form two names are compared by (runs of space, _ and - read as one -), so "agent a" and "agent_a" are one agent.
+const AGENT_RE = /^[a-z0-9][a-z0-9 _-]{0,63}$/;
+function agentName(x) {
+  if (typeof x !== 'string') return { ok: false, error: 'agent name must be text' };
+  const name = x.normalize('NFKC').toLowerCase();
+  if (!AGENT_RE.test(name) || / $/.test(name) || / {2}/.test(name))
+    return { ok: false, error: 'agent name refused: only a-z, 0-9, single spaces, _ and - (starting with a letter or digit, at most 64 characters)' };
+  return { ok: true, name, key: name.replace(/[ _-]+/g, '-'), script: name.replace(/[ _-]/g, '').includes('script') };
 }
-const scriptAgent = (a) => /script/.test(cleanAgent(a));
+// The compare form of a name, or '' when the name is refused.
+function cleanAgent(x) { const a = agentName(x); return a.ok ? a.key : ''; }
+// true when the name says "script" OR is refused (a refused name can never count as a sub-agent)
+const scriptAgent = (a) => { const r = agentName(a); return !r.ok || r.script; };
 const failedNow = (rec) => Array.isArray(rec.fails) && rec.fails.includes(rec.hash);
 // Every version (hash) that ever got a fail, in its own KV key so a pass that races a fail still sees it. Last 50 kept.
 const FAILS_KEEP = 50;
@@ -1477,6 +1486,15 @@ function spotProblem(rec, d) {
   if (z.key === mine.key) return '';
   if (d.open === false && Array.isArray(d.zone_towns) && d.zone_towns.some((t) => (townKey(t) || {}).key === mine.key)) return '';
   return `spot.zone "${String(d.zone).slice(0, 80)}" is not his town (${mine.display})${d.open ? '' : ' or a lock zone that lists his town'}`;
+}
+
+// A fill may never carry a broken value as text: "[object Object]", "undefined" or "NaN" (the page check fails those too).
+const JUNK = /\[object Object\]|\bundefined\b|\bNaN\b/;
+function fillJunk(d, depth = 0) {
+  if (typeof d === 'string') return JUNK.test(d) ? `a text value says "${d.match(JUNK)[0]}" (a broken value, not real text)` : '';
+  if (depth > 8) return 'fill is nested too deep';
+  if (d && typeof d === 'object') for (const v of Object.values(d)) { const w = fillJunk(v, depth + 1); if (w) return w; }
+  return '';
 }
 
 // Checks a fill for the new sections before it is saved. Returns '' when ok, else the reason.
@@ -2043,7 +2061,7 @@ async function agentsMap(env, id) { const j = await getJ(env, 'agents:' + id); r
 function agentsClash(map, hash) {
   const h = map && Object.hasOwn(map, hash) ? map[hash] : null;
   if (!h) return '';
-  const a = new Set((h['1'] || []).map(cleanAgent)), both = (h['2'] || []).map(cleanAgent).filter((x) => a.has(x));
+  const a = new Set((h['1'] || []).map(cleanAgent).filter(Boolean)), both = (h['2'] || []).map(cleanAgent).filter((x) => x && a.has(x));
   return both.length ? `agent ${both[0]} posted to both checker slots of this version` : '';
 }
 
@@ -2055,8 +2073,11 @@ async function check(req, env, now = new Date(), f) {
 }
 async function checkLocked(b, env, now, f) {
   const slot = String(b.checker);
-  const agent = cleanAgent(b.agent);
-  if (!ID.test(String(b.id || '')) || !['1', '2'].includes(slot) || !agent || !['pass', 'fail'].includes(b.result)) return json({ ok: false, error: 'bad check' }, 400);
+  if (!ID.test(String(b.id || '')) || !['1', '2'].includes(slot) || !['pass', 'fail'].includes(b.result)) return json({ ok: false, error: 'bad check' }, 400);
+  const an = agentName(b.agent);
+  if (!an.ok) return json({ ok: false, error: an.error }, 409);
+  if (an.script && b.result === 'pass') return json({ ok: false, error: 'a script may only fail a report; a pass must come from a sub-agent' }, 409);
+  const agent = an.key;
   const rec = await getJ(env, 'req:' + b.id);
   if (!rec) return json({ ok: false, error: 'not found' }, 404);
   if (rec.status === 'sent') return json({ ok: false, error: 'already sent' }, 409);
@@ -2075,7 +2096,6 @@ async function checkLocked(b, env, now, f) {
     await putJ(env, 'agents:' + rec.id, amap, KEEP);
   }
   if (seen.map(cleanAgent).includes(agent)) return json({ ok: false, error: `agent ${agent} already posted to checker ${slot === '1' ? 2 : 1} of this version; one agent can never hold both slots` }, 409);
-  if (b.result === 'pass' && scriptAgent(agent)) return json({ ok: false, error: 'a script may only fail a report; a pass must come from a sub-agent' }, 409);
   if (b.result === 'pass') rec.fails = [...new Set([...(Array.isArray(rec.fails) ? rec.fails : []), ...(await failList(env, rec.id))])].slice(-FAILS_KEEP);
   if (b.result === 'pass' && failedNow(rec)) return json({ ok: false, error: 'a checker failed this version; fill the fix first (a new version), then both check again' }, 409);
   if (other && cleanAgent(other.agent) === agent) return json({ ok: false, error: 'checker 1 and checker 2 must be different agents' }, 409);
@@ -2243,7 +2263,7 @@ async function fillLocked(b, env) {
   const rec = await getJ(env, 'req:' + b.id);
   if (!rec) return json({ ok: false, error: 'not found' }, 404);
   if (rec.status === 'sent') return json({ ok: false, error: 'already sent; the owner has this version' }, 409);
-  const why = fillProblem(rec, b.section, b.data);
+  const why = fillJunk(b.data) || fillProblem(rec, b.section, b.data);
   if (why) return json({ ok: false, error: 'bad fill: ' + why }, 400);
   // Screenshots: only ones hosted for THIS report through /shot (so the page never points at a missing or foreign image).
   if (b.section === 'ai' && Array.isArray(b.data.screenshots)) {
@@ -2383,12 +2403,12 @@ export default {
       if (p === '/api/free-report/shot' && req.method === 'POST') return await shot(req, env);
       const m = p.match(/^\/r\/([a-f0-9]{48})$/);
       if (m && req.method === 'GET') return await report(m[1], u, env);
-      const ms = p.match(/^\/r\/([a-f0-9]{48})\/ai-(chatgpt|gemini|google_ai)\.png$/);
+      const ms = u.pathname.match(/^\/r\/([a-f0-9]{48})\/ai-(chatgpt|gemini|google_ai)\.png$/); // exact: no trailing slash
       if (ms && req.method === 'GET') return await shotGet(ms[1], ms[2], env);
       // the POST-only endpoints answer 405 to any other method (never the generic 200 page)
       if (/^\/api\/free-report\/(check|mark-sent|fill|rerender|followup|shot)$/.test(p)) return json({ ok: false, error: 'POST only' }, 405);
       // anything else under /r/ is not a page we serve
-      if (p.startsWith('/r/')) return new Response(GONE, { status: 404, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow' } });
+      if (p === '/r' || p.startsWith('/r/')) return new Response(GONE, { status: 404, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow' } });
       return new Response('Booked Out free report', { status: 200, headers: { 'x-robots-tag': 'noindex' } });
     } catch (e) {
       return json({ saved: false, error: 'server' }, 500);
@@ -2402,7 +2422,7 @@ export default {
     sendAlert, isTestRequest, plain, ownerEmail, mime, sendMail, sendBlock, check, review, trySend, sha, budgetLine, renderReport, submit, build, tick, TRADES, REVENUE,
     fuTick, followup, startFollowups, fuHelpers, gmailThread, allowed, pickFixes,
     diagnose, speedFinding, FIVE_MIN_TEST: FU.FIVE_MIN_TEST, bookingList: FU.bookingList, bookingFixOk: FU.bookingFixOk, knownFor, competitorView, refreshReport, speedEstimate, fillProblem, fill, rerender, SOURCES, FEW_REVIEWS, FILL,
-    shot, shotUrl, pngBytes, SHOT_ENGINES, townState, cleanAgent, townKey, addFail, failList, withLock, agentsClash, agentsMap },
+    shot, shotUrl, pngBytes, SHOT_ENGINES, townState, cleanAgent, agentName, fillJunk, townKey, addFail, failList, withLock, agentsClash, agentsMap },
 };
 
 const GONE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Report not found | Booked Out Solutions</title><style>body{margin:0;font:18px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;background:#F6F1E7;color:#0A0F26}main{max-width:34rem;margin:0 auto;padding:3rem 1.2rem}</style></head><body><main><h1>This report is not here</h1><p>The link may be old or mistyped. Reply to the email it came in and we will send it again, or write to hello@getbookedoutsolutions.com.</p><p>Booked Out Solutions</p></main></body></html>';
