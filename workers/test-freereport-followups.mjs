@@ -28,6 +28,14 @@ const FILLS = {
   booking: { score: 6, fixes: ['Put your phone number as a tap-to-call button at the top of the home page.', 'Make the quote button bigger.'] },
   category: { main_category: 'HVAC contractor', big_job: 'new systems', match: true },
 };
+// The sections added Nov 20 (item 215). A fast answer and a big review count, so the fixes the sequence quotes do not change.
+const NEW = {
+  speed: { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: 3, after_hours: { tested: true, answered: true, when: 'Mon Nov 16, 7:40 pm', channel: 'call' } },
+  known_for: { scanned: 5, reviews: ['On time and fair price', 'Showed up on time, fair price', 'On time again, clean work', 'Fair price and clean', 'Clean and on time'].map((text) => ({ text, rating: 5 })) },
+  competitor: { name: 'Fake Air One', theirs: { photos: 80 }, yours: { photos: 12 } },
+  listings: { sites: { google: { found: true }, yelp: { found: false }, bbb: { found: true }, facebook: { found: true }, nextdoor: { found: false }, chamber: { found: false } } },
+  spot: { zone: 'Smyrna', open: true, lock_version: 1 },
+};
 const GMAIL = { SEND_ROUTE: 'gmail', GMAIL_CLIENT_ID: 'id', GMAIL_CLIENT_SECRET: 'sec', GMAIL_REFRESH_TOKEN: 'ref' };
 // Fake Google: token, send (returns a thread id), thread read (ours only, or with a reply, or refused).
 function gfetch(o = {}) {
@@ -51,11 +59,13 @@ const post = (b) => new Request('https://x/api/free-report', { method: 'POST', b
 // A report sent Tue Nov 17 2026 at 11:00 am Central, through the real flow.
 async function sent(extra = {}, shop = SHOP, fills = FILLS) {
   const f = gfetch();
-  const env = { KV: kv(), STATUS_KEY: KEY, LIVE: 'on', ...GMAIL, ...extra };
+  const env = { KV: kv(), STATUS_KEY: KEY, LIVE: 'on', SPEED_TEST_LIVE: 'on', ...GMAIL, ...extra };
   const j = await (await T.submit(post(shop), env, at('2026-11-17T10:30:00-06:00'))).json();
   await T.tick(env, at('2026-11-17T10:45:00-06:00'), f);
-  for (const [section, data] of Object.entries(fills)) await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section, data });
+  const all = { ...fills, ai: { google_ai: { named: false }, ...fills.ai }, ...Object.fromEntries(Object.entries(NEW).filter(([k]) => !(k in fills))) };
+  for (const [section, data] of Object.entries(all)) await call(env, '/api/free-report/fill', { id: j.id, k: KEY, section, data });
   const rec = () => JSON.parse(env.KV.m.get('req:' + j.id));
+  assert.equal(rec().complete, true, 'report complete before the checks: ' + rec().pending.join(', '));
   const h = rec().hash;
   const mark = (c, a) => T.check(new Request('https://x/', { method: 'POST', body: JSON.stringify({ id: j.id, k: KEY, checker: c, agent: a, result: 'pass', hash: h }) }), env, at('2026-11-17T11:00:00-06:00'), f);
   await mark(1, 'checker-a'); await mark(2, 'checker-b');
@@ -210,12 +220,54 @@ await test('Two overlapping cron runs on the same day send once (the day is clai
 });
 
 await test('Facts never repeat: map "not found" in c2 means n2 does not send it again', async () => {
-  const fills = { ...FILLS, google: { ...FILLS.google, rank_for_keyword: null }, ai: { chatgpt: { named: true }, gemini: { named: false } } };
+  const fills = { ...FILLS, google: { ...FILLS.google, rank_for_keyword: null, rank_checked: true }, ai: { chatgpt: { named: true }, gemini: { named: false } } };
   const { env, rec } = await sent({ FOLLOWUPS: 'on' }, SHOP, fills);
   const f = gfetch();
   for (let d = new Date('2026-11-18T17:15:00Z'), i = 0; i < 150; i++, d = new Date(d.getTime() + 86400000)) await T.fuTick(env, d, f);
   const texts = sends(f).map((c) => decode(c).text);
   assert.equal(texts.filter((t) => /didn't show up/.test(t)).length, 1, texts.map((t) => t.slice(10, 60)).join(' | '));
+});
+
+await test('Few reviews + slow answer: the three fixes on the sent page are saved and the follow-ups quote exactly those', async () => {
+  const fills = { ...FILLS, google: { ...FILLS.google, review_count: 8, top3: [{ name: 'Fake Air One', rating: 4.8, review_count: 6 }, { name: 'Fake Air Two', rating: 4.7, review_count: 5 }, { name: 'Fake Air Three', rating: 4.9, review_count: 4 }] },
+    reviews: { ...FILLS.reviews, owner_reply_on_newest: true }, booking: { score: 6, fixes: [] } };
+  const { env, id, rec } = await sent({ FOLLOWUPS: 'on' }, SHOP, { ...fills, speed: { tested: true, channel: 'call', when: 'Mon Nov 16, 2:10 pm', minutes: null, waited_hours: 48 } });
+  const saved = rec().fu.fixes;
+  assert.equal(saved.length, 3);
+  assert.match(saved[0], /^Ask every happy customer for a Google review the day the job is done\. You have 8 Google reviews so far/);
+  assert.ok(saved.some((x) => /within 5 minutes/.test(x)), saved.join(' | '));
+  assert.deepEqual(saved, T.pickFixes(rec()), 'saved = what the page showed');
+  // later code or data changes must not change what the follow-ups quote
+  const r = rec(); r.sections.google.review_count = 500; r.sections.speed.minutes = 1; env.KV.m.set('req:' + id, JSON.stringify(r));
+  assert.notDeepEqual(T.pickFixes(rec()), saved);
+  const v = FU.values(rec(), { ...T.fuHelpers(), now: new Date('2026-11-18T17:15:00Z') });
+  assert.equal(v.fix_1_line, 'Ask every happy customer for a Google review the day the job is done.'.replace(/\.$/, '') + '.', JSON.stringify(v));
+  const f = gfetch();
+  for (let d = new Date('2026-11-18T17:15:00Z'), i = 0; i < 40; i++, d = new Date(d.getTime() + 86400000)) await T.fuTick(env, d, f);
+  const texts = sends(f).map((c) => decode(c).text).join('\n');
+  assert.doesNotMatch(texts, /\b500 (Google )?reviews\b|\byou have 500\b/, 'never quotes the changed data');
+});
+
+await test('Follow-ups: booking_fix_1 is never a "5 minutes" fix for a shop that answered within 5 minutes', () => {
+  const h = { ...T.fuHelpers(), now: new Date('2026-11-18T17:15:00Z') };
+  const rec = (minutes, fixes) => ({ ...SHOP, token: 'a'.repeat(48), sections: { ...FILLS, booking: { score: 5, fixes }, speed: { tested: true, channel: 'call', when: 'Mon', minutes } } });
+  for (const x of ['Answer every new call in under 5 minutes.', 'Reply within five minutes.', 'Use a 5-minute callback rule.', 'Use a 5\u2011minute callback rule.',
+    'Use a 5\u2013minute callback rule.', 'Reply within five (5) minutes.', 'Answer in 5 or fewer minutes.'])
+    assert.equal(FU.values(rec(2, [x, 'Make the quote button bigger.']), h).booking_fix_1, 'Make the quote button bigger.', 'the first fix the page shows: ' + x);
+  assert.equal(FU.values(rec(40, ['Reply within five minutes.']), h).booking_fix_1, undefined, 'other 5-minute wordings are dropped for every shop');
+  assert.equal(FU.values(rec(40, [FU.SPEED_FIX]), h).booking_fix_1, undefined, 'the speed sentence never comes from the booking list');
+  assert.equal(FU.values(rec(2, [FU.SPEED_FIX]), h).booking_fix_1, undefined, 'and never for a fast one');
+  assert.equal(FU.values(rec(2, ['Make the quote button bigger.']), h).booking_fix_1, 'Make the quote button bigger.');
+});
+
+await test('Follow-ups: a fix that already has double quotes is not double-wrapped', () => {
+  const h = { ...T.fuHelpers(), now: new Date('2026-11-18T17:15:00Z') };
+  const rec = { ...SHOP, token: 'a'.repeat(48), sections: { ...FILLS, booking: { score: 5, fixes: ['Add a "Book now" button at the top.'] } } };
+  const v = FU.values(rec, h);
+  for (const k of ['fix_1', 'fix_2', 'fix_3']) if (v[k]) {
+    assert.match(v[k], /^"[^"]*"$/, v[k]);
+  }
+  assert.ok(Object.values(v).some((x) => /'Book now'/.test(x)), JSON.stringify(v));
 });
 
 await test('A bare domain in a filled email is refused (it would turn into a link)', () => {

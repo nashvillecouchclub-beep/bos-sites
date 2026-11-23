@@ -34,6 +34,65 @@ function fixLine(s, max = 25) {
   return x.charAt(0).toUpperCase() + x.slice(1);
 }
 
+// Shared text tools for the worker and the follow-ups (Nov 21 2026).
+// fold(): NFKC, every Unicode digit to 0-9 ("٥", "५", "５"), Cyrillic/Greek look-alike letters to Latin ("mіnutes" with a
+// Cyrillic i), and the invisible format characters removed (zero-width spaces and joiners, word joiners, BOM, soft hyphen).
+export const SPEED_FIX = 'Call or text back every new lead within 5 minutes, even after hours.';
+export const INVISIBLE = /[\p{Cf}\u034F\u180E]/gu; // every format character (zero-width, joiners, BOM, soft hyphen, bidi marks), CGJ, MVS
+const isNd = (ch) => /\p{Nd}/u.test(ch);
+function asciiDigits(str) {
+  return [...str].map((ch) => {
+    if (/[0-9]/.test(ch) || !isNd(ch)) return ch;
+    // Unicode decimal digits come in runs of ten starting at zero: count the digit code points just below this one
+    const cp = ch.codePointAt(0);
+    let k = 0;
+    while (k < 60 && isNd(String.fromCodePoint(cp - k - 1))) k++;
+    return String(k % 10);
+  }).join('');
+}
+const LOOKALIKE = { 'ı': 'i', 'ɪ': 'i', 'а': 'a', 'е': 'e', 'і': 'i', 'ј': 'j', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'ѕ': 's', 'һ': 'h', 'ԁ': 'd', 'ԛ': 'q', 'ԝ': 'w',
+  'А': 'a', 'В': 'b', 'Е': 'e', 'І': 'i', 'Ј': 'j', 'К': 'k', 'М': 'm', 'Н': 'h', 'О': 'o', 'Р': 'p', 'С': 'c', 'Т': 't', 'Х': 'x', 'У': 'y', 'Ѕ': 's',
+  'ο': 'o', 'ι': 'i', 'ν': 'v', 'α': 'a', 'ε': 'e', 'κ': 'k', 'ρ': 'p', 'τ': 't', 'υ': 'u', 'χ': 'x', 'Ο': 'o', 'Ι': 'i', 'Α': 'a', 'Β': 'b', 'Ε': 'e',
+  'Η': 'h', 'Κ': 'k', 'Μ': 'm', 'Ν': 'n', 'Ρ': 'p', 'Τ': 't', 'Χ': 'x', 'Υ': 'y', 'Ζ': 'z' };
+export function fold(x) {
+  return asciiDigits(String(x == null ? '' : x).normalize('NFKC').replace(INVISIBLE, '')).replace(/[\u0131\u026A\u0370-\u03FF\u0400-\u04FF\u0500-\u052F]/g, (c) => LOOKALIKE[c] || c).toLowerCase();
+}
+const words2 = (x) => fold(x).replace(/[^a-z0-9]+/g, ' ').trim();
+// FIVE_MIN_TEST: does this text talk about answering within 5 minutes? (Used for the diagnosis and fast-shop checks only; it
+// no longer decides which booking fixes show.) A real decimal ("1.5", "2,5") is one number, a 5 that ends a sentence ("5.
+// Minutes later") does not count, a range ending in 5 ("3-5 minutes") does, "twenty-five" does not.
+export function FIVE_MIN_TEST(x) {
+  let s = fold(x);
+  s = s.replace(/(\d)[.,](\d)/g, '$1$2').replace(/(\d)[.!?](\s|$)/g, '$1 xstop$2');
+  s = s.replace(/[^a-z0-9]+/g, ' ');
+  return /(?<!(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety) )\b(5|five)(ish)?( ish)?( 5)? ?(or (fewer|less|so) |to \d+ |to [a-z]+ )?min(ute)?s?\b/.test(s);
+}
+// Response speed belongs to SPEED_FIX alone (Rickey's coordinator, Nov 21): a booking fix that talks about any time unit, or
+// that is the standard speed sentence, is never shown as a booking fix, for any shop.
+// "second" alone is an ordinal ("add a second call button"); it is time talk only with a number ("1 second", "one second") or
+// as "seconds". "business hours" and "opening hours" are about listing hours, not answer speed.
+const TIME_UNIT = /(?<![a-z])(secs?|seconds|mins?|minutes?|hrs?|hours?)(?![a-z])|\b(\d+|one) second\b/;
+export function bookingFixOk(x) {
+  const w = words2(x);
+  if (!w) return false;
+  if (w === words2(SPEED_FIX)) return false;
+  return !TIME_UNIT.test(w.replace(/\b(business|opening) hours?\b/g, ' '));
+}
+// The one filtered booking list. The page's booking test section, the three fixes (its first item) and the follow-ups'
+// booking_fix_1 all come from this list, so they never disagree. Cleaned, no blanks, no repeats.
+export function bookingList(fixes, plainFn) {
+  const out = [], seen = new Set();
+  for (const x of Array.isArray(fixes) ? fixes : []) {
+    const c = plainFn(x);
+    if (!c || !bookingFixOk(c)) continue;
+    const k = words2(c);
+    if (seen.has(k)) continue;
+    seen.add(k); out.push(c);
+  }
+  return out;
+}
+export function answeredFast(sp) { return !!(sp && sp.tested === true && sp.minutes != null && +sp.minutes <= 5); }
+
 // Every placeholder value, from the owner's own report only. A missing value is left out (never guessed).
 // h: { site, townState, plain, pickFixes, TRADES, chicagoDate, now }
 export function values(rec, h) {
@@ -66,15 +125,18 @@ export function values(rec, h) {
   }
   if (rv && rv.newest_review) set('newest_review_replied', rv.owner_reply_on_newest ? 'yes' : 'no');
   if (bk && bk.score != null) set('booking_score', Math.max(0, Math.min(10, +bk.score)));
-  if (bk && Array.isArray(bk.fixes) && bk.fixes[0] && words(bk.fixes[0]) <= 45) set('booking_fix_1', h.plain(bk.fixes[0]));
+  const bfix = bk ? bookingList(bk.fixes, h.plain)[0] : null;
+  // the first booking fix as the report page lists it (the same filter as the page's booking test list)
+  if (bfix && words(bfix) <= 45) set('booking_fix_1', bfix);
   if (ai && ai.chatgpt && ai.gemini) {
     const named = !!(ai.chatgpt.named || ai.gemini.named), both = !!(ai.chatgpt.named && ai.gemini.named);
     // "yes" only when both named it, "no" only when neither did; a split answer is left out (the step uses its fallback).
     if (both) set('ai_named', 'yes'); else if (!named) set('ai_named', 'no');
     set('ai_result', both ? 'was named in both answers' : !named ? "wasn't named in either answer" : null);
   }
-  const fixes = h.pickFixes(rec);
-  fixes.forEach((f, i) => { const x = fixLine(h.plain(f)); if (x) { set('fix_' + (i + 1), `"${x}"`); set('fix_' + (i + 1) + '_line', x + '.'); } });
+  // The fixes saved on the record when the report was sent (what he actually read); older records fall back to a re-pick.
+  const fixes = rec.fu && Array.isArray(rec.fu.fixes) ? rec.fu.fixes : h.pickFixes(rec);
+  fixes.forEach((f, i) => { const x = fixLine(h.plain(f)); if (x) { set('fix_' + (i + 1), `"${x.replace(/["\u201C\u201D]/g, "'")}"`); set('fix_' + (i + 1) + '_line', x + '.'); } });
   const checks = [];
   if (g && g.has_google_profile) checks.push('your Google reviews', 'your map spot');
   if (ai && ai.chatgpt) checks.push('the ChatGPT and Gemini test');
@@ -99,6 +161,9 @@ export function bodyProblems(body, reportLink) {
   if (words(body) >= 120) p.push('120 words or more');
   if ((body.match(/\?/g) || []).length !== 1 || !lines[lines.length - 1].trim().endsWith('?')) p.push('not exactly one question on the last line');
   if (/\$/.test(body)) p.push('dollar sign');
+  if (/[<>]/.test(body)) p.push('angle bracket (raw HTML)');
+  if (/""/.test(body) || lines.some((l) => l.trim() && !/[\p{L}\p{N}]/u.test(l.replace(INVISIBLE, '')))) p.push('blank fix line');
+  if (body.replace(INVISIBLE, '') !== body) p.push('invisible characters');
   if (/[‒-―]/.test(body)) p.push('long dash');
   if (/[\p{Extended_Pictographic}]/u.test(body)) p.push('emoji');
   if (/\{[a-z_0-9]+\}/.test(body)) p.push('placeholder left');
