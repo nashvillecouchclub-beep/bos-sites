@@ -1,0 +1,38 @@
+{
+ "brand": "booked-out",
+ "format": "pin",
+ "w": 1000,
+ "h": 1500,
+ "fonts": [
+  "Instrument Sans",
+  "Bricolage Grotesque"
+ ],
+ "fonts_loaded": true,
+ "min_font_px": 26,
+ "headline_px": 96,
+ "text_pairs": [
+  {
+   "fg": "#FFFFFF",
+   "bg": "#0E1536",
+   "large": true
+  },
+  {
+   "fg": "#ECEFFB",
+   "bg": "#1B2140"
+  },
+  {
+   "fg": "#FFB224",
+   "bg": "#0A0F26"
+  },
+  {
+   "fg": "#A9B2D6",
+   "bg": "#070B1E"
+  },
+  {
+   "fg": "#0A0F26",
+   "bg": "#FFB224"
+  }
+ ],
+ "overflow": false,
+ "headline": "The first 10 seconds of the phone call"
+}
