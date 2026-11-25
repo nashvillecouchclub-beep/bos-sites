@@ -21,3 +21,7 @@
 /report/*
   X-Robots-Tag: noindex, nofollow
   Referrer-Policy: no-referrer
+/lists/*
+  X-Robots-Tag: noindex, nofollow
+  Referrer-Policy: no-referrer
+  Cache-Control: public, max-age=300
